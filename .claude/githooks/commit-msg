@@ -1,0 +1,9 @@
+#!/bin/sh
+# D159: commit messages never mention Claude or AI tooling. Strip the
+# attribution lines tools add, so none reach GitHub.
+msg="$1"
+tmp="$msg.tmp.$$"
+grep -v -i -E '^(Co-Authored-By:.*(claude|anthropic)|Claude-Session:|.*Generated with \[?Claude)' "$msg" > "$tmp" || true
+# Drop trailing blank lines left behind.
+awk 'NF{n=NR} {l[NR]=$0} END{for(i=1;i<=n;i++) print l[i]}' "$tmp" > "$msg"
+rm -f "$tmp"

@@ -241,6 +241,7 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
   - Each builder works in its own worktree.
   - Only the integrator pushes, after every finished task that passes its checks. Each approved milestone gets a tag (`m0`, `s1`…`s8`).
   - Never pushed: `.env`, backups, generated test data, uploaded files and model files.
+  - **Commit messages and PR text never mention Claude, Anthropic or AI tooling:** no `Co-Authored-By`, `Claude-Session` or "Generated with" lines (D159). The `commit-msg` git hook strips them if they slip in.
 - **Agents** (`.claude/agents/`), all on the session model (Opus 5.5):
   - **Planner:** writes the tasks and pass criteria, keeps `TASKS.md`, and is the only agent that edits `memory.md`.
   - **Test writer:** writes each task's tests before any code exists.
