@@ -10,8 +10,8 @@
 // - NEO4J_ADMIN_PASSWORD and NEO4J_WRITER_PASSWORD come from `pnpm setup:secrets`.
 //
 // Throwaway data (D82): every org database a test makes is `org-<random uuid>` and is
-// dropped in afterAll; every non-org database is `test-<random>`. Nothing else is touched.
-import { randomBytes, randomUUID } from 'node:crypto';
+// dropped in afterAll. Nothing else is touched.
+import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -120,10 +120,6 @@ export async function runOn(
 
 export function newOrgId(): string {
   return randomUUID();
-}
-
-export function newTestDatabaseName(): string {
-  return `test-${randomBytes(6).toString('hex')}`;
 }
 
 export async function databaseStatuses(driver: Driver, name: string): Promise<string[]> {

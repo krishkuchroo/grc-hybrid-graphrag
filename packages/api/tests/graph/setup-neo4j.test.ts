@@ -10,8 +10,11 @@
 //   overrides what is already set). It logs in as the Desktop `neo4j` account.
 // - `grc_admin` (NEO4J_ADMIN_PASSWORD) may create databases and nothing else: no drop,
 //   stop, user, role or privilege management, and no reading or writing of graph data.
-// - `grc_writer` (NEO4J_WRITER_PASSWORD) reads and writes in `org-*` databases only, with
-//   no admin rights at all.
+// - `grc_writer` (NEO4J_WRITER_PASSWORD) reads and writes graph data, with write denied on
+//   the default `neo4j` database, and can never change `system`: no database, user, role,
+//   alias or privilege management and no DBMS privileges at all (D144: Neo4j 2026.05
+//   can't grant on a name pattern like `org-*`, so the writer is limited by `neo4j` and
+//   `system` only; our code refuses Cypher with `USE`).
 // - Neither account must change its password on first login.
 // - A second run changes nothing: same users, same roles, same privileges, same passwords.
 // - The script never prints a password.
@@ -28,7 +31,6 @@ import {
   dropDatabases,
   graphTestEnv,
   newOrgId,
-  newTestDatabaseName,
   refused,
   runOn,
   runSetupNeo4j,
@@ -50,8 +52,6 @@ const probeRole = `grc_probe_role_${Math.random().toString(36).slice(2, 10)}`;
 // An org database that exists for the whole file, made by the Desktop account, with one
 // node in it that only the Desktop account wrote.
 const orgDb = `org-${newOrgId()}`;
-// A database whose name doesn't start with `org-`.
-const otherDb = newTestDatabaseName();
 
 interface Snapshot {
   users: Record<string, unknown>[];
@@ -87,9 +87,7 @@ beforeAll(async () => {
   writer = driverAs('grc_writer', env.writerPassword);
 
   createdDatabases.add(orgDb);
-  createdDatabases.add(otherDb);
   await runOn(sup, 'system', `CREATE DATABASE \`${orgDb}\` IF NOT EXISTS WAIT`);
-  await runOn(sup, 'system', `CREATE DATABASE \`${otherDb}\` IF NOT EXISTS WAIT`);
   await runOn(sup, orgDb, 'CREATE (:GrcTestProbe {owner: "desktop"})');
 }, LONG);
 
@@ -239,23 +237,59 @@ describe('grc_admin may create databases and nothing else (criterion 1, D57)', (
   });
 });
 
-describe('grc_writer reads and writes org-* only, with no admin rights (criteria 1 and 4)', () => {
+describe('grc_writer reads and writes org databases, never neo4j or system (criteria 1 and 4, D144)', () => {
   it('can write and read in an org database', async () => {
     await runOn(writer, orgDb, 'CREATE (:GrcTestProbe {owner: "writer"})');
     const rows = await runOn(writer, orgDb, 'MATCH (n:GrcTestProbe) RETURN n.owner AS owner ORDER BY owner');
     expect(rows.map((r) => r['owner'])).toEqual(['desktop', 'writer']);
   });
 
-  it('cannot write in a database whose name does not start with org-', async () => {
-    await refused(runOn(writer, otherDb, 'CREATE (:GrcTestProbe {owner: "writer"})'));
-    const rows = await runOn(sup, otherDb, 'MATCH (n:GrcTestProbe) RETURN count(n) AS n');
-    expect(rows[0]?.['n']).toBe(0);
-  });
-
   it('cannot write in the default neo4j database', async () => {
     await refused(runOn(writer, 'neo4j', 'CREATE (:GrcTestProbe {owner: "writer"})'));
     const rows = await runOn(sup, 'neo4j', 'MATCH (n:GrcTestProbe {owner: "writer"}) RETURN count(n) AS n');
     expect(rows[0]?.['n']).toBe(0);
+  });
+
+  it('holds no DBMS privilege and nothing on system beyond access, through its own roles', async () => {
+    const users = await runOn(sup, 'system', 'SHOW USERS YIELD user, roles WHERE user = $u RETURN roles', {
+      u: 'grc_writer',
+    });
+    const roles = ((users[0]?.['roles'] as string[]) ?? []).filter((r) => r !== 'PUBLIC');
+    expect(roles.length).toBeGreaterThan(0);
+    const grants: string[] = [];
+    for (const role of roles) {
+      const rows = await runOn(sup, 'system', `SHOW ROLE \`${role}\` PRIVILEGES AS COMMANDS`);
+      for (const r of rows) {
+        const cmd = String(r['command']);
+        if (cmd.startsWith('GRANT ')) grants.push(cmd);
+      }
+    }
+    expect(grants.filter((c) => /\bON DBMS\b/.test(c))).toEqual([]);
+    expect(grants.filter((c) => /\bON (DATABASE|GRAPH) `?system`?\b/.test(c) && !/^GRANT ACCESS\b/.test(c))).toEqual(
+      [],
+    );
+    // Database-level rights on every database (`*`) would reach system too (stop, alter).
+    expect(
+      grants.filter(
+        (c) =>
+          /\bON DATABASE \*/.test(c) &&
+          !/^GRANT (ACCESS|(CREATE|DROP|SHOW) (INDEX|CONSTRAINT)|INDEX MANAGEMENT|CONSTRAINT MANAGEMENT|NAME MANAGEMENT|CREATE NEW (NODE )?LABEL|CREATE NEW (RELATIONSHIP )?TYPE|CREATE NEW (PROPERTY )?NAME)\b/.test(
+            c,
+          ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('cannot change a database setting in system', async () => {
+    await refused(runOn(writer, 'system', `ALTER DATABASE \`${orgDb}\` SET ACCESS READ ONLY`));
+    const rows = await runOn(sup, 'system', 'SHOW DATABASES YIELD name, access WHERE name = $name', { name: orgDb });
+    expect(rows[0]?.['access']).toBe('read-write');
+  });
+
+  it('cannot create a database alias in system', async () => {
+    const alias = `grc-probe-alias-${newOrgId().slice(0, 8)}`;
+    await refused(runOn(writer, 'system', `CREATE ALIAS \`${alias}\` FOR DATABASE \`${orgDb}\``));
+    await runOn(sup, 'system', `DROP ALIAS \`${alias}\` IF EXISTS FOR DATABASE`).catch(() => undefined);
   });
 
   it(
