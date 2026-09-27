@@ -19,6 +19,9 @@ const USE_KEYWORD = /\bUSE\b/i;
 // other orgs' databases and other activity; ACCESS on `*` means no privilege can hide them
 // (D144), so they are refused here too. `n.show` and `$show` are a property and a parameter.
 const SHOW_KEYWORD = /(?<![.$\w])SHOW\b/i;
+// A map key called show (`{show: true}`, `{a: 1, show: 2}`) sits right after `{` or `,` and right
+// before a single `:`; no SHOW command can be written that way. Only that exact shape is excused.
+const SHOW_MAP_KEY = /([{,]\s*)SHOW(\s*:)(?!:)/gi;
 
 /** Throws GraphQueryRefused when `cypher` names a database or is a SHOW command, or isn't text (fail safe). */
 export function assertNoDatabaseReference(cypher: string): void {
@@ -27,7 +30,7 @@ export function assertNoDatabaseReference(cypher: string): void {
   if (USE_KEYWORD.test(code)) {
     throw new GraphQueryRefused('Graph queries may not name a database (USE)');
   }
-  if (SHOW_KEYWORD.test(code)) {
+  if (SHOW_KEYWORD.test(code.replace(SHOW_MAP_KEY, '$1 $2'))) {
     throw new GraphQueryRefused('Graph queries may not run SHOW commands');
   }
 }
