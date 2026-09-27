@@ -70,6 +70,20 @@ export class JobsService implements OnApplicationShutdown {
     });
   }
 
+  /** True in the worker program, the only one that processes jobs and runs schedules. */
+  get processesJobs(): boolean {
+    return this.options.processJobs;
+  }
+
+  /** Schedules a queue on a cron expression (UTC). Only the worker program runs schedules. */
+  async schedule(queue: string, cron: string, data: object = {}): Promise<void> {
+    if (!this.options.processJobs) {
+      throw new Error('The API program does not run schedules; schedule jobs in the worker.');
+    }
+    await this.ensureQueue(queue);
+    await this.boss.schedule(queue, cron, data);
+  }
+
   async onApplicationShutdown(): Promise<void> {
     await this.boss.stop({ graceful: true, timeout: 10_000 });
   }
