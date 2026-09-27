@@ -28,6 +28,32 @@ It's a portfolio project and research prototype. It **must look like a finished 
 8. **Orchestration layer.** A multi-agent setup that is configured from the finished plan. ✅ Decisions locked 2026-09-26 (D74–D107). ✅ Done 2026-09-27: 9 agents, the hooks, the monitor and the board, verified by smoke tests, with the review's findings fixed (D119).
 9. **Workflow generation.** Build workflows that support the orchestration layer and build out the solid project layer. Decided 2026-09-27 (D109–D121). The milestone workflow is written, and gets a real test after setup. ← *current phase*
 
+## Current state (saved end of day 2026-09-27; resume from here)
+- **The M0 build is paused and nothing is running.**
+  - Workflow run: `wf_c4ecda66-beb`.
+  - To resume: `Workflow({scriptPath: ".claude/workflows/milestone.js", resumeFromRunId: "wf_c4ecda66-beb", args: {milestone: "m0", step: "build", notes: {...}}})`. Give each blocked task a note for its first test writer. Finished agents replay from cache.
+  - If resume isn't possible in a new session, start the build step again. Done tasks are already merged on `main`, and blocked tasks keep their branches.
+- **Done, merged and pushed:**
+  - M0-001: the monorepo (`da6e6f0`).
+  - M0-002: Compose and setup:secrets (`696c5f0`).
+- **Blocked, with code or tests on their `task/<ID>` branches:**
+  - **M0-003 (Postgres):** code at 800f2cb. Waits on Q33 and Q34.
+  - **M0-004 (Neo4j):** tests at 8a9d7a8. Waits on a working `neo4j` password; then its test writer runs the live tests red.
+  - **M0-006 (storage):** code at 0687acd. Works with a dev network, 79/79. Waits on Q33.
+- **Waiting on those:** M0-005 and M0-007 to M0-016.
+- **Open questions for the user:**
+  - **Q33:** the dev switch can't publish 5433 or 8333, because Docker doesn't publish ports for containers only on an internal network (D61/D132 vs D63). Recommended: (a) with the switch on, Postgres and SeaweedFS also join a dev-only network with outgoing traffic off (no masquerade). The M0-002 compose test is updated to allow it. Check first that the ports open.
+  - **Q34:** pgvector needs a superuser to install. Recommended: (c) mount a `vector--0.8.6.control` with `trusted = true`.
+  - **D140 password reset:** the user runs `scratchpad/reset-neo4j-password.sh`. The auto-mode check blocked the main session from turning Neo4j login off; the script is in this session's scratchpad. If it's gone, rewrite it: stop the DBMS, set `dbms.security.auth_enabled=false`, start, `ALTER USER neo4j SET PASSWORD <random> CHANGE NOT REQUIRED` into `.env`, set it back to `true`, restart. Then check the login without printing the password.
+  - **Before resuming:** accept or refuse the M0-006 builder's own choices (the S3 and NestJS packages, SeaweedFS volume settings) and add test-bucket cleanup.
+- **Environment as left:**
+  - Neo4j DBMS: running (127.0.0.1 only), started with `bin/neo4j start` and Desktop's bundled JRE. No licence was accepted.
+  - Docker: `grc-postgres` is running, and Docker's limit is about 4 GB.
+  - Monitor: running at http://127.0.0.1:4800.
+  - `.env`: has the generated secrets plus the wrong `NEO4J_DESKTOP_PASSWORD`.
+- **Hook fixes during the build:** guard rails 5/7 now judge files by content (`checkout.mjs`), and the skills.md row is fixed. `milestone.js` takes `notes`. Hook tests: 123/123.
+- **Security note:** the old password was typed into the chat, and workflow agents saw it. It'll be replaced by D140.
+
 ## Non-functional requirements
 Consistent · Concurrent · Scalable · Durable · Follows good design principles.
 

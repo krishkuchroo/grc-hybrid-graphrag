@@ -561,7 +561,11 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **From now on, the main session:**
     - uses Edit/Write for project files while agents run
     - commits its own changes before starting a workflow step
-- **Resume here (updated 2026-09-27):** phase 8 is done, and `phase8-build-plan.md` has been removed.
+- **Resume here (end of day 2026-09-27):** the M0 build is paused. The full state is in CLAUDE.md, under "Current state". Blockers and fixes are in `logs/build-errors.md`.
+  - **Done:** M0-001 and M0-002, merged and pushed.
+  - **Blocked:** M0-003, M0-004 and M0-006.
+  - **Open:** Q33 (reach Postgres and storage from the Mac; rec (a)), Q34 (pgvector install; rec (c)), and the user running the D140 password script.
+- **Earlier resume note:** phase 8 is done, and `phase8-build-plan.md` has been removed.
   - Phase 9: `.claude/workflows/milestone.js` is written (D121). A dry run with stand-in agents passed on 2026-09-27: dependencies, blocked tasks, the test-writer loop, send-backs, the 8-agent cap, the real-Gemma slot, and refusing a bad list.
   - Next: the setup tasks below, then a real test of the workflow with a tiny throwaway milestone.
   - **D108 is still unrecorded.** It's the user's OK for the workflow smoke test ("resterted the session , do a workflow test"). The permission check refused the main session's edit, so the user adds it or confirms it again.
