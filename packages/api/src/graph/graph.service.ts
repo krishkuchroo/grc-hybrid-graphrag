@@ -22,7 +22,7 @@ const ALREADY_EXISTS = 'Neo.ClientError.Database.ExistingDatabaseFound';
 const ONLINE_WAIT_MS = 120_000;
 
 // Strings, quoted names and comments can't name a database, so they are dropped before the check.
-const NOT_CODE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`]|``)*`|\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
+const NOT_CODE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`]|``)*`|\/\/[^\r\n]*|\/\*[\s\S]*?\*\//g;
 
 function assertNoUse(query: unknown): void {
   const text = typeof query === 'string' ? query : (query as { text?: unknown } | null)?.text;
