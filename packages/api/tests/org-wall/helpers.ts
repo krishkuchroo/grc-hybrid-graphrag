@@ -20,7 +20,7 @@
 //   - breakGlassSessions: `id`, `orgId` (the org being read), `userId` (the operator),
 //     `reason`, `expiresAt`, `endedAt` (null = still open).
 //   Any column the tests don't pass has a default or is nullable.
-// - `src/db/migrations/0001_identity_and_rls.sql` (applied by `drizzle-kit migrate`) creates
+// - `src/db/migrations/0002_identity_and_rls.sql` (applied by `drizzle-kit migrate`) creates
 //   the tables, the SQL function `app_visible_org(uuid)` and the standard policies.
 //
 // Seed rows are written by the `postgres` superuser (which RLS never applies to). Everything

@@ -132,10 +132,14 @@ describe('criterion 7: D72 retries', () => {
     await waitFor(
       'the job to fail for good',
       async () => {
+        // Take `calls` before the read and check it is unchanged after. pg-boss marks a job active
+        // before it calls the handler, so if no call happened around the read, a `retry` row is the
+        // retry left by attempt number `calls`, not an older row the worker has since picked up again.
+        const callsBefore = calls;
         const row = await jobRow(id!);
         if (!row) return false;
         if (row.state === 'failed') return true;
-        if (row.state === 'retry' && calls === waits.length + 1) {
+        if (row.state === 'retry' && callsBefore === calls && callsBefore === waits.length + 1) {
           waits.push(Number(row.delay));
           await need(db, 'the database').query(`update pgboss.job set start_after = now() where id = $1`, [id]);
         }
