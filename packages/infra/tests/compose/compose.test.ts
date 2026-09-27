@@ -12,7 +12,14 @@
 // subprocess gets a clean environment (no COMPOSE_* or app variables leak in).
 //
 // The dev-switch tests run base + dev together and compare the result with the base
-// alone: the only allowed difference is the two 127.0.0.1 ports (criterion 4).
+// alone. The only allowed differences are the two 127.0.0.1 ports (criterion 4) and,
+// since D141, one dev-only network `grc-dev` (a bridge with outgoing traffic off:
+// masquerade disabled), joined only by grc-postgres and grc-seaweedfs. Docker publishes
+// no ports for a container that sits only on an internal network, so without it the
+// dev switch's ports never open. The base file stays as D63 has it.
+//
+// D142: grc-postgres mounts a secondary `vector--0.8.6.control` with `trusted = true`,
+// so the database owner (grc_migrator, NOSUPERUSER) can CREATE EXTENSION vector.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,6 +33,11 @@ const COMPOSE = join(INFRA, 'compose.yaml');
 const COMPOSE_DEV = join(INFRA, 'compose.dev.yaml');
 const ENV_EXAMPLE = join(ROOT, '.env.example');
 const API_DOCKERFILE = join(ROOT, 'packages', 'api', 'Dockerfile');
+
+const DEV_NET = 'grc-dev';
+const MASQUERADE = 'com.docker.network.bridge.enable_ip_masquerade';
+const DEV_NET_MEMBERS = ['grc-postgres', 'grc-seaweedfs'];
+const VECTOR_CONTROL_TARGET = '/usr/share/postgresql/18/extension/vector--0.8.6.control';
 
 const REQUIRED_SERVICES = ['grc-postgres', 'grc-seaweedfs', 'grc-caddy', 'grc-api', 'grc-worker'] as const;
 const FOUR_GIB = 4 * 1024 ** 3;
@@ -49,12 +61,15 @@ interface Service {
   environment?: Record<string, string | null>;
   mem_limit?: string | number;
   deploy?: { resources?: { limits?: { memory?: string | number } } };
-  volumes?: { type: string; source?: string }[];
+  volumes?: { type: string; source?: string; target?: string; read_only?: boolean }[];
 }
 interface Project {
   name: string;
   services: Record<string, Service>;
-  networks?: Record<string, { name?: string; internal?: boolean; external?: boolean }>;
+  networks?: Record<
+    string,
+    { name?: string; internal?: boolean; external?: boolean; driver?: string; driver_opts?: Record<string, unknown> }
+  >;
   volumes?: Record<string, { name?: string }>;
 }
 
@@ -138,6 +153,9 @@ function svc(p: Project, name: string): Service {
 }
 function netsOf(s: Service): string[] {
   return Object.keys(s.networks ?? {}).sort();
+}
+function without<T>(o: Record<string, T> | undefined, key: string): Record<string, T> {
+  return Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => k !== key));
 }
 function portKey(p: Port): string {
   return `${p.host_ip ?? '0.0.0.0'}:${p.published ?? ''}:${p.target}`;
@@ -322,19 +340,103 @@ describe('compose: the dev switch (criterion 4, D61, D132, D137)', () => {
     }
   });
 
-  it('changes nothing else: no new services, networks or volumes, and no other service setting', () => {
+  it('changes nothing else: no new services or volumes, only grc-dev among networks, and no other service setting', () => {
     const b = stack();
     const d = devStack();
     expect(d.name).toBe(b.name);
     expect(Object.keys(d.services).sort()).toEqual(Object.keys(b.services).sort());
-    expect(d.networks).toEqual(b.networks);
+    expect(without(d.networks, DEV_NET)).toEqual(b.networks);
     expect(d.volumes).toEqual(b.volumes);
     for (const name of Object.keys(b.services)) {
-      const { ports: bp, ...bRest } = b.services[name]!;
-      const { ports: dp, ...dRest } = d.services[name]!;
+      const { ports: bp, networks: bn, ...bRest } = b.services[name]!;
+      const { ports: dp, networks: dn, ...dRest } = d.services[name]!;
       expect(dRest, `settings of ${name}`).toEqual(bRest);
-      if (name !== 'grc-postgres' && name !== 'grc-seaweedfs') expect(dp, `ports of ${name}`).toEqual(bp);
+      if (!DEV_NET_MEMBERS.includes(name)) {
+        expect(dp, `ports of ${name}`).toEqual(bp);
+        expect(dn, `networks of ${name}`).toEqual(bn);
+      } else {
+        expect(without(dn, DEV_NET), `networks of ${name} other than ${DEV_NET}`).toEqual(bn);
+      }
     }
+  });
+});
+
+describe('compose: the dev-only network grc-dev (D141, D63)', () => {
+  it('the base file has no grc-dev network, and no service in it joins one', () => {
+    expect(Object.keys(stack().networks ?? {})).not.toContain(DEV_NET);
+    for (const [name, s] of Object.entries(stack().services)) expect(netsOf(s), name).not.toContain(DEV_NET);
+    expect(readFileSync(COMPOSE, 'utf8')).not.toMatch(/grc-dev/);
+  });
+
+  it('the dev switch adds exactly one network, grc-dev', () => {
+    const added = Object.keys(devStack().networks ?? {}).filter((n) => !(n in (stack().networks ?? {})));
+    expect(added).toEqual([DEV_NET]);
+  });
+
+  it('grc-dev is named grc-dev, is a local bridge, and is neither internal nor external', () => {
+    const net = devStack().networks?.[DEV_NET];
+    expect(net).toBeDefined();
+    expect(net?.name ?? DEV_NET).toBe(DEV_NET);
+    expect(net?.driver ?? 'bridge').toBe('bridge');
+    expect(net?.internal ?? false).toBe(false);
+    expect(net?.external ?? false).toBe(false);
+  });
+
+  it('grc-dev has outgoing traffic off: masquerade "false" is its only driver option', () => {
+    const opts = devStack().networks?.[DEV_NET]?.driver_opts ?? {};
+    expect(Object.keys(opts)).toEqual([MASQUERADE]);
+    expect(String(opts[MASQUERADE])).toBe('false');
+  });
+
+  it.each(DEV_NET_MEMBERS)('%s joins grc-internal and grc-dev', (name) => {
+    expect(netsOf(svc(devStack(), name))).toEqual(['grc-dev', 'grc-internal']);
+  });
+
+  it('no other service joins grc-dev', () => {
+    const members = Object.entries(devStack().services)
+      .filter(([, s]) => netsOf(s).includes(DEV_NET))
+      .map(([name]) => name)
+      .sort();
+    expect(members).toEqual([...DEV_NET_MEMBERS].sort());
+  });
+});
+
+describe('compose: pgvector is a trusted extension (D142)', () => {
+  function controlMount() {
+    return (svc(stack(), 'grc-postgres').volumes ?? []).find((v) => v.target === VECTOR_CONTROL_TARGET);
+  }
+
+  it(`grc-postgres bind-mounts a file at ${VECTOR_CONTROL_TARGET}, read-only`, () => {
+    const m = controlMount();
+    expect(m, 'mount for vector--0.8.6.control').toBeDefined();
+    expect(m?.type).toBe('bind');
+    expect(m?.read_only).toBe(true);
+  });
+
+  it('the mounted file is in the repo, named vector--0.8.6.control', () => {
+    const src = controlMount()?.source ?? '';
+    expect(src.endsWith('/vector--0.8.6.control'), src).toBe(true);
+    expect(src.startsWith(INFRA + '/'), src).toBe(true);
+    expect(existsSync(src), src).toBe(true);
+  });
+
+  it('the file sets only trusted = true (a secondary control file changes nothing else)', () => {
+    const src = controlMount()?.source ?? '';
+    expect(existsSync(src), src).toBe(true);
+    const settings = readFileSync(src, 'utf8')
+      .split('\n')
+      .map((l) => l.replace(/#.*$/, '').trim())
+      .filter((l) => l !== '')
+      .map((l) => {
+        const m = /^([a-z_]+)\s*=\s*'?([^']*)'?$/.exec(l);
+        return m ? [m[1], m[2]!.trim().toLowerCase()] : [l, '<unparsed>'];
+      });
+    expect(settings).toEqual([['trusted', 'true']]);
+  });
+
+  it('the dev switch keeps the same mount', () => {
+    const d = (svc(devStack(), 'grc-postgres').volumes ?? []).find((v) => v.target === VECTOR_CONTROL_TARGET);
+    expect(d).toEqual(controlMount());
   });
 });
 
