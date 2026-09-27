@@ -9,10 +9,14 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@grc/shared": "workspace:*"
+    "@grc/shared": "workspace:*",
+    "drizzle-orm": "^0.45.3",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^10.11.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
