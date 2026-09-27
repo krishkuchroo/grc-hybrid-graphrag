@@ -1,11 +1,26 @@
-# The dev-only switch (D61, D132, D137). Off by default: it applies only when named:
+# The dev-only switch (D61, D132, D137, D141). Off by default: it applies only when named:
 #   docker compose -f packages/infra/compose.yaml -f packages/infra/compose.dev.yaml --env-file .env up -d
 # It opens exactly two ports, both on 127.0.0.1 only, so tests on the Mac can reach
 # Postgres (5433, because 5432 is taken) and SeaweedFS's S3 API (8333).
+# Docker publishes no ports for a container that sits only on an internal network, so both
+# also join grc-dev (D141): a bridge with outgoing traffic off (no masquerade).
 services:
   grc-postgres:
     ports:
       - '127.0.0.1:5433:5432'
+    networks:
+      - grc-internal
+      - grc-dev
   grc-seaweedfs:
     ports:
       - '127.0.0.1:8333:8333'
+    networks:
+      - grc-internal
+      - grc-dev
+
+networks:
+  grc-dev:
+    name: grc-dev
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: 'false'

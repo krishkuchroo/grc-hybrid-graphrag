@@ -19,6 +19,8 @@ services:
     volumes:
       - grc-postgres-data:/var/lib/postgresql
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      # D142: marks pgvector 0.8.6 as trusted, so grc_migrator (NOSUPERUSER) can install it.
+      - ./postgres/extension/vector--0.8.6.control:/usr/share/postgresql/18/extension/vector--0.8.6.control:ro
     networks:
       - grc-internal
     healthcheck:

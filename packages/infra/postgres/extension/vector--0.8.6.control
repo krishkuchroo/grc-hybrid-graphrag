@@ -1,0 +1,5 @@
+# D142: a secondary control file for pgvector 0.8.6. It marks the extension as trusted, so the
+# database owner (grc_migrator, NOSUPERUSER) can CREATE EXTENSION vector. grc_app owns no
+# database and has no CREATE on one, so it still can't. Every other setting comes from
+# vector.control in the image.
+trusted = true
