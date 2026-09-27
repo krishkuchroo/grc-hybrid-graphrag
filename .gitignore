@@ -1,0 +1,29 @@
+# Secrets live only in the git-ignored .env (D57)
+.env
+.env.*
+!.env.example
+
+# Hook and monitor logs (D92, D107)
+logs/
+
+# Claude Code: agent worktrees and personal settings
+.claude/worktrees/
+.claude/settings.local.json
+
+# Never pushed (D81): backups, generated test data, uploads, model files.
+# The data paths get confirmed in milestone 0.
+backups/
+data/generated/
+data/uploads/
+models/
+*.gguf
+*.safetensors
+
+# Build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# macOS
+.DS_Store

@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="monitor-key" content="__MONITOR_KEY__">
+<title>Agent Monitor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232c64d8'/%3E%3Ccircle cx='11' cy='16' r='3.5' fill='white'/%3E%3Ccircle cx='21' cy='16' r='3.5' fill='white' fill-opacity='.6'/%3E%3C/svg%3E">
+<style nonce="__NONCE__">
+:root {
+  color-scheme: light dark;
+  --bg: #f4f6f9; --surface: #ffffff; --surface-2: #eff2f6; --text: #18202e; --muted: #5d6879; --line: #e0e5ec;
+  --accent: #2c64d8; --on-accent: #ffffff; --ok: #1a8049; --warn: #a76100; --bad: #c2352b;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
+  --c-blue: #2c64d8; --c-purple: #7b4bd1; --c-orange: #c8620f; --c-green: #1a8049;
+  --c-cyan: #0b829a; --c-yellow: #9a7400; --c-red: #c2352b; --c-pink: #c23a82; --c-neutral: #5d6879;
+  --radius: 10px;
+  --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --surface: #151b23; --surface-2: #1c232d; --text: #e5e9f0; --muted: #98a2b3; --line: #29313d;
+    --accent: #7ea6ff; --on-accent: #0d1117; --ok: #4cc27d; --warn: #e3a64a; --bad: #f07563;
+    --shadow: none;
+    --c-blue: #7ea6ff; --c-purple: #b597f5; --c-orange: #f0a05a; --c-green: #4cc27d;
+    --c-cyan: #4fc9dd; --c-yellow: #e3c04a; --c-red: #f07563; --c-pink: #f07fbc; --c-neutral: #98a2b3;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); -webkit-text-size-adjust: 100%; }
+button { font: inherit; cursor: pointer; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 6px 16px; padding: 12px 24px; border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
+}
+.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+h1 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+.project { color: var(--muted); font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.conn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.conn[data-tone="ok"]::before { background: var(--ok); }
+.conn[data-tone="bad"] { color: var(--bad); }
+.conn[data-tone="bad"]::before { background: var(--bad); }
+
+main { max-width: 1440px; margin: 0 auto; padding: 20px 24px 48px; display: grid; gap: 28px; }
+h2 { margin: 0 0 10px; font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 10px; }
+.section-head h2 { margin: 0; }
+.hint { margin: 0; font-size: 12.5px; color: var(--muted); }
+kbd { font: 12px var(--mono); padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); }
+
+.attention { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.attention li {
+  display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--line);
+  border-left: 3px solid var(--muted); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow);
+}
+.attention .att-blocked, .attention .att-error { border-left-color: var(--bad); }
+.attention .att-quiet { border-left-color: var(--warn); }
+.attention .calm { border-left-color: var(--ok); color: var(--muted); }
+.att-kind { min-width: 58px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.att-blocked .att-kind, .att-error .att-kind { color: var(--bad); }
+.att-quiet .att-kind { color: var(--warn); }
+.att-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+.milestones { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.milestone { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.milestone.empty { background: transparent; box-shadow: none; border-style: dashed; }
+.ms-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
+.bar { display: flex; height: 8px; margin: 8px 0 6px; overflow: hidden; border-radius: 99px; background: var(--surface-2); }
+.seg-done { background: var(--ok); }
+.seg-review { background: var(--accent); }
+.seg-progress { background: color-mix(in srgb, var(--accent) 40%, transparent); }
+.seg-blocked { background: var(--bad); }
+.ms-foot { min-height: 1.3em; font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 5px; vertical-align: -1px; border-radius: 2px; background: var(--surface-2); outline: 1px solid var(--line); }
+.legend .l-done::before { background: var(--ok); outline: 0; }
+.legend .l-review::before { background: var(--accent); outline: 0; }
+.legend .l-progress::before { background: color-mix(in srgb, var(--accent) 40%, transparent); outline: 0; }
+.legend .l-blocked::before { background: var(--bad); outline: 0; }
+
+.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.card {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
+}
+.card[data-status="quiet"] { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.card[data-status="finished"] { opacity: .8; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chip {
+  --c: var(--c-neutral); display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 8px; border-radius: 99px;
+  font-size: 13px; font-weight: 600; color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent);
+}
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.chip[data-color="blue"] { --c: var(--c-blue); }
+.chip[data-color="purple"] { --c: var(--c-purple); }
+.chip[data-color="orange"] { --c: var(--c-orange); }
+.chip[data-color="green"] { --c: var(--c-green); }
+.chip[data-color="cyan"] { --c: var(--c-cyan); }
+.chip[data-color="yellow"] { --c: var(--c-yellow); }
+.chip[data-color="red"] { --c: var(--c-red); }
+.chip[data-color="pink"] { --c: var(--c-pink); }
+.status { padding: 2px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface-2); }
+.status-running { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.status-running::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; vertical-align: 1px; border-radius: 50%; background: currentColor; }
+.status-quiet { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .status-running::before { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+}
+.card-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 12.5px; }
+.task { font: 600 12.5px var(--mono); }
+.where { font: 12px var(--mono); overflow-wrap: anywhere; }
+.last { margin: 0; overflow-wrap: anywhere; }
+.checks { margin: 0; font-size: 12.5px; font-weight: 600; }
+.checks[data-tone="ok"] { color: var(--ok); }
+.checks[data-tone="warn"] { color: var(--warn); }
+.checks[data-tone="bad"] { color: var(--bad); }
+.card h3 { margin: 4px 0 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.steps, .notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.steps li { display: grid; grid-template-columns: 64px 84px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 12.5px; }
+.steps time { font: 11.5px var(--mono); color: var(--muted); }
+.steps .tool { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.steps .subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); }
+.notes li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 8px; border-radius: 6px; font-size: 12.5px; background: var(--surface-2); }
+.notes li.muted { background: none; padding: 0; }
+.note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-state { flex: none; font-size: 11.5px; color: var(--warn); }
+.note-state.ok { color: var(--ok); }
+.note-form { display: grid; gap: 6px; margin-top: 2px; }
+.note-form[hidden] { display: none; }
+textarea {
+  width: 100%; min-height: 56px; resize: vertical; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  font: 13px/1.4 var(--sans); color: var(--text); background: var(--bg);
+}
+textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.form-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.feedback { font-size: 12px; }
+button.primary { padding: 6px 12px; border: 0; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--on-accent); background: var(--accent); }
+button.primary:disabled { opacity: .6; cursor: default; }
+button.link { padding: 0; border: 0; background: none; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+button.link:disabled { color: var(--muted); text-decoration: none; cursor: default; }
+.empty-state { margin: 0; padding: 18px 12px; color: var(--muted); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  padding: 9px 12px; text-align: left; white-space: nowrap; font-size: 11.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line);
+}
+td { padding: 9px 12px; vertical-align: top; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+td.wrap { min-width: 220px; max-width: 460px; overflow-wrap: anywhere; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 99px; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface-2); }
+.pill-done { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.pill-in-progress, .pill-in-review { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.pill-blocked, .pill-block, .pill-error { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+details summary { cursor: pointer; }
+details p { margin: 6px 0 0; white-space: pre-wrap; }
+
+dialog {
+  width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--line);
+  border-radius: 12px; color: var(--text); background: var(--surface); box-shadow: 0 20px 50px rgb(0 0 0 / 25%);
+}
+dialog::backdrop { background: rgb(10 14 20 / 45%); }
+dialog header { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+dialog h2 { margin: 0; font-size: 14px; text-transform: none; letter-spacing: 0; color: var(--text); }
+dialog pre { margin: 0; padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.5 var(--mono); }
+.icon-button { padding: 2px 8px; border: 0; border-radius: 6px; font-size: 20px; line-height: 1; color: var(--muted); background: none; }
+
+@media (max-width: 640px) {
+  .topbar, main { padding-left: 16px; padding-right: 16px; }
+  .agents { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><h1>Agent Monitor</h1><span class="project" id="project"></span></div>
+  <p class="conn" id="conn" role="status" aria-live="polite">Connecting…</p>
+</header>
+<main>
+  <section aria-labelledby="attention-h">
+    <h2 id="attention-h">Needs attention</h2>
+    <ul class="attention" id="attention"></ul>
+  </section>
+
+  <section aria-labelledby="milestones-h">
+    <h2 id="milestones-h">Milestones</h2>
+    <div class="milestones" id="milestones"></div>
+    <div class="legend" aria-hidden="true">
+      <span class="l-done">done</span><span class="l-review">in review</span><span class="l-progress">in progress</span>
+      <span class="l-blocked">blocked</span><span>to do</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="agents-h">
+    <div class="section-head">
+      <h2 id="agents-h">Agents <span class="muted" id="agent-counts"></span></h2>
+      <p class="hint">A note reaches the agent at its next step. To pause or stop a workflow, use <kbd>/workflows</kbd> in Claude Code.</p>
+    </div>
+    <div class="agents" id="agents"></div>
+  </section>
+
+  <section aria-labelledby="board-h">
+    <h2 id="board-h">Task board</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Milestone</th><th>Owner</th><th>Status</th><th>Pass criteria &amp; tests</th><th>Blocked notes</th><th>Log</th></tr></thead>
+        <tbody id="board-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="rails-h">
+    <h2 id="rails-h">Guard rails <span class="muted">(latest 50 blocks and errors)</span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Rule</th><th>Result</th><th>Who</th><th>What</th><th>Why</th></tr></thead>
+        <tbody id="rails-body"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<dialog id="log-dialog" aria-labelledby="log-title">
+  <header><h2 id="log-title">Task log</h2><button type="button" class="icon-button" id="log-close" aria-label="Close">×</button></header>
+  <pre id="log-body"></pre>
+</dialog>
+
+<script nonce="__NONCE__">
+'use strict';
+// Everything shown comes from the logs, so it's added as text, never as HTML.
+const KEY = document.querySelector('meta[name="monitor-key"]').content;
+const POLL_MS = 2000;
+const TYPE_COLORS = {
+  planner: 'blue', 'test-writer': 'purple', 'builder-platform': 'orange', 'builder-backend': 'green',
+  'builder-frontend': 'cyan', 'builder-data': 'yellow', 'security-reviewer': 'red', 'code-reviewer': 'pink',
+};
+const RULES = {
+  1: 'Containers', 2: 'Secrets', 3: 'Git', 4: 'Finish checks', 5: 'Protected files', 6: 'Skills', 7: 'Test files',
+  '5/7': 'Changed files', monitor: 'Monitor',
+};
+const $ = (id) => document.getElementById(id);
+let serverNow = Date.now();
+
+function h(tag, props, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props ?? {})) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === 'class') node.className = value;
+    else if (key === 'text') node.textContent = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? '' : String(value));
+  }
+  for (const child of children.flat()) {
+    if (child !== null && child !== undefined && child !== false) node.append(child);
+  }
+  return node;
+}
+
+async function api(path, init = {}) {
+  const res = await fetch(path, { ...init, cache: 'no-store', headers: { 'X-Monitor-Key': KEY, ...(init.headers ?? {}) } });
+  let body = {};
+  try { body = await res.json(); } catch {}
+  if (!res.ok) throw new Error(body.error || `The monitor answered ${res.status}.`);
+  return body;
+}
+
+const clock = (ts) => (ts ? new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+function ago(ts) {
+  if (!ts) return '';
+  const s = Math.max(0, Math.round((serverNow - Date.parse(ts)) / 1000));
+  if (s < 10) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const hours = Math.round(m / 60);
+  return hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`;
+}
+
+const rendered = new Map();
+function renderIfChanged(key, data, render) {
+  const signature = JSON.stringify(data);
+  if (rendered.get(key) === signature) return;
+  rendered.set(key, signature);
+  render(data);
+}
+
+// ------------------------------------------------------------ needs attention
+const KIND_LABELS = { blocked: 'Blocked', quiet: 'Quiet', error: 'Error' };
+function renderAttention(items) {
+  if (!items.length) {
+    $('attention').replaceChildren(h('li', { class: 'calm', text: 'Nothing needs you right now.' }));
+    return;
+  }
+  $('attention').replaceChildren(...items.map((item) => h('li', { class: `att-${item.kind}` },
+    h('span', { class: 'att-kind', text: KIND_LABELS[item.kind] ?? item.kind }),
+    h('span', { class: 'att-text', text: item.text }),
+    item.taskId ? h('button', { type: 'button', class: 'link', text: 'Task log', onclick: () => openLog(item.taskId) }) : null)));
+}
+
+// ----------------------------------------------------------------- milestones
+const SEGMENTS = [['done', 'seg-done'], ['review', 'seg-review'], ['progress', 'seg-progress'], ['blocked', 'seg-blocked']];
+function renderMilestones(milestones) {
+  $('milestones').replaceChildren(...milestones.map((m) => {
+    const bar = h('div', { class: 'bar', role: 'img', 'aria-label': `${m.done} of ${m.total} tasks done` });
+    for (const [key, cls] of SEGMENTS) {
+      if (!m.total || !m[key]) continue;
+      const segment = h('span', { class: cls });
+      segment.style.width = `${(m[key] / m.total) * 100}%`;
+      bar.append(segment);
+    }
+    const detail = [m.progress && `${m.progress} in progress`, m.review && `${m.review} in review`, m.blocked && `${m.blocked} blocked`].filter(Boolean).join(' · ');
+    return h('div', { class: m.total ? 'milestone' : 'milestone empty' },
+      h('div', { class: 'ms-head' }, h('strong', { text: m.id }), h('span', { class: 'muted', text: m.total ? `${m.done}/${m.total} done` : 'not planned yet' })),
+      bar,
+      h('div', { class: 'ms-foot muted', text: detail }));
+  }));
+}
+
+// --------------------------------------------------------------------- agents
+const cards = new Map();
+
+function buildCard(id) {
+  const c = {};
+  c.type = h('span', { class: 'chip' });
+  c.status = h('span', { class: 'status' });
+  c.task = h('button', { type: 'button', class: 'task link', title: 'Open the task log' });
+  c.where = h('span', { class: 'where muted' });
+  c.last = h('p', { class: 'last' });
+  c.checks = h('p', { class: 'checks' });
+  c.steps = h('ol', { class: 'steps' });
+  c.notes = h('ul', { class: 'notes' });
+  c.textarea = h('textarea', { rows: '2', maxlength: '2000', placeholder: 'Write a note for this agent… (⌘/Ctrl + Enter sends)', 'aria-label': 'Note for this agent' });
+  c.feedback = h('span', { class: 'feedback muted', role: 'status' });
+  c.send = h('button', { type: 'submit', class: 'primary', text: 'Send note' });
+  c.form = h('form', { class: 'note-form' }, c.textarea, h('div', { class: 'form-row' }, c.feedback, c.send));
+  c.task.addEventListener('click', () => { if (c.taskId) openLog(c.taskId); });
+  c.textarea.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      c.form.requestSubmit();
+    }
+  });
+  c.form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    sendNote(id, c);
+  });
+  c.root = h('article', { class: 'card' },
+    h('header', { class: 'card-head' }, c.type, c.status),
+    h('div', { class: 'card-sub' }, c.task, c.where),
+    c.last, c.checks,
+    h('h3', { text: 'Last steps' }), c.steps,
+    h('h3', { text: 'Notes' }), c.notes, c.form);
+  return c;
+}
+
+async function sendNote(id, c) {
+  const text = c.textarea.value.trim();
+  if (!text) {
+    c.feedback.textContent = 'Write a note first.';
+    return;
+  }
+  c.send.disabled = true;
+  c.feedback.textContent = 'Sending…';
+  try {
+    await api('/api/note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agentId: id, text }) });
+    c.textarea.value = '';
+    c.feedback.textContent = 'Queued. It reaches the agent at its next step.';
+    refresh();
+  } catch (error) {
+    c.feedback.textContent = error.message;
+  } finally {
+    c.send.disabled = false;
+  }
+}
+
+function checksLine(finish) {
+  if (!finish) return ['', ''];
+  if (finish.blocked) return ['Handed in as blocked', 'bad'];
+  if (finish.cleared) return ['Handed in', 'ok'];
+  if (finish.attempts) return [`Finish checks failed ${finish.attempts} of 3`, finish.attempts >= 3 ? 'bad' : 'warn'];
+  return ['', ''];
+}
+
+function updateCard(c, a) {
+  c.taskId = a.taskId;
+  c.root.dataset.status = a.status;
+  c.type.textContent = a.type;
+  c.type.dataset.color = TYPE_COLORS[a.type] ?? 'neutral';
+  c.status.className = `status status-${a.status}`;
+  c.status.textContent = a.status === 'quiet' ? `quiet for ${ago(a.lastTs).replace(' ago', '')}` : a.status;
+  c.task.textContent = a.taskId ?? 'no task ID';
+  c.task.disabled = !a.taskId;
+  c.where.textContent = a.where ? `in ${a.where}` : '';
+  if (a.status === 'finished') c.last.replaceChildren(h('span', { class: 'muted', text: 'Finished ' }), ago(a.stoppedAt));
+  else c.last.replaceChildren(h('span', { class: 'muted', text: 'Last: ' }), a.lastAction || 'starting…', h('span', { class: 'muted', text: ` · ${ago(a.lastTs)}` }));
+  const [checks, tone] = checksLine(a.finish);
+  c.checks.textContent = checks;
+  c.checks.dataset.tone = tone;
+  c.checks.hidden = !checks;
+  c.steps.replaceChildren(...(a.steps.length
+    ? [...a.steps].reverse().map((s) => h('li', {},
+      h('time', { datetime: s.ts, text: clock(s.ts) }),
+      h('span', { class: 'tool', text: s.tool, title: s.tool }),
+      h('span', { class: 'subject', text: s.subject, title: s.subject })))
+    : [h('li', { class: 'muted', text: 'No steps yet.' })]));
+  c.notes.replaceChildren(...(a.notes.length
+    ? a.notes.map((n) => h('li', {},
+      h('span', { class: 'note-text', text: n.text }),
+      h('span', { class: n.deliveredAt ? 'note-state ok' : 'note-state', text: n.deliveredAt ? `delivered ${clock(n.deliveredAt)}` : `waiting since ${clock(n.ts)}` })))
+    : [h('li', { class: 'muted', text: 'No notes sent.' })]));
+  c.form.hidden = a.status === 'finished';
+}
+
+// Moves cards only when the order changes, keeping a half-written note focused.
+function placeChildren(container, nodes) {
+  const current = [...container.children];
+  if (current.length === nodes.length && nodes.every((node, k) => current[k] === node)) return;
+  const active = document.activeElement;
+  const selection = active instanceof HTMLTextAreaElement ? [active.selectionStart, active.selectionEnd] : null;
+  container.replaceChildren(...nodes);
+  if (active && active !== document.body && container.contains(active)) {
+    active.focus({ preventScroll: true });
+    if (selection) active.setSelectionRange(...selection);
+  }
+}
+
+function renderAgents(list) {
+  const counts = { running: 0, quiet: 0, finished: 0 };
+  for (const a of list) counts[a.status] += 1;
+  $('agent-counts').textContent = list.length ? `· ${counts.running} running · ${counts.quiet} quiet · ${counts.finished} recently finished` : '';
+  const seen = new Set();
+  const nodes = list.map((a) => {
+    seen.add(a.id);
+    let c = cards.get(a.id);
+    if (!c) {
+      c = buildCard(a.id);
+      cards.set(a.id, c);
+    }
+    updateCard(c, a);
+    return c.root;
+  });
+  for (const id of cards.keys()) if (!seen.has(id)) cards.delete(id);
+  if (!list.length) {
+    $('agents').replaceChildren(h('p', { class: 'empty-state', text: 'No agents have run yet. They appear here when a workflow or the Agent tool starts one.' }));
+    return;
+  }
+  placeChildren($('agents'), nodes);
+}
+
+// ------------------------------------------------------------ board and rails
+const statusPill = (status) => h('span', { class: `pill pill-${(status || 'to do').replace(/\s+/g, '-')}`, text: status || 'to do' });
+
+function renderBoard(tasks) {
+  if (!tasks.length) {
+    $('board-body').replaceChildren(h('tr', {}, h('td', { colspan: '7', class: 'empty-state', text: 'The board is empty. The planner fills it at the start of each milestone.' })));
+    return;
+  }
+  $('board-body').replaceChildren(...tasks.map((t) => h('tr', {},
+    h('td', { class: 'mono', text: t.id }),
+    h('td', { text: t.milestone }),
+    h('td', { text: t.owner }),
+    h('td', {}, statusPill(t.status)),
+    h('td', { class: 'wrap', text: t.criteria }),
+    h('td', { class: 'wrap', text: t.blockedNotes }),
+    h('td', {}, t.hasLog ? h('button', { type: 'button', class: 'link', text: 'View', onclick: () => openLog(t.id) }) : h('span', { class: 'muted', text: '—' })))));
+}
+
+function reasonCell(reason = '') {
+  if (reason.length <= 140) return reason;
+  return h('details', {}, h('summary', { text: `${reason.slice(0, 120)}…` }), h('p', { text: reason }));
+}
+
+function renderRails(entries) {
+  if (!entries.length) {
+    $('rails-body').replaceChildren(h('tr', {}, h('td', { colspan: '6', class: 'empty-state', text: 'No blocks or errors yet.' })));
+    return;
+  }
+  $('rails-body').replaceChildren(...entries.map((e) => h('tr', {},
+    h('td', { class: 'mono', text: clock(e.ts), title: e.ts }),
+    h('td', { text: `${e.rule}${RULES[e.rule] ? ` · ${RULES[e.rule]}` : ''}` }),
+    h('td', {}, h('span', { class: `pill pill-${e.decision === 'error' ? 'error' : 'block'}`, text: e.decision })),
+    h('td', { text: e.agent_type || 'main' }),
+    h('td', { class: 'mono wrap', text: e.subject || e.tool || '' }),
+    h('td', { class: 'wrap' }, reasonCell(e.reason)))));
+}
+
+// ------------------------------------------------------------------- task log
+const dialog = $('log-dialog');
+$('log-close').addEventListener('click', () => dialog.close());
+dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+async function openLog(id) {
+  $('log-title').textContent = `Task log · ${id}`;
+  $('log-body').textContent = 'Loading…';
+  if (!dialog.open) dialog.showModal();
+  try {
+    $('log-body').textContent = (await api(`/api/task-log?id=${encodeURIComponent(id)}`)).text;
+  } catch (error) {
+    $('log-body').textContent = error.message;
+  }
+}
+
+// ---------------------------------------------------------------- the refresh
+function setConn(text, tone) {
+  $('conn').textContent = text;
+  $('conn').dataset.tone = tone;
+}
+
+async function refresh() {
+  try {
+    const state = await api('/api/state');
+    serverNow = Date.parse(state.now);
+    $('project').textContent = state.project;
+    renderIfChanged('attention', state.attention, renderAttention);
+    renderIfChanged('milestones', state.milestones, renderMilestones);
+    renderAgents(state.agents);
+    renderIfChanged('board', state.tasks, renderBoard);
+    renderIfChanged('rails', state.guardrails, renderRails);
+    setConn(`Updated ${new Date(serverNow).toLocaleTimeString()}`, 'ok');
+  } catch (error) {
+    setConn(error instanceof TypeError ? "Can't reach the monitor. Is the server still running?" : error.message, 'bad');
+  }
+}
+
+let timer = null;
+function schedule() {
+  clearTimeout(timer);
+  timer = setTimeout(async () => {
+    if (!document.hidden) await refresh();
+    schedule();
+  }, POLL_MS);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+refresh().then(schedule);
+</script>
+</body>
+</html>

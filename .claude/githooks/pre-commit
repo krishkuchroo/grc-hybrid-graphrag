@@ -1,0 +1,3 @@
+#!/bin/sh
+# Guard rail 2 (D57, D94): scan staged changes for secrets before every commit.
+exec node "$(git rev-parse --show-toplevel)/.claude/hooks/git-pre-commit.mjs"
