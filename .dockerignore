@@ -1,0 +1,13 @@
+# Never copied into an image: secrets (D57), local state and anything D81 keeps out of git.
+.env
+.env.*
+!.env.example
+.git
+.claude
+logs
+backups
+data
+models
+**/node_modules
+**/dist
+**/coverage
