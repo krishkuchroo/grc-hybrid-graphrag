@@ -543,6 +543,8 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - security reviewer: fp-check, differential-review
   - integrator: resolving-merge-conflicts
   - planner: writing-plans
+- **D137 Storage test port** (2026-09-27): **(a) 8333**, SeaweedFS's standard S3 port. The dev switch publishes `127.0.0.1:8333:8333` (D132).
+- **D138 New names in the M0 briefs** (2026-09-27): **(a) Kept as the planner wrote them:** `pnpm org:create` (D133), `query-guard.ts` with `assertNoDatabaseReference` and the `GraphQueryRefused` error (D131), and the `S3_ENDPOINT` setting (D132).
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
