@@ -23,8 +23,8 @@ const MAX_ROUNDS = 3 // test-writer rounds, and reviewer send-backs (D78, D86)
 const given = typeof args === 'string' ? { milestone: args } : args ?? {}
 const milestone = String(given.milestone ?? '').trim().toLowerCase()
 const step = given.step ?? 'plan'
-// Optional { "<task ID>": "note" } for a resumed run: the note goes into that
-// task's first test-writer brief only, so every other brief stays cached.
+// Optional { "<task ID>": "note" }: the note goes into that task's first
+// test-writer brief only, and a task blocked on the board runs again.
 const resumeNotes = given.notes ?? {}
 if (!MILESTONES.includes(milestone)) return { error: `the milestone must be one of ${MILESTONES.join(', ')}; got "${given.milestone}"` }
 if (!['plan', 'build', 'tag'].includes(step)) return { error: `the step must be plan, build or tag; got "${step}"` }
@@ -303,7 +303,8 @@ function start(t) {
         const deps = await Promise.all(t.dependsOn.map((d) => start(byId.get(d))))
         const stuck = t.dependsOn.filter((_, k) => deps[k] !== 'done')
         if (stuck.length) return (results[t.id] = { status: 'waiting', findings: `waits on ${stuck.join(', ')}` }).status
-        if (board === 'blocked') return (results[t.id] = { status: 'blocked', findings: 'blocked on the board; the user sorts it out first' }).status
+        // A note for the task (args.notes) means the user sorted out its block.
+        if (board === 'blocked' && !resumeNotes[t.id]) return (results[t.id] = { status: 'blocked', findings: 'blocked on the board; the user sorts it out first' }).status
         log(`${t.id} starts (${t.owner})`)
         results[t.id] = await runTask(t)
         log(`${t.id}: ${results[t.id].status}`)
