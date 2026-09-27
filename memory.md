@@ -515,6 +515,34 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The link: **https://github.com/krishkuchroo/grc-hybrid-graphrag** (sent 2026-09-27). It's recorded in CLAUDE.md too. Then the main session sets up the local repo, the secret check and the remote, without pushing.
 - **D123 Signing commits** (2026-09-27): **(a) Off for this project only** (`git config commit.gpgsign false` in this repo). The user's other projects stay signed. This way agents never wait on a passphrase prompt.
 - **D124 The first commit and push** (2026-09-27): **(a)** The main session makes the first commit, and the user pushes it with `! git push -u origin main`.
+  - **Updated the same day:** the user said "push it yourself". Guard rail 3 blocks the main session, so the integrator agent pushed it (task SETUP-001). `main` is on GitHub at 3b50ed8, tracking `origin/main`.
+- **D125 Neo4j Desktop settings** (2026-09-27): **(a)** The user stops the DBMS. The main session then checks the exact setting names in its config, moves routing to 7689 (D62), switches off usage reporting and discovery broadcasts (D58), and shows the diff.
+  - **Done 2026-09-27.** The user said "you stop it"; the DBMS was already stopped. Changes to its `neo4j.conf` (backup: `neo4j.conf.before-grc-2026-09-27`):
+    - `server.routing.listen_address` and `advertised_address` set to `:7689`
+    - `dbms.usage_report.enabled=false`
+    - `dbms.fleet_manager.enabled=false` (the source of the discovery broadcasts)
+  - Neo4j's own config check passed.
+- **D126 Trail of Bits plugins** (2026-09-27): **(a) Install them now.** The main session finds the exact install commands and names, and shows them before running anything.
+  - **Done 2026-09-27:** both installed, for the user. `differential-review:differential-review` (1.1.4) is preloaded in `security-reviewer.md`. `insecure-defaults` (2.0.3) now ships an audit workflow (`/insecure-defaults:audit`) instead of a skill, so it can't be preloaded. It's run at each checkpoint instead (D128).
+- **D127 Docker memory** (2026-09-27): the user asked for it to be changed "through terminal", not the Docker Desktop screen. The target stays 4 GB (D82).
+  - Done: `"MemoryMiB": 4096` added to Docker Desktop's `settings-store.json`.
+  - It takes effect when the user restarts Docker Desktop (`docker desktop restart`). The restart also stops the other project's running container, so it's the user's to run.
+- **D128 The insecure-defaults audit** (2026-09-27): **(a)** The main session runs `/insecure-defaults:audit` on the whole codebase at each milestone checkpoint, and its findings go into the checkpoint report (D114).
+- **D129 The throwaway test run** (2026-09-27): **(a) Skipped** (replaces D121's throwaway milestone). The first M0 task is the real test: the main session watches it closely and fixes anything in the workflow before the rest continue.
+- **M0 plan questions** (2026-09-27). The user answered "21a 22a 23a 24a 25a 26b 27a and OK". **The M0 task list is approved (D111).**
+- **D130 Lint and format tool** (2026-09-27): **(a) ESLint + Prettier.**
+- **D131 AI graph queries naming a database** (2026-09-27): **(a)** Our code refuses any AI-written graph query that names a database, with a test for it. The 28 shared read-only accounts stay (D73).
+- **D132 Testing file storage** (2026-09-27): **(a)** The dev-only switch that opens Postgres on 5433 (D61) also opens SeaweedFS on 127.0.0.1. It's off by default.
+- **D133 Creating an org and its first Admin** (2026-09-27): **(a)** A command-line setup command run by the platform operator (the user), for now.
+- **D134 SSO** (2026-09-27): **(a) Built in slice 7**, with the Admin screens. M0-017 moves there. The tests use a small stand-in sign-in provider that runs locally.
+- **D135 Nightly backups and the monthly restore test** (2026-09-27): **(b) Slice 7**, with the admin tools.
+- **D136 Skills for M0** (2026-09-27): **(a) Approved as listed** (D88):
+  - builders: test-driven-development, systematic-debugging, verification-before-completion; plus ai-sdk for backend, and frontend-design and shadcn for frontend
+  - test writer: test-driven-development
+  - code reviewer: code-review
+  - security reviewer: fp-check, differential-review
+  - integrator: resolving-merge-conflicts
+  - planner: writing-plans
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
@@ -523,6 +551,12 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The shape of the build workflow moved to phase 9, where it belongs.
 - **Phase 8, round 3:** answered on 2026-09-26 (D86, D89, D90). The phase 8 decisions are locked, and the configuration is in progress.
 - **Phase 8 configuration (feature-dev phase 3):** answered on 2026-09-26 (D91–D99). **Feature-dev phase 4:** the minimal and clean designs came back. The pragmatic design agent got stuck and was stopped, so the main session wrote the middle option. The comparison was presented on 2026-09-26. **Q104–Q107 were answered the same day (D104–D107), and the build (feature-dev phase 5) started.**
+- **The user, 2026-09-27:** "lets get to the implememntation we are too focused ont he preparartion". Next is milestone 0 planning; the remaining setup items are done alongside it.
+- **M0 planning ran on 2026-09-27** (workflow step `plan`). There are 17 tasks, M0-001 to M0-017, in `TASKS.md`, and 7 questions for the user.
+  - **Lesson (D129's watched first run):** the planner's hand-in was refused by guard rail 5. The cause was the main session editing CLAUDE.md and skills.md through Bash while the planner ran. The hand-in check excludes only main-session edits made with Edit/Write.
+  - **From now on, the main session:**
+    - uses Edit/Write for project files while agents run
+    - commits its own changes before starting a workflow step
 - **Resume here (updated 2026-09-27):** phase 8 is done, and `phase8-build-plan.md` has been removed.
   - Phase 9: `.claude/workflows/milestone.js` is written (D121). A dry run with stand-in agents passed on 2026-09-27: dependencies, blocked tasks, the test-writer loop, send-backs, the 8-agent cap, the real-Gemma slot, and refusing a bad list.
   - Next: the setup tasks below, then a real test of the workflow with a tiny throwaway milestone.
@@ -550,7 +584,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
     - the local repo (`main`)
     - git's secret check (`core.hooksPath .claude/githooks`)
     - the remote `origin`, pointing at the user's empty private GitHub repo (D122)
-    - no commit or push yet; the hook tests still pass (120)
+    - the first commit, 3b50ed8 (unsigned, D123), pushed by the integrator (D124); the hook tests still pass (120)
   - Commit signing uses a GPG key (checked 2026-09-27).
   - **The user lowers Docker Desktop's memory limit from 8 GB to 4 GB** (D82).
   - **Turn on git's secret check:** right after creating the repo, run `git config core.hooksPath .claude/githooks` (D57, D104).
@@ -559,7 +593,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **Install the Trail of Bits `insecure-defaults` and `differential-review` plugins**, after the user's OK (D87). Then add their skills to `security-reviewer.md`, checking the exact `plugin:skill` names.
   - **After the repo exists, check that a worktree agent's start snapshot records its worktree**, not the main checkout. The `cwd` that SubagentStart gives worktree agents isn't documented.
   - **Milestone 0: keep Vitest away from the hook tests.** Either run it per package (`pnpm -r test`) or exclude `.claude/**`, because the hook tests use `node:test`.
-  - **Neo4j Desktop config**, with the DBMS stopped: move routing to 7689 (D62) and switch off usage reporting and discovery broadcasts (D58).
+  - ✅ **Neo4j Desktop config** (D125): routing on 7689, usage reporting and Fleet Manager off.
   - **The user's one-time step** (needs the Mac password): trust Caddy's local certificate, and add the hosts entry `127.0.0.1 grc.localhost` (D65).
   - **The user stops other projects' containers** before running the stack (D35).
 - **Parked for later phases:**

@@ -16,8 +16,8 @@ During a workflow run, each agent uses only the skills the user approved for tha
 | Backend builder | `ai-sdk` | vercel (claude-plugins-official) | The Vercel AI SDK, our link to Gemma |
 | Code reviewer | `code-review` | mattpocock-skills (claude-plugins-official) | Checks a change against the coding standards and against what the task asked for |
 | Security reviewer | `fp-check` | fp-check (trailofbits) | Double-checks a suspected security bug, so false alarms don't block work |
-| Security reviewer | `insecure-defaults` | insecure-defaults (trailofbits), **not installed yet** | Finds hard-coded passwords, fallback secrets and weak login settings |
-| Security reviewer | `differential-review` | differential-review (trailofbits), **not installed yet** | A security review of each change and what it could affect |
+| Security reviewer | `insecure-defaults` | insecure-defaults (trailofbits) 2.0.3, installed 2026-09-27. **It's now an audit workflow (`/insecure-defaults:audit`), not a preloadable skill; the main session runs it at each milestone checkpoint (D128)** | Finds hard-coded passwords, fallback secrets and weak login settings |
+| Security reviewer | `differential-review:differential-review` | differential-review (trailofbits) 1.1.4, installed 2026-09-27, preloaded in `security-reviewer.md` | A security review of each change and what it could affect |
 | Integrator | `resolving-merge-conflicts` | mattpocock-skills (claude-plugins-official) | Combines work when two agents changed the same files |
 | Main session, at setup | `git-guardrails-claude-code` | mattpocock-skills (claude-plugins-official) | Sets up the git guard rails (D84). It isn't registered in its plugin, so its steps are read from the plugin files instead of invoked. |
 | Main session | `writing-for-agents` | mattpocock-skills (claude-plugins-official) | Writing the agents' instructions |

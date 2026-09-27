@@ -5,6 +5,7 @@ tools: Read, Bash
 model: inherit
 skills:
   - fp-check:fp-check
+  - differential-review:differential-review
 color: red
 ---
 

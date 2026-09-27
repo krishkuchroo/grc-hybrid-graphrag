@@ -259,7 +259,7 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
 - **Milestone workflow (D109–D118):** `.claude/workflows/milestone.js`, started with the milestone ID.
   1. Step `plan`: the planner splits the milestone. The user OKs the task list and skills (D111).
   2. Step `build`: each task goes test writer → builder → both reviewers → integrator, on branch `task/<ID>`. Up to 8 agents run at once. A blocked task holds only the tasks that wait on it. Real-Gemma steps run one at a time at the end.
-  3. The checkpoint (D114). Then step `tag`, after the user approves.
+  3. The checkpoint (D114), including a whole-codebase `/insecure-defaults:audit` run (D128). Then step `tag`, after the user approves.
 - **Agent monitor (D100–D103):**
   - Run `node .claude/monitor/server.mjs`, then open http://127.0.0.1:4800.
   - It shows milestone progress, each agent's task and last steps, the board and the guard-rail blocks.
