@@ -13,5 +13,8 @@
     "eslint": "^10.11.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
+  },
+  "dependencies": {
+    "neo4j-driver": "^6.2.0"
   }
 }
