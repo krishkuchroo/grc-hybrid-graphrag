@@ -546,6 +546,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **D137 Storage test port** (2026-09-27): **(a) 8333**, SeaweedFS's standard S3 port. The dev switch publishes `127.0.0.1:8333:8333` (D132).
 - **D138 New names in the M0 briefs** (2026-09-27): **(a) Kept as the planner wrote them:** `pnpm org:create` (D133), `query-guard.ts` with `assertNoDatabaseReference` and the `GraphQueryRefused` error (D131), and the `S3_ENDPOINT` setting (D132).
 - **D139 Running the M0 build** (2026-09-27): the user: "Keep on going you have the control on blocks, note down the errors in logs i am letting you run". The main session handles blocked tasks and workflow errors itself during the build and writes each error and what it did to `logs/build-errors.md`. Still no new plan decision without the user.
+- **D140 The Neo4j Desktop `neo4j` password** (2026-09-27): **(a)** The password the user gave didn't work. The main session sets a new random one: it turns login off briefly (127.0.0.1 only), sets the new password straight into `.env` without showing it, then turns login back on. This overrides the M0-004 brief's "never reset the password". Neo4j Desktop will ask for it again. Login is never turned off for good.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
