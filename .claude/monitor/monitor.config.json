@@ -1,0 +1,53 @@
+{
+  "port": 4800,
+  "logsDir": "logs",
+  "quietMinutes": 10,
+  "board": {
+    "file": "TASKS.md",
+    "columns": {
+      "id": "id",
+      "milestone": "milestone",
+      "owner": "owner",
+      "status": "status",
+      "pass criteria & tests": "criteria",
+      "blocked notes": "blockedNotes",
+      "task log": "log"
+    }
+  },
+  "milestones": ["M0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"],
+  "agentColors": {
+    "planner": "blue",
+    "test-writer": "purple",
+    "builder-platform": "orange",
+    "builder-backend": "green",
+    "builder-frontend": "cyan",
+    "builder-data": "yellow",
+    "security-reviewer": "red",
+    "code-reviewer": "pink"
+  },
+  "guardRails": {
+    "1": "Containers",
+    "2": "Secrets",
+    "3": "Git",
+    "4": "Finish checks",
+    "5": "Protected files",
+    "6": "Skills",
+    "7": "Test files",
+    "5/7": "Changed files",
+    "monitor": "Monitor"
+  },
+  "openQuestions": { "file": "CLAUDE.md", "heading": "Open questions for the user" },
+  "health": {
+    "intervalSeconds": 15,
+    "containers": ["grc-", "grc_"],
+    "ports": [
+      { "label": "Neo4j Bolt", "port": 7687 },
+      { "label": "Neo4j UI", "port": 7474 },
+      { "label": "Ollama", "port": 11434 },
+      { "label": "Caddy (HTTPS)", "port": 443 }
+    ],
+    "http": [{ "label": "Ollama API", "url": "http://127.0.0.1:11434/api/version" }],
+    "dockerMemoryLimitGB": 4
+  },
+  "launch": { "maxConcurrent": 2, "agentsDir": ".claude/agents" }
+}

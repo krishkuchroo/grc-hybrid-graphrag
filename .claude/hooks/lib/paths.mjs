@@ -6,8 +6,11 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The main checkout. CLAUDE_PROJECT_DIR points here even inside worktrees.
-export const PROJECT_DIR = resolve(
+// The main checkout. CLAUDE_PROJECT_DIR points here inside workflow
+// agents' worktrees, but at the worktree for a run started with --worktree
+// (the monitor's launched runs), so .claude/worktrees/<name> maps back (D161).
+export const mainCheckout = (dir) => resolve(dir).replace(/[\\/]\.claude[\\/]worktrees[\\/][^\\/]+$/, '');
+export const PROJECT_DIR = mainCheckout(
   process.env.CLAUDE_PROJECT_DIR || join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'),
 );
 

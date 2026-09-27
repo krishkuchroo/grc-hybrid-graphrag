@@ -287,20 +287,24 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
   1. Step `plan`: the planner splits the milestone. The user OKs the task list and skills (D111).
   2. Step `build`: each task goes test writer → builder → both reviewers → integrator, on branch `task/<ID>`. Up to 8 agents run at once. A blocked task holds only the tasks that wait on it. Real-Gemma steps run one at a time at the end.
   3. The checkpoint (D114), including a whole-codebase `/insecure-defaults:audit` run (D128). Then step `tag`, after the user approves.
-- **Agent monitor (D100–D103):**
-  - Run `node .claude/monitor/server.mjs`, then open http://127.0.0.1:4800.
-  - It shows milestone progress, each agent's task and last steps, the board and the guard-rail blocks.
-  - It sends an agent a note, which the agent gets at its next step.
+- **Agent monitor (D100–D103, v2: D148–D158, D161):**
+  - Run `node .claude/monitor/server.mjs`, then open http://127.0.0.1:4800. How it works and how to reuse it: `.claude/monitor/README.md`.
+  - Tabs: Overview (attention, open questions, health, tokens today, milestones), Agents, Launch, Tokens, Activity (log search), Board.
+  - Notes reach an agent at its next step, to one agent or several. Answers to open questions reach the main session with the user's next message there (D155).
+  - Launched runs (D151–D154, D161): only `.claude/agents/`, auto mode plus edits in their own worktree, 2 at a time, reply anytime, Stop button. They count as agents in every guard rail (D158).
+  - Everything project-specific is in `.claude/monitor/monitor.config.json` (D149). The folder imports nothing from outside it.
   - Pause or stop a workflow in `/workflows`.
 - **Logs (D92, D107):** kept in `logs/`, which is git-ignored. Only the hooks and the monitor write there.
   - `guardrails.jsonl`: blocks, and errors from hooks that failed.
-  - `activity.jsonl`: each agent's steps.
-  - `notes.jsonl` and `inbox/`: notes to agents.
+  - `activity.jsonl`: each agent's steps (the monitor's hook).
+  - `edits.jsonl`: who edited which file, for the hand-in backstop (the guard rails' `record-checkout.mjs`, D157).
+  - `notes.jsonl`, `answers.jsonl` and `inbox/`: notes to agents and answers to the main session.
+  - `launches/<session>/`: runs launched from the monitor.
   - `state/`: what the hooks track about each agent.
   - `tasks/<ID>.md`: each task's log.
 - **Where the guard rails live:**
   - `.claude/hooks/`: one file per rule, with the shared code in `lib/`.
-  - Tests: `node --test '.claude/hooks/__tests__/*.test.mjs'`.
+  - Tests: `node --test '.claude/hooks/__tests__/*.test.mjs'`, and for the monitor `node --test '.claude/monitor/__tests__/*.test.mjs'`.
   - Git's pre-commit secret scan is `.claude/githooks/pre-commit`. Switch it on at setup with `git config core.hooksPath .claude/githooks`.
   - **Fail safe (D119):** a command the guard rails can't read is blocked. That covers a program name or file name built at run time (`$X`, `$(…)`), git and gh aliases, and an agent setting `COMPOSE_*` or `GIT_CONFIG_*`.
 

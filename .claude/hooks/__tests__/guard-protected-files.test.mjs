@@ -22,6 +22,11 @@ test('no agent edits CLAUDE.md, .claude/, skills.md or logs/', () => {
   assert.match(decideProtected(edit('builder-backend', join(homedir(), '.claude', 'settings.json'))).reason, /~\/\.claude/);
 });
 
+test('a run launched with --agent is an agent here too (D158)', () => {
+  const launched = input({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: at('CLAUDE.md') }, agent_type: 'builder-backend', session_id: 'run1', cwd: PROJECT });
+  assert.ok(decideProtected(launched));
+});
+
 test('only the planner edits memory.md and TASKS.md', () => {
   assert.ok(decideProtected(edit('builder-backend', at('memory.md'))));
   assert.ok(decideProtected(edit('integrator', at('TASKS.md'))));

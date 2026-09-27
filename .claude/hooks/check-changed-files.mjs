@@ -1,7 +1,7 @@
 // Guard rails 7 and 5, backstop at hand-in (D89, D95, D104, D107):
 // builders didn't change test files, and no agent changed files it can't
 // edit, however the change was made. It compares the checkout with how it
-// looked when the agent started (recorded by monitor-hook.mjs). The
+// looked when the agent started (recorded by record-checkout.mjs). The
 // integrator is skipped: its merges bring in other agents' approved work.
 import { changedSince } from './lib/checkout.mjs';
 import { isHandInEvent, parseHandoff } from './lib/handoff.mjs';

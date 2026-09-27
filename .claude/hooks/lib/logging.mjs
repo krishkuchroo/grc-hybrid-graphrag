@@ -4,7 +4,6 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { LOGS_DIR } from './paths.mjs';
 import { redact } from './secret-scan.mjs';
-import { agentKey } from './state.mjs';
 
 const now = () => new Date().toISOString();
 
@@ -60,20 +59,12 @@ export function logHookError({ rule, input, error }) {
   );
 }
 
-// logs/activity.jsonl: what each agent is doing, for the monitor (D100).
-export function logActivity(entry) {
-  const clean = { ts: now(), ...entry };
-  if (clean.subject !== undefined) clean.subject = clip(clean.subject, 240);
-  append(join(LOGS_DIR, 'activity.jsonl'), `${JSON.stringify(clean)}\n`);
+// logs/edits.jsonl: who edited which file through Edit/Write/NotebookEdit,
+// so the hand-in backstop can tell other people's edits apart (D157).
+export const EDITS_FILE = () => join(LOGS_DIR, 'edits.jsonl');
+export function logEdit(entry) {
+  append(EDITS_FILE(), `${JSON.stringify({ ts: now(), ...entry })}\n`);
 }
-
-// logs/notes.jsonl: every note the user sends an agent, and its delivery (D101).
-export function logNote(entry) {
-  append(join(LOGS_DIR, 'notes.jsonl'), `${JSON.stringify({ ts: now(), ...entry })}\n`);
-}
-
-// logs/inbox/<agent>.jsonl: notes waiting for an agent's next step (D101).
-export const inboxFile = (agentId) => join(LOGS_DIR, 'inbox', `${agentKey(agentId)}.jsonl`);
 
 export function safeTaskId(id, fallback) {
   return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(id ?? '')) ? String(id) : fallback;

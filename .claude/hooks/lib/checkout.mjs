@@ -3,7 +3,8 @@
 import { readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { runGit as git } from './git.mjs';
-import { LOGS_DIR, gitTopLevel, isInside, realish } from './paths.mjs';
+import { EDITS_FILE } from './logging.mjs';
+import { gitTopLevel, isInside, realish } from './paths.mjs';
 
 const split = (text) => text.split('\0').filter(Boolean);
 
@@ -50,11 +51,11 @@ export function snapshot(cwd) {
 
 // Paths edited through Edit/Write/NotebookEdit by anyone else (another agent
 // or the main session) since `since`, relative to `repo`.
-function editedByOthers(agentId, since, repo, activityFile) {
+function editedByOthers(agentId, since, repo, editsFile) {
   const out = new Set();
   let text = '';
   try {
-    text = readFileSync(activityFile, 'utf8');
+    text = readFileSync(editsFile, 'utf8');
   } catch {
     return out;
   }
@@ -118,7 +119,7 @@ function othersContent(repo, tips, paths) {
 // since the start commit, minus files whose content matches work that
 // existed without the agent, minus files that were already changed and
 // haven't been touched since, minus files someone else edited.
-export function changedSince(start, agentId, activityFile = join(LOGS_DIR, 'activity.jsonl')) {
+export function changedSince(start, agentId, editsFile = EDITS_FILE()) {
   const { repo, head, dirty = {}, startedAt } = start;
   const names = new Set();
   if (head) split(git(repo, ['diff', '--name-only', '-z', head])).forEach((p) => names.add(p));
@@ -127,7 +128,7 @@ export function changedSince(start, agentId, activityFile = join(LOGS_DIR, 'acti
     split(git(repo, ['diff', '--name-only', '-z'])).forEach((p) => names.add(p));
   }
   split(git(repo, ['ls-files', '--others', '--exclude-standard', '-z'])).forEach((p) => names.add(p));
-  const others = editedByOthers(agentId, startedAt, repo, activityFile);
+  const others = editedByOthers(agentId, startedAt, repo, editsFile);
   const theirs = othersContent(repo, start.tips ?? [], [...names]);
   return [...names].filter((p) => {
     if (theirs.has(p)) return false;
