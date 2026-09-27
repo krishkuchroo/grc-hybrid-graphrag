@@ -1,7 +1,7 @@
 // How a checkout looked when an agent started, and which files changed
 // since, for the hand-in backstop of guard rails 5 and 7.
 import { readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { runGit as git } from './git.mjs';
 import { LOGS_DIR, gitTopLevel, isInside, realish } from './paths.mjs';
 
@@ -41,7 +41,11 @@ export function snapshot(cwd) {
   } catch {}
   const dirty = {};
   for (const p of dirtyPaths(repo).slice(0, 5000)) dirty[p] = signature(join(repo, p));
-  return { repo, head, dirty };
+  let tips = [];
+  try {
+    tips = [...new Set(git(repo, ['for-each-ref', '--format=%(objectname)', 'refs/heads']).split('\n').filter(Boolean))].slice(0, 200);
+  } catch {}
+  return { repo, head, dirty, tips };
 }
 
 // Paths edited through Edit/Write/NotebookEdit by anyone else (another agent
@@ -70,39 +74,63 @@ function editedByOthers(agentId, since, repo, activityFile) {
   return out;
 }
 
-// Where to diff from. In a worktree, an agent that moves its branch onto the
-// current main brings in commits others made after the worktree was created
-// (M0-001's first run): diff from where its branch meets main instead, but
-// only when that point is later than the start commit. The main checkout
-// always diffs from the start commit.
-function diffBase(repo, head) {
-  try {
-    const gitDir = resolve(repo, git(repo, ['rev-parse', '--git-dir']).trim());
-    const common = resolve(repo, git(repo, ['rev-parse', '--git-common-dir']).trim());
-    if (realish(gitDir) === realish(common)) return head;
-    const base = git(repo, ['merge-base', 'HEAD', 'refs/heads/main']).trim();
-    git(repo, ['merge-base', '--is-ancestor', head, base]);
-    return base || head;
-  } catch {
-    return head;
+// path -> blob id for every file in a commit's tree.
+function treeOf(repo, commit) {
+  const files = new Map();
+  for (const entry of split(git(repo, ['ls-tree', '-r', '-z', commit]))) {
+    const tab = entry.indexOf('\t');
+    files.set(entry.slice(tab + 1), entry.slice(0, tab).split(' ')[2]);
   }
+  return files;
+}
+
+// Paths whose current content (or absence) matches a commit that existed
+// without the agent: a branch tip when it started, or main now. A worktree
+// agent that switches onto a task branch or rebases onto main brings in
+// other people's commits; those files aren't its changes (M0-001's runs).
+function othersContent(repo, tips, paths) {
+  const same = new Set();
+  const commits = new Set(tips);
+  try {
+    commits.add(git(repo, ['rev-parse', '--verify', '-q', 'refs/heads/main']).trim());
+  } catch {}
+  commits.delete('');
+  if (!paths.length || !commits.size) return same;
+  const present = paths.filter((p) => signature(join(repo, p)) !== 'missing');
+  const current = new Map();
+  if (present.length) {
+    const ids = git(repo, ['hash-object', '--stdin-paths'], { input: `${present.join('\n')}\n` }).trim().split('\n');
+    present.forEach((p, k) => current.set(p, ids[k]));
+  }
+  for (const commit of commits) {
+    let tree;
+    try {
+      tree = treeOf(repo, commit);
+    } catch {
+      continue;
+    }
+    for (const p of paths) if (tree.get(p) === current.get(p)) same.add(p);
+  }
+  return same;
 }
 
 // Files this agent changed since it started: anything git sees as changed
-// since the start commit (or the diffBase above), minus files that were
-// already changed and haven't been touched since, minus files someone else
-// edited.
+// since the start commit, minus files whose content matches work that
+// existed without the agent, minus files that were already changed and
+// haven't been touched since, minus files someone else edited.
 export function changedSince(start, agentId, activityFile = join(LOGS_DIR, 'activity.jsonl')) {
   const { repo, head, dirty = {}, startedAt } = start;
   const names = new Set();
-  if (head) split(git(repo, ['diff', '--name-only', '-z', diffBase(repo, head)])).forEach((p) => names.add(p));
+  if (head) split(git(repo, ['diff', '--name-only', '-z', head])).forEach((p) => names.add(p));
   else {
     split(git(repo, ['diff', '--name-only', '-z', '--cached'])).forEach((p) => names.add(p));
     split(git(repo, ['diff', '--name-only', '-z'])).forEach((p) => names.add(p));
   }
   split(git(repo, ['ls-files', '--others', '--exclude-standard', '-z'])).forEach((p) => names.add(p));
   const others = editedByOthers(agentId, startedAt, repo, activityFile);
+  const theirs = othersContent(repo, start.tips ?? [], [...names]);
   return [...names].filter((p) => {
+    if (theirs.has(p)) return false;
     if (p in dirty && dirty[p] === signature(join(repo, p))) return false;
     return !others.has(p);
   });

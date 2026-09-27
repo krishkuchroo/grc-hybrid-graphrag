@@ -51,6 +51,43 @@ test("in a worktree, main's later commits aren't the agent's, but its own branch
   assert.deepEqual(changedSince(start, 'wt-agent', '/nonexistent').sort(), ['a.test.ts', 'memory.md']);
 });
 
+test("a builder that takes a task branch doesn't own the test writer's commits there", () => {
+  const repo = makeRepo(undefined, { 'a.ts': 'a\n' });
+  git(repo, 'branch', 'task/Y');
+  const tw = join(repo, '.tw');
+  git(repo, 'worktree', 'add', '-q', tw, 'task/Y');
+  put(tw, 'a.test.ts', 'the test writer\n');
+  git(tw, 'add', '-A');
+  git(tw, 'commit', '-qm', 'Y: tests');
+  git(tw, 'switch', '-q', '--detach');
+  const wt = join(repo, '.builder');
+  git(repo, 'worktree', 'add', '-q', '--detach', wt, 'main');
+  const start = { ...snapshot(wt), startedAt: new Date().toISOString() };
+  git(wt, 'switch', '-q', 'task/Y');
+  put(wt, 'a.ts', 'built\n');
+  assert.deepEqual(changedSince(start, 'builder', '/nonexistent'), ['a.ts']);
+  put(wt, 'a.test.ts', 'weakened\n');
+  assert.deepEqual(changedSince(start, 'builder', '/nonexistent').sort(), ['a.test.ts', 'a.ts']);
+});
+
+test('a resumed agent that rebases its old branch onto a newer main owns only its own work', () => {
+  const repo = makeRepo(undefined, { 'skills.md': 's\n' });
+  const wt = join(repo, '.wt');
+  git(repo, 'worktree', 'add', '-q', '-b', 'task/Z', wt);
+  put(wt, 'z.test.ts', 'tests\n');
+  git(wt, 'add', '-A');
+  git(wt, 'commit', '-qm', 'Z: tests');
+  git(wt, 'switch', '-q', '--detach');
+  const start = { ...snapshot(wt), startedAt: new Date().toISOString() };
+  put(repo, 'skills.md', 'fixed on main\n');
+  git(repo, 'commit', '-qam', 'main moves on');
+  git(wt, 'switch', '-q', 'task/Z');
+  git(wt, 'rebase', '-q', 'main');
+  assert.deepEqual(changedSince(start, 'resumed', '/nonexistent'), []);
+  git(wt, 'rm', '-q', 'skills.md');
+  assert.deepEqual(changedSince(start, 'resumed', '/nonexistent'), ['skills.md']);
+});
+
 test('createdSinceStart is true only for files the agent made', () => {
   const repo = makeRepo(undefined, { 'src/old.test.ts': 'x\n' });
   put(repo, 'src/before.test.ts', 'before\n');

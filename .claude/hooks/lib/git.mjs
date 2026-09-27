@@ -36,11 +36,12 @@ export function gitCall(args) {
 // A short option cluster such as -fd or -uf.
 export const isShortCluster = (v) => /^-[A-Za-z0-9]+$/.test(v);
 
-export function runGit(repo, args, { timeoutMs = 30_000 } = {}) {
+export function runGit(repo, args, { timeoutMs = 30_000, input } = {}) {
   return execFileSync('git', ['-C', repo, ...args], {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
-    stdio: ['ignore', 'pipe', 'ignore'],
+    stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'ignore'],
+    input,
     timeout: timeoutMs,
   });
 }
