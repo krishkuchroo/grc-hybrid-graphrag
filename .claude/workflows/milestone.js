@@ -2,7 +2,7 @@ export const meta = {
   name: 'milestone',
   description: 'Run one GRC milestone: plan it, build its tasks through the agent chain, or tag it',
   whenToUse:
-    'Start with the milestone ID (m0, s1 … s8). Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81). Args: "m0", or { milestone: "m0", step: "build", notes?: { "<task ID>": "note for its first test writer" } }.',
+    'Start with the milestone ID (m0, s1 … s8). Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81). Args: "m0", or { milestone: "m0", step: "build", notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "review" } }.',
   phases: [
     { title: 'Plan', detail: 'the planner splits the milestone into tasks and briefs' },
     { title: 'Build', detail: 'test writer → builder → reviewers → integrator, per task' },
@@ -26,6 +26,10 @@ const step = given.step ?? 'plan'
 // Optional { "<task ID>": "note" }: the note goes into that task's first
 // test-writer brief only, and a task blocked on the board runs again.
 const resumeNotes = given.notes ?? {}
+// Optional { "<task ID>": "build" | "review" }: restart a task at that stage,
+// when its tests (and, for review, its code) are already on its branch. Its
+// note, if any, goes to the first agent of that stage.
+const startFrom = given.from ?? {}
 if (!MILESTONES.includes(milestone)) return { error: `the milestone must be one of ${MILESTONES.join(', ')}; got "${given.milestone}"` }
 if (!['plan', 'build', 'tag'].includes(step)) return { error: `the step must be plan, build or tag; got "${step}"` }
 const MS = milestone.toUpperCase()
@@ -212,7 +216,9 @@ async function runTask(t) {
   let reviewNote = ''
   let rounds = 0
   let sendBacks = 0
-  let needTests = true
+  const startAt = startFrom[id]
+  let needTests = !startAt
+  let skipBuild = startAt === 'review'
   while (true) {
     if (needTests) {
       rounds += 1
@@ -235,12 +241,16 @@ async function runTask(t) {
       needTests = false
     }
 
+    if (skipBuild) {
+      skipBuild = false
+    } else {
     const b = keep(
       await handIn(
         id,
         t.owner,
         [
           `You work in a fresh worktree. Start with \`git switch ${branch}\`; the tests are committed there (D112).`,
+          startAt === 'build' && rounds === 0 && !reviewNote && resumeNotes[id],
           reviewNote && `The reviewers sent it back. Fix these:\n${reviewNote}`,
           `Commit your code with a message starting "${id}:". Then run \`git switch --detach\`, so the reviewers can take the branch.`,
           'If a test looks wrong, hand off as "blocked", set `testProblem` to true, and say why in your findings. It goes back to the test writer.',
@@ -257,12 +267,14 @@ async function runTask(t) {
     }
     if (b.status !== 'done') return blocked(t.owner, b)
     record(id, t.owner, b, 'in review')
+    }
 
     // Both reviewers look at the same commit, side by side.
     const review = (who) =>
       handIn(id, who, [
         `You work in a fresh worktree. Start with \`git switch --detach ${branch}\`. The base is \`main\`.`,
         sendBacks ? `This is review round ${sendBacks + 1}; it was sent back ${sendBacks} time(s) before.` : '',
+        startAt === 'review' && sendBacks === 0 && resumeNotes[id],
       ], { isolation: 'worktree' })
     const [code, security] = await Promise.all([review('code-reviewer'), review('security-reviewer')])
     for (const [who, h] of [['code-reviewer', code], ['security-reviewer', security]]) {
