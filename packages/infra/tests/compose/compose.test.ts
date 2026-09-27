@@ -12,7 +12,13 @@
 // subprocess gets a clean environment (no COMPOSE_* or app variables leak in).
 //
 // The dev-switch tests run base + dev together and compare the result with the base
-// alone: the only allowed difference is the two 127.0.0.1 ports (criterion 4).
+// alone. By D145 (which replaces D141's grc-dev join), grc-postgres and grc-seaweedfs stay
+// on grc-internal only, always, and every base service is left exactly as it is. The only
+// allowed additions are one small relay service `grc-dev-relay` on grc-internal plus one
+// normal dev-only network `grc-dev`, both defined only in compose.dev.yaml. The relay
+// publishes exactly 127.0.0.1:5433 (to grc-postgres:5432) and 127.0.0.1:8333 (to
+// grc-seaweedfs:8333). Docker publishes no port for a container that is only on an
+// internal network, which is why the relay needs grc-dev.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -29,6 +35,9 @@ const API_DOCKERFILE = join(ROOT, 'packages', 'api', 'Dockerfile');
 
 const REQUIRED_SERVICES = ['grc-postgres', 'grc-seaweedfs', 'grc-caddy', 'grc-api', 'grc-worker'] as const;
 const FOUR_GIB = 4 * 1024 ** 3;
+// D145: the one dev-only relay service and the one dev-only network it joins.
+const RELAY = 'grc-dev-relay';
+const DEV_NET = 'grc-dev';
 
 type Json = Record<string, unknown>;
 interface Port {
@@ -51,10 +60,17 @@ interface Service {
   deploy?: { resources?: { limits?: { memory?: string | number } } };
   volumes?: { type: string; source?: string }[];
 }
+interface Network {
+  name?: string;
+  internal?: boolean;
+  external?: boolean;
+  driver?: string;
+  driver_opts?: Record<string, string>;
+}
 interface Project {
   name: string;
   services: Record<string, Service>;
-  networks?: Record<string, { name?: string; internal?: boolean; external?: boolean }>;
+  networks?: Record<string, Network>;
   volumes?: Record<string, { name?: string }>;
 }
 
@@ -138,6 +154,10 @@ function svc(p: Project, name: string): Service {
 }
 function netsOf(s: Service): string[] {
   return Object.keys(s.networks ?? {}).sort();
+}
+function without<T>(o: Record<string, T> | undefined, key: string): Record<string, T> | undefined {
+  if (!o) return o;
+  return Object.fromEntries(Object.entries(o).filter(([k]) => k !== key));
 }
 function portKey(p: Port): string {
   return `${p.host_ip ?? '0.0.0.0'}:${p.published ?? ''}:${p.target}`;
@@ -305,15 +325,17 @@ describe('compose: published ports (criterion 3, D61)', () => {
   });
 });
 
-describe('compose: the dev switch (criterion 4, D61, D132, D137)', () => {
-  it('opens Postgres on 127.0.0.1:5433 -> 5432 and nothing else on Postgres', () => {
-    const keys = (svc(devStack(), 'grc-postgres').ports ?? []).map(portKey);
-    expect(keys).toEqual(['127.0.0.1:5433:5432']);
-  });
-
-  it("opens SeaweedFS's S3 port on 127.0.0.1:8333 -> 8333 and nothing else on SeaweedFS", () => {
-    const keys = (svc(devStack(), 'grc-seaweedfs').ports ?? []).map(portKey);
-    expect(keys).toEqual(['127.0.0.1:8333:8333']);
+describe('compose: the dev switch (criterion 4, D61, D132, D137, D145)', () => {
+  it('opens exactly 127.0.0.1:5433 and 127.0.0.1:8333, both on grc-dev-relay', () => {
+    const baseKeys = new Set(
+      Object.entries(stack().services).flatMap(([name, s]) => (s.ports ?? []).map((p) => `${name} ${portKey(p)}`)),
+    );
+    const opened = Object.entries(devStack().services).flatMap(([name, s]) =>
+      (s.ports ?? [])
+        .filter((p) => !baseKeys.has(`${name} ${portKey(p)}`))
+        .map((p) => `${name} ${p.host_ip ?? '0.0.0.0'}:${p.published ?? ''}`),
+    );
+    expect(opened.sort()).toEqual([`${RELAY} 127.0.0.1:5433`, `${RELAY} 127.0.0.1:8333`]);
   });
 
   it('every port it opens binds to 127.0.0.1', () => {
@@ -322,19 +344,91 @@ describe('compose: the dev switch (criterion 4, D61, D132, D137)', () => {
     }
   });
 
-  it('changes nothing else: no new services, networks or volumes, and no other service setting', () => {
+  it.each(['grc-postgres', 'grc-seaweedfs'])('%s publishes no ports and stays on grc-internal only (D145)', (name) => {
+    expect(svc(devStack(), name).ports ?? []).toEqual([]);
+    expect(netsOf(svc(devStack(), name))).toEqual(['grc-internal']);
+  });
+
+  it('changes nothing else: every base service, network and volume is exactly as in the base stack', () => {
     const b = stack();
     const d = devStack();
     expect(d.name).toBe(b.name);
-    expect(Object.keys(d.services).sort()).toEqual(Object.keys(b.services).sort());
-    expect(d.networks).toEqual(b.networks);
+    expect(Object.keys(without(d.services, RELAY) ?? {}).sort()).toEqual(Object.keys(b.services).sort());
+    expect(without(d.networks, DEV_NET)).toEqual(b.networks);
     expect(d.volumes).toEqual(b.volumes);
     for (const name of Object.keys(b.services)) {
-      const { ports: bp, ...bRest } = b.services[name]!;
-      const { ports: dp, ...dRest } = d.services[name]!;
-      expect(dRest, `settings of ${name}`).toEqual(bRest);
-      if (name !== 'grc-postgres' && name !== 'grc-seaweedfs') expect(dp, `ports of ${name}`).toEqual(bp);
+      expect(d.services[name], `service ${name}`).toEqual(b.services[name]);
     }
+  });
+
+  it('adds exactly one service, grc-dev-relay, and one network, grc-dev', () => {
+    const addedServices = Object.keys(devStack().services).filter((k) => !(k in stack().services));
+    const addedNets = Object.keys(devStack().networks ?? {}).filter((k) => !(k in (stack().networks ?? {})));
+    expect(addedServices).toEqual([RELAY]);
+    expect(addedNets).toEqual([DEV_NET]);
+  });
+});
+
+describe('compose: the dev relay grc-dev-relay (D145)', () => {
+  it('the base stack has no relay and no grc-dev network', () => {
+    expect(Object.keys(stack().services)).not.toContain(RELAY);
+    expect(Object.keys(stack().networks ?? {})).not.toContain(DEV_NET);
+    for (const [name, s] of Object.entries(stack().services)) {
+      expect(netsOf(s), name).not.toContain(DEV_NET);
+    }
+  });
+
+  it('the relay and grc-dev are defined in compose.dev.yaml and not in compose.yaml', () => {
+    const devText = readFileSync(COMPOSE_DEV, 'utf8');
+    expect(devText).toMatch(/^\s+grc-dev-relay:/m);
+    expect(devText).toMatch(/^\s+grc-dev:/m);
+    expect(readFileSync(COMPOSE, 'utf8')).not.toMatch(/grc-dev/);
+  });
+
+  it('the relay container is named grc-dev-relay', () => {
+    expect(svc(devStack(), RELAY).container_name).toBe(RELAY);
+  });
+
+  it('the relay is on grc-internal and grc-dev only', () => {
+    expect(netsOf(svc(devStack(), RELAY))).toEqual([DEV_NET, 'grc-internal']);
+  });
+
+  it('only the relay joins grc-dev', () => {
+    const members = Object.entries(devStack().services)
+      .filter(([, s]) => netsOf(s).includes(DEV_NET))
+      .map(([name]) => name);
+    expect(members).toEqual([RELAY]);
+  });
+
+  it('grc-dev is a normal bridge network named grc-dev (not internal, not external)', () => {
+    const n = devStack().networks?.[DEV_NET];
+    expect(n).toBeDefined();
+    expect(n?.name ?? DEV_NET).toBe(DEV_NET);
+    expect(n?.driver ?? 'bridge').toBe('bridge');
+    expect(n?.internal ?? false).toBe(false);
+    expect(n?.external ?? false).toBe(false);
+  });
+
+  it('the relay forwards 5433 to grc-postgres:5432 and 8333 to grc-seaweedfs:8333', () => {
+    const r = svc(devStack(), RELAY);
+    const published = (r.ports ?? []).map((p) => p.published ?? '').sort();
+    expect(published).toEqual(['5433', '8333']);
+    const cfg = JSON.stringify([r.entrypoint, r.command, r.environment]);
+    expect(cfg).toContain('grc-postgres:5432');
+    expect(cfg).toContain('grc-seaweedfs:8333');
+  });
+
+  it('the relay has no volumes, no host mappings and no host networking', () => {
+    const r = svc(devStack(), RELAY);
+    expect(r.volumes ?? []).toEqual([]);
+    expect(extraHosts(r)).toEqual([]);
+    expect((r as Json).network_mode).toBeUndefined();
+  });
+
+  it('the relay has a memory limit, and with it the dev stack stays under 4 GB', () => {
+    expect(memLimit(svc(devStack(), RELAY))).not.toBeNull();
+    const total = Object.values(devStack().services).reduce((sum, s) => sum + (memLimit(s) ?? Infinity), 0);
+    expect(total).toBeLessThan(FOUR_GIB);
   });
 });
 

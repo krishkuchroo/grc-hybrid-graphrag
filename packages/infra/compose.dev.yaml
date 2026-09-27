@@ -1,11 +1,37 @@
-# The dev-only switch (D61, D132, D137). Off by default: it applies only when named:
+# The dev-only switch (D61, D132, D137, D145). Off by default: it applies only when named:
 #   docker compose -f packages/infra/compose.yaml -f packages/infra/compose.dev.yaml --env-file .env up -d
 # It opens exactly two ports, both on 127.0.0.1 only, so tests on the Mac can reach
 # Postgres (5433, because 5432 is taken) and SeaweedFS's S3 API (8333).
+# D145: grc-postgres and grc-seaweedfs stay on grc-internal only (no internet), always.
+# Docker publishes no port for a container that sits only on an internal network, so the
+# switch adds one small relay, grc-dev-relay, on grc-internal plus one normal dev-only
+# network, grc-dev. The relay publishes the two ports and forwards them.
 services:
-  grc-postgres:
+  grc-dev-relay:
+    image: alpine/socat:1.8.0.3
+    container_name: grc-dev-relay
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        socat TCP-LISTEN:5432,fork,reuseaddr TCP:grc-postgres:5432 &
+        exec socat TCP-LISTEN:8333,fork,reuseaddr TCP:grc-seaweedfs:8333
     ports:
       - '127.0.0.1:5433:5432'
-  grc-seaweedfs:
-    ports:
       - '127.0.0.1:8333:8333'
+    networks:
+      - grc-internal
+      - grc-dev
+    depends_on:
+      - grc-postgres
+      - grc-seaweedfs
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+
+networks:
+  grc-dev:
+    name: grc-dev
+    driver: bridge
