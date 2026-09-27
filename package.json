@@ -11,7 +11,9 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "setup:secrets": "node packages/infra/scripts/setup-secrets.ts",
-    "setup:neo4j": "node packages/infra/scripts/setup-neo4j.ts"
+    "setup:neo4j": "node packages/infra/scripts/setup-neo4j.ts",
+    "org:create": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/create-org.ts",
+    "seed:demo": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/seed-demo.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
