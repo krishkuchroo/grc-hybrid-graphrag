@@ -1,0 +1,11 @@
+# The dev-only switch (D61, D132, D137). Off by default: it applies only when named:
+#   docker compose -f packages/infra/compose.yaml -f packages/infra/compose.dev.yaml --env-file .env up -d
+# It opens exactly two ports, both on 127.0.0.1 only, so tests on the Mac can reach
+# Postgres (5433, because 5432 is taken) and SeaweedFS's S3 API (8333).
+services:
+  grc-postgres:
+    ports:
+      - '127.0.0.1:5433:5432'
+  grc-seaweedfs:
+    ports:
+      - '127.0.0.1:8333:8333'
