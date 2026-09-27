@@ -9,7 +9,11 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@grc/shared": "workspace:*"
+    "@aws-sdk/client-s3": "^3.1141.0",
+    "@grc/shared": "workspace:*",
+    "@nestjs/common": "^12.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
