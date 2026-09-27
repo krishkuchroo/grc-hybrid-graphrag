@@ -52,7 +52,10 @@ const LOADS: [string, string][] = [
 /** Procedures that read or send data and need no write: run in a READ session, as the AI path does. */
 const READ_PROCEDURES: [string, string][] = [
   ['apoc.load.json from an http URL', `CALL apoc.load.json('${NOWHERE}') YIELD value RETURN value`],
-  ['apoc.load.json from a file:/// URL', `CALL apoc.load.json('file:///grc-outside-probe.json') YIELD value RETURN value`],
+  [
+    'apoc.load.json from a file:/// URL',
+    `CALL apoc.load.json('file:///grc-outside-probe.json') YIELD value RETURN value`,
+  ],
   ['apoc.load.jsonArray', `CALL apoc.load.jsonArray('${NOWHERE}') YIELD value RETURN value`],
   ['apoc.load.xml', `CALL apoc.load.xml('${NOWHERE}') YIELD value RETURN value`],
   ['apoc.export.json.all streamed', 'CALL apoc.export.json.all(null, {stream: true}) YIELD data RETURN data'],
@@ -131,7 +134,8 @@ describe.each(ACCOUNTS)('$name cannot reach outside the database (D52.2)', (acco
   it('is refused LOAD CSV from an http or file:/// URL by Neo4j itself', async () => {
     const run = impersonatedRunner(sup, account, 'READ');
     expect(await run(org, 'RETURN 1 AS one'), 'the account must exist first').toEqual([{ one: 1 }]);
-    for (const [what, cypher] of LOADS) expectDenied(await errorOf(run, cypher), LOAD_DENIED, `${what} as ${account.name}`);
+    for (const [what, cypher] of LOADS)
+      expectDenied(await errorOf(run, cypher), LOAD_DENIED, `${what} as ${account.name}`);
   });
 
   it('is refused the apoc.load, apoc.export and apoc.spatial procedures by Neo4j itself', async () => {
@@ -159,11 +163,7 @@ describe.each(ACCOUNTS)('$name cannot reach outside the database (D52.2)', (acco
   });
 
   it('can execute none of the installed apoc.load, import, export, bolt or spatial procedures', async () => {
-    const rows = await runOn(
-      sup,
-      'system',
-      `SHOW PROCEDURES EXECUTABLE BY \`${account.name}\` YIELD name RETURN name`,
-    );
+    const rows = await runOn(sup, 'system', `SHOW PROCEDURES EXECUTABLE BY \`${account.name}\` YIELD name RETURN name`);
     const names = rows.map((r) => String(r['name']));
     expect(names.length, 'the account must be able to execute some procedure (PUBLIC)').toBeGreaterThan(0);
     expect(names.filter((n) => OUTSIDE_PREFIXES.some((p) => n.startsWith(p)))).toEqual([]);
@@ -171,7 +171,10 @@ describe.each(ACCOUNTS)('$name cannot reach outside the database (D52.2)', (acco
 
   it('holds DENY LOAD and a DENY EXECUTE for each outside procedure family, apoc.bolt included', async () => {
     const privileges = await ownPrivileges(account);
-    expect(privileges.some((p) => /^DENY LOAD ON ALL DATA TO /.test(p)), privileges.join('\n')).toBe(true);
+    expect(
+      privileges.some((p) => /^DENY LOAD ON ALL DATA TO /.test(p)),
+      privileges.join('\n'),
+    ).toBe(true);
     for (const prefix of OUTSIDE_PREFIXES) {
       const pattern = `${prefix}*`;
       expect(

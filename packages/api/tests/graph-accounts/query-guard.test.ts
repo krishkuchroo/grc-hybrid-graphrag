@@ -133,7 +133,10 @@ const SHOW_REFUSED: [string, string][] = [
   ['SHOW after PROFILE', 'PROFILE SHOW TRANSACTIONS'],
   ['SHOW in a second statement', 'MATCH (n) RETURN n;\nSHOW DATABASES'],
   ['SHOW inside a CALL subquery', 'CALL { SHOW DATABASES YIELD name RETURN name } RETURN name'],
-  ['SHOW inside a scoped subquery with no spaces', 'CALL (){SHOW TRANSACTIONS YIELD transactionId RETURN transactionId} RETURN 1'],
+  [
+    'SHOW inside a scoped subquery with no spaces',
+    'CALL (){SHOW TRANSACTIONS YIELD transactionId RETURN transactionId} RETURN 1',
+  ],
   ['SHOW after UNION', "RETURN 'a' AS name UNION SHOW DATABASES YIELD name RETURN name"],
 ];
 
