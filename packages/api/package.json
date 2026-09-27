@@ -9,7 +9,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@grc/shared": "workspace:*"
+    "@grc/shared": "workspace:*",
+    "neo4j-driver": "^6.2.0"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
