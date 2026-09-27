@@ -12,11 +12,13 @@
 // subprocess gets a clean environment (no COMPOSE_* or app variables leak in).
 //
 // The dev-switch tests run base + dev together and compare the result with the base
-// alone. The only allowed differences are the two 127.0.0.1 ports (criterion 4) and,
-// since D141, one dev-only network `grc-dev` (a bridge with outgoing traffic off:
-// masquerade disabled), joined only by grc-postgres and grc-seaweedfs. Docker publishes
-// no ports for a container that sits only on an internal network, so without it the
-// dev switch's ports never open. The base file stays as D63 has it.
+// alone. Since D145 (which replaces D141's grc-dev join), grc-postgres and grc-seaweedfs
+// stay on grc-internal only, with or without the dev switch, and publish no ports. The dev
+// switch adds exactly one service, the relay `grc-dev-relay` (a small pinned image), on
+// grc-internal plus exactly one normal dev-only network. The relay publishes only
+// 127.0.0.1:5433 (forwarding to grc-postgres:5432) and 127.0.0.1:8333 (forwarding to
+// grc-seaweedfs:8333), and does nothing else. Nothing else in the stack changes. The live
+// check that Postgres and SeaweedFS can't reach the internet is in dev-relay.live.test.ts.
 //
 // D142: grc-postgres mounts a secondary `vector--0.8.6.control` with `trusted = true`,
 // so the database owner (grc_migrator, NOSUPERUSER) can CREATE EXTENSION vector.
@@ -34,9 +36,8 @@ const COMPOSE_DEV = join(INFRA, 'compose.dev.yaml');
 const ENV_EXAMPLE = join(ROOT, '.env.example');
 const API_DOCKERFILE = join(ROOT, 'packages', 'api', 'Dockerfile');
 
-const DEV_NET = 'grc-dev';
+const RELAY = 'grc-dev-relay';
 const MASQUERADE = 'com.docker.network.bridge.enable_ip_masquerade';
-const DEV_NET_MEMBERS = ['grc-postgres', 'grc-seaweedfs'];
 const VECTOR_CONTROL_TARGET = '/usr/share/postgresql/18/extension/vector--0.8.6.control';
 
 const REQUIRED_SERVICES = ['grc-postgres', 'grc-seaweedfs', 'grc-caddy', 'grc-api', 'grc-worker'] as const;
@@ -62,6 +63,9 @@ interface Service {
   mem_limit?: string | number;
   deploy?: { resources?: { limits?: { memory?: string | number } } };
   volumes?: { type: string; source?: string; target?: string; read_only?: boolean }[];
+  privileged?: boolean;
+  cap_add?: string[];
+  depends_on?: Record<string, unknown>;
 }
 interface Project {
   name: string;
@@ -153,9 +157,6 @@ function svc(p: Project, name: string): Service {
 }
 function netsOf(s: Service): string[] {
   return Object.keys(s.networks ?? {}).sort();
-}
-function without<T>(o: Record<string, T> | undefined, key: string): Record<string, T> {
-  return Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => k !== key));
 }
 function portKey(p: Port): string {
   return `${p.host_ip ?? '0.0.0.0'}:${p.published ?? ''}:${p.target}`;
@@ -323,81 +324,127 @@ describe('compose: published ports (criterion 3, D61)', () => {
   });
 });
 
-describe('compose: the dev switch (criterion 4, D61, D132, D137)', () => {
-  it('opens Postgres on 127.0.0.1:5433 -> 5432 and nothing else on Postgres', () => {
-    const keys = (svc(devStack(), 'grc-postgres').ports ?? []).map(portKey);
-    expect(keys).toEqual(['127.0.0.1:5433:5432']);
+describe('compose: the dev switch (criterion 4, D61, D132, D137, D145)', () => {
+  function relay(): Service {
+    return svc(devStack(), RELAY);
+  }
+  function addedNetworks(): string[] {
+    return Object.keys(devStack().networks ?? {}).filter((n) => !(n in (stack().networks ?? {})));
+  }
+  function devNet(): string {
+    const added = addedNetworks();
+    if (added.length !== 1) throw new Error(`expected exactly one dev-only network, got ${JSON.stringify(added)}`);
+    return added[0]!;
+  }
+  function relayCommand(): string {
+    const r = relay();
+    return JSON.stringify([r.entrypoint ?? null, r.command ?? null]);
+  }
+
+  it('adds exactly one service, grc-dev-relay', () => {
+    const added = Object.keys(devStack().services).filter((n) => !(n in stack().services));
+    expect(added).toEqual([RELAY]);
   });
 
-  it("opens SeaweedFS's S3 port on 127.0.0.1:8333 -> 8333 and nothing else on SeaweedFS", () => {
-    const keys = (svc(devStack(), 'grc-seaweedfs').ports ?? []).map(portKey);
-    expect(keys).toEqual(['127.0.0.1:8333:8333']);
-  });
-
-  it('every port it opens binds to 127.0.0.1', () => {
-    for (const [name, s] of Object.entries(devStack().services)) {
-      for (const p of s.ports ?? []) expect(p.host_ip, `${name} ${portKey(p)}`).toBe('127.0.0.1');
-    }
-  });
-
-  it('changes nothing else: no new services or volumes, only grc-dev among networks, and no other service setting', () => {
-    const b = stack();
-    const d = devStack();
-    expect(d.name).toBe(b.name);
-    expect(Object.keys(d.services).sort()).toEqual(Object.keys(b.services).sort());
-    expect(without(d.networks, DEV_NET)).toEqual(b.networks);
-    expect(d.volumes).toEqual(b.volumes);
-    for (const name of Object.keys(b.services)) {
-      const { ports: bp, networks: bn, ...bRest } = b.services[name]!;
-      const { ports: dp, networks: dn, ...dRest } = d.services[name]!;
-      expect(dRest, `settings of ${name}`).toEqual(bRest);
-      if (!DEV_NET_MEMBERS.includes(name)) {
-        expect(dp, `ports of ${name}`).toEqual(bp);
-        expect(dn, `networks of ${name}`).toEqual(bn);
-      } else {
-        expect(without(dn, DEV_NET), `networks of ${name} other than ${DEV_NET}`).toEqual(bn);
-      }
-    }
-  });
-});
-
-describe('compose: the dev-only network grc-dev (D141, D63)', () => {
-  it('the base file has no grc-dev network, and no service in it joins one', () => {
-    expect(Object.keys(stack().networks ?? {})).not.toContain(DEV_NET);
-    for (const [name, s] of Object.entries(stack().services)) expect(netsOf(s), name).not.toContain(DEV_NET);
+  it('the base file has no relay service and no dev-only network', () => {
+    expect(Object.keys(stack().services)).not.toContain(RELAY);
     expect(readFileSync(COMPOSE, 'utf8')).not.toMatch(/grc-dev/);
   });
 
-  it('the dev switch adds exactly one network, grc-dev', () => {
-    const added = Object.keys(devStack().networks ?? {}).filter((n) => !(n in (stack().networks ?? {})));
-    expect(added).toEqual([DEV_NET]);
+  it('adds exactly one network, whose name starts with grc-', () => {
+    const added = addedNetworks();
+    expect(added).toHaveLength(1);
+    const key = added[0]!;
+    expect(key).toMatch(/^grc-/);
+    expect(devStack().networks?.[key]?.name ?? key).toMatch(/^grc-/);
   });
 
-  it('grc-dev is named grc-dev, is a local bridge, and is neither internal nor external', () => {
-    const net = devStack().networks?.[DEV_NET];
-    expect(net).toBeDefined();
-    expect(net?.name ?? DEV_NET).toBe(DEV_NET);
+  it('the dev-only network is a normal local bridge: not internal, not external, no masquerade option', () => {
+    const net = devStack().networks?.[devNet()];
     expect(net?.driver ?? 'bridge').toBe('bridge');
     expect(net?.internal ?? false).toBe(false);
     expect(net?.external ?? false).toBe(false);
+    expect(Object.keys(net?.driver_opts ?? {})).not.toContain(MASQUERADE);
   });
 
-  it('grc-dev has outgoing traffic off: masquerade "false" is its only driver option', () => {
-    const opts = devStack().networks?.[DEV_NET]?.driver_opts ?? {};
-    expect(Object.keys(opts)).toEqual([MASQUERADE]);
-    expect(String(opts[MASQUERADE])).toBe('false');
+  it('changes no existing service, network or volume (Postgres and SeaweedFS keep grc-internal only and no ports)', () => {
+    const b = stack();
+    const d = devStack();
+    expect(d.name).toBe(b.name);
+    expect(d.volumes).toEqual(b.volumes);
+    for (const [key, net] of Object.entries(b.networks ?? {})) expect(d.networks?.[key], `network ${key}`).toEqual(net);
+    for (const name of Object.keys(b.services)) {
+      expect(d.services[name], `service ${name}`).toEqual(b.services[name]);
+    }
   });
 
-  it.each(DEV_NET_MEMBERS)('%s joins grc-internal and grc-dev', (name) => {
-    expect(netsOf(svc(devStack(), name))).toEqual(['grc-dev', 'grc-internal']);
-  });
+  it.each(['grc-postgres', 'grc-seaweedfs'])(
+    '%s is on grc-internal only and publishes no ports with the dev switch on',
+    (name) => {
+      expect(netsOf(svc(devStack(), name))).toEqual(['grc-internal']);
+      expect(svc(devStack(), name).ports ?? []).toEqual([]);
+    },
+  );
 
-  it('no other service joins grc-dev', () => {
+  it('only the relay joins the dev-only network', () => {
+    const net = devNet();
     const members = Object.entries(devStack().services)
-      .filter(([, s]) => netsOf(s).includes(DEV_NET))
-      .map(([name]) => name)
-      .sort();
-    expect(members).toEqual([...DEV_NET_MEMBERS].sort());
+      .filter(([, s]) => netsOf(s).includes(net))
+      .map(([name]) => name);
+    expect(members).toEqual([RELAY]);
+  });
+
+  it('the relay is on grc-internal and the dev-only network, nothing else', () => {
+    expect(netsOf(relay())).toEqual([devNet(), 'grc-internal'].sort());
+  });
+
+  it('the relay is named grc-dev-relay', () => {
+    expect(relay().container_name).toBe(RELAY);
+  });
+
+  it('the relay runs a pinned image (a version tag other than latest, or a digest), not a local build', () => {
+    const image = relay().image ?? '';
+    expect(relay().build).toBeUndefined();
+    const digest = /@sha256:[0-9a-f]{64}$/.test(image);
+    const tag = /:([^/:@]+)$/.exec(image)?.[1];
+    expect(digest || (tag !== undefined && tag !== 'latest' && /\d/.test(tag)), image).toBe(true);
+  });
+
+  it('the relay publishes exactly 127.0.0.1:5433 and 127.0.0.1:8333', () => {
+    const published = (relay().ports ?? []).map((p) => `${p.host_ip ?? '0.0.0.0'}:${p.published ?? ''}`).sort();
+    expect(published).toEqual(['127.0.0.1:5433', '127.0.0.1:8333']);
+  });
+
+  it('the relay forwards to grc-postgres:5432 and grc-seaweedfs:8333, and to no other host', () => {
+    const cmd = relayCommand();
+    expect(cmd).toContain('grc-postgres:5432');
+    expect(cmd).toContain('grc-seaweedfs:8333');
+    const targets = [...cmd.matchAll(/\b(grc-[a-z0-9-]+):(\d+)/g)].map((m) => `${m[1]}:${m[2]}`);
+    expect([...new Set(targets)].sort()).toEqual(['grc-postgres:5432', 'grc-seaweedfs:8333']);
+    expect(cmd).not.toMatch(/host\.docker\.internal/);
+  });
+
+  it('the relay does nothing else: no volumes, no environment, no extra hosts, not privileged, no added capabilities', () => {
+    const r = relay();
+    expect(r.volumes ?? []).toEqual([]);
+    expect(Object.keys(r.environment ?? {})).toEqual([]);
+    expect(extraHosts(r)).toEqual([]);
+    expect(r.privileged ?? false).toBe(false);
+    expect(r.cap_add ?? []).toEqual([]);
+    expect((r as Json).network_mode).toBeUndefined();
+  });
+
+  it('the relay has a memory limit, and the dev stack stays under 4 GB (D82)', () => {
+    expect(memLimit(relay())).not.toBeNull();
+    const total = Object.values(devStack().services).reduce((sum, s) => sum + (memLimit(s) ?? Infinity), 0);
+    expect(total).toBeLessThan(FOUR_GIB);
+  });
+
+  it('every port the dev stack opens binds to 127.0.0.1, and only the relay and Caddy publish', () => {
+    for (const [name, s] of Object.entries(devStack().services)) {
+      for (const p of s.ports ?? []) expect(p.host_ip, `${name} ${portKey(p)}`).toBe('127.0.0.1');
+      if (name !== RELAY && name !== 'grc-caddy') expect(s.ports ?? [], name).toEqual([]);
+    }
   });
 });
 
