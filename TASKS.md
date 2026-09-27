@@ -4,12 +4,12 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 
 | ID | Milestone | Owner | Status | Pass criteria & tests | Blocked notes | Task log |
 |----|-----------|-------|--------|------------------------|---------------|----------|
-| M0-001 | M0 | builder-platform | blocked | pnpm monorepo (api, web, shared, generators, benchmark, infra), strict TS, root `lint` / `typecheck` / `test` scripts, Vitest per package that never picks up `.claude/**`. Tests: `pnpm --filter infra test -- workspace` | Waits on Q1 (which lint and format tool). | |
-| M0-002 | M0 | builder-platform | to do | Compose file with `grc-` names, 127.0.0.1-only ports, internal network for Postgres and SeaweedFS, dev switch for 5433, secrets setup script. Tests: `pnpm --filter infra test -- compose` | | |
+| M0-001 | M0 | builder-platform | to do | pnpm monorepo (api, web, shared, generators, benchmark, infra), strict TS, ESLint + Prettier (D130), root `lint` / `typecheck` / `test` scripts, Vitest per package that never picks up `.claude/**`. Tests: `pnpm --filter infra test -- workspace` | | |
+| M0-002 | M0 | builder-platform | to do | Compose file with `grc-` names, 127.0.0.1-only ports, internal network for Postgres and SeaweedFS, dev switch (off by default) that opens Postgres on 5433 and SeaweedFS on 127.0.0.1 (D132), secrets setup script. Tests: `pnpm --filter infra test -- compose` | | |
 | M0-003 | M0 | builder-platform | to do | Postgres 18.6 + pgvector 0.8.x wired through Drizzle, migration account vs restricted app account (no RLS bypass), per-transaction org context. Tests: `pnpm --filter api test -- db` | | |
 | M0-004 | M0 | builder-platform | to do | Neo4j driver, `grc_admin` and `grc_writer` accounts, one database per org created on demand (idempotent). Tests: `pnpm --filter api test -- graph` | | |
-| M0-005 | M0 | builder-platform | blocked | 28 read-only Neo4j accounts (role × clearance): read-only, time-limited, see only allowed types and labels, outbox hidden, no reach into another org's database. Tests: `pnpm --filter api test -- graph-accounts` | Waits on Q2 (a query can name another org's database). | |
-| M0-006 | M0 | builder-platform | blocked | SeaweedFS behind a small `FileStore` interface, one bucket per org, backend-only service key. Tests: `pnpm --filter api test -- storage` | Waits on Q3 (how tests on the Mac reach storage). | |
+| M0-005 | M0 | builder-platform | to do | 28 read-only Neo4j accounts (role × clearance): read-only, time-limited, see only allowed types and labels, outbox hidden; our code refuses any AI-written graph query that names a database (D131). Tests: `pnpm --filter api test -- graph-accounts` | | |
+| M0-006 | M0 | builder-platform | to do | SeaweedFS behind a small `FileStore` interface, one bucket per org, backend-only service key; tests on the Mac reach it through the dev switch (D132). Tests: `pnpm --filter api test -- storage` | | |
 | M0-007 | M0 | builder-platform | to do | One NestJS/Fastify codebase, two programs (API, worker); `/api/v1`, health, OpenAPI from Zod, one error format with reference ID, paging helper, pino, security headers, 1 MB cap, 300/min limit, pg-boss with 3 retries. Tests: `pnpm --filter api test -- platform` | | |
 | M0-008 | M0 | builder-platform | to do | D50 role table and D51 labels as shared data + checks; every table cell and every clearance × label pair tested; NestJS guard. Tests: `pnpm --filter shared test -- access` and `pnpm --filter api test -- access-guard` | | |
 | M0-009 | M0 | builder-platform | to do | Identity and grant tables (Better Auth schema + role/clearance + auditor grants, parent links, break-glass sessions), RLS with FORCE on every org table; every org pair isolated; no org context = no rows. Tests: `pnpm --filter api test -- org-wall` | | |
@@ -17,10 +17,13 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | M0-011 | M0 | builder-platform | to do | Machine API keys: one org + one role, expiry, revocable, shown once, stored hashed, audited. Tests: `pnpm --filter api test -- api-keys` | | |
 | M0-012 | M0 | builder-platform | to do | Postgres audit trail: per-org sequence and hash chain, add-only for the app account, nightly chain check. Tests: `pnpm --filter api test -- audit` | | |
 | M0-013 | M0 | builder-platform | to do | Neo4j audit outbox: change + audit entry in one transaction; the worker copies to Postgres within 5 s, exactly once, even after a crash. Tests: `pnpm --filter api test -- outbox` | | |
-| M0-014 | M0 | builder-platform | blocked | Org provisioning (Postgres org + audit partition + Neo4j database + bucket + first Admin), safe to re-run; demo seed of 2 orgs with one user per role. Tests: `pnpm --filter api test -- provision` | Waits on Q4 (how orgs and first Admins are created). | |
+| M0-014 | M0 | builder-platform | to do | Org provisioning (Postgres org + audit partition + Neo4j database + bucket + first Admin) through a command-line setup command run by the platform operator (D133), safe to re-run; demo seed of 2 orgs with one user per role. Tests: `pnpm --filter api test -- provision` | | |
 | M0-015 | M0 | builder-frontend | to do | Web shell: Vite + React + shadcn + TanStack Router/Query, typed client from OpenAPI, sign-in, MFA setup and check, sign-out, idle and lock messages, header with org/user/role. Tests: `pnpm --filter web test -- auth` | | |
 | M0-016 | M0 | builder-platform | to do | Caddy at `https://grc.localhost`: local HTTPS, 80→443, web app + `/api/v1` proxy, headers, 25 MB cap; Playwright sign-in with MFA through the front door; written demo steps. Tests: `pnpm --filter infra test -- front-door` and `pnpm --filter web playwright test e2e/sign-in` | | |
-| M0-017 | M0 | builder-platform | blocked | Per-org SSO (OIDC/SAML) through Better Auth's SSO plugin; when on, it replaces passwords for that org. Tests: `pnpm --filter api test -- sso` | Waits on Q5 (SSO now or with the Admin slice, and how to test it). | |
+
+**Moved out of M0 (planned with slice 7, no task yet):**
+- SSO (OIDC/SAML) is planned for S7, with the Admin screens. Its tests will use a small stand-in sign-in provider that runs locally (D134).
+- Nightly backups and the monthly restore test are planned for S7, with the admin tools (D135).
 
 ## Briefs
 
@@ -42,23 +45,21 @@ Task: M0-001
 
 **Goal:** Create the pnpm workspaces monorepo that every later task builds in.
 
-**Decisions:** D6, D33, D36, D46, D78 (lint and type checks clean), D82 (one test process), D97 (finish checks use root `lint`, `typecheck`, `test`), memory.md setup item "keep Vitest away from the hook tests".
-
-**Blocked on Q1:** which lint and format tool. Nothing about the linter is decided, and D78 requires lint to be clean.
+**Decisions:** D6, D33, D36, D46, D78 (lint and type checks clean), D82 (one test process), D97 (finish checks use root `lint`, `typecheck`, `test`), D130 (lint and format tool: ESLint + Prettier), memory.md setup item "keep Vitest away from the hook tests".
 
 **Files:**
-- Create: `package.json` (root, private, `"packageManager": "pnpm@11.1.3"`, `"engines": {"node": ">=24"}`), `pnpm-workspace.yaml` (`packages/*`), `tsconfig.base.json` (strict, `noUncheckedIndexedAccess`, ES2024, NodeNext), the lint/format config for the tool chosen in Q1, `.nvmrc` (`24`), `.env.example`.
+- Create: `package.json` (root, private, `"packageManager": "pnpm@11.1.3"`, `"engines": {"node": ">=24"}`), `pnpm-workspace.yaml` (`packages/*`), `tsconfig.base.json` (strict, `noUncheckedIndexedAccess`, ES2024, NodeNext), `eslint.config.js` (ESLint flat config with TypeScript support, D130), `.prettierrc` and `.prettierignore` (Prettier, D130), `.nvmrc` (`24`), `.env.example`.
 - Create for each of `api`, `web`, `shared`, `generators`, `benchmark`, `infra`: `packages/<pkg>/package.json` (name `@grc/<pkg>`, scripts `test`, `typecheck`, `lint`), `packages/<pkg>/tsconfig.json`, `packages/<pkg>/vitest.config.ts`, `packages/<pkg>/src/index.ts`.
 - Modify: `.gitignore` only if a new build-output path appears.
 
 **Pass criteria:**
 1. `pnpm install` succeeds from a clean clone.
-2. Root scripts: `lint` (whole repo, excluding `.claude/**`, `logs/**`, `dist/**`), `typecheck` (`pnpm -r typecheck`), `test` (`pnpm -r test`). Each exits 0 on the empty packages.
+2. Root scripts: `lint` (ESLint plus a Prettier check, D130, over the whole repo, excluding `.claude/**`, `logs/**`, `dist/**`), `typecheck` (`pnpm -r typecheck`), `test` (`pnpm -r test`). Each exits 0 on the empty packages.
 3. The root has no Vitest config, and no package's Vitest config includes anything under `.claude/`. `node --test '.claude/hooks/__tests__/*.test.mjs'` still passes.
 4. `pnpm --filter <pkg> test -- <name>` runs only the matching test files in that package, as one process (`pool: 'forks'`, `singleFork: true`, or the equivalent).
 5. `packages/shared` can be imported from `api` and `web` as `@grc/shared`.
 
-**Tests to write (test writer):** `packages/infra/tests/workspace.test.ts`. It checks that the six packages exist with the right names and scripts, that the root scripts exist, that the TS base config has `strict: true`, that no Vitest config includes `.claude`, and that `@grc/shared` resolves from `packages/api`.
+**Tests to write (test writer):** `packages/infra/tests/workspace.test.ts`. It checks that the six packages exist with the right names and scripts, that the root scripts exist, that the TS base config has `strict: true`, that an ESLint config and a Prettier config exist at the root and the root `lint` script runs both (D130), that no Vitest config includes `.claude`, and that `@grc/shared` resolves from `packages/api`.
 
 **Test command:** `pnpm --filter infra test -- workspace`
 
@@ -68,7 +69,7 @@ Task: M0-002
 
 **Goal:** Write the Docker Compose stack and the secrets setup script.
 
-**Decisions:** D5, D13, D21, D28, D35, D57 (secrets in the git-ignored `.env`, generated by a setup script), D60, D61, D63, D82 (4 GB Docker), D98, D106.
+**Decisions:** D5, D13, D21, D28, D35, D57 (secrets in the git-ignored `.env`, generated by a setup script), D60, D61, D63, D82 (4 GB Docker), D98, D106, D132 (the dev switch also opens SeaweedFS on 127.0.0.1, off by default).
 
 **Files:**
 - Create: `packages/infra/compose.yaml`, `packages/infra/compose.dev.yaml` (the dev switch), `packages/infra/scripts/setup-secrets.ts`, `packages/api/Dockerfile` (one image; the API and worker differ only in their start command).
@@ -78,13 +79,13 @@ Task: M0-002
 1. Project name `grc`. Services `grc-postgres` (`pgvector/pgvector:pg18`), `grc-seaweedfs`, `grc-caddy`, `grc-api`, `grc-worker`. Every `container_name`, volume and network starts with `grc-` or `grc_`.
 2. Networks: `grc-internal` (`internal: true`), which holds Postgres, SeaweedFS, API and worker; `grc-edge`, which holds Caddy, API and worker. Postgres and SeaweedFS are on no other network (D63).
 3. Only `grc-caddy` publishes ports: `127.0.0.1:443:443` and `127.0.0.1:80:80`. API, worker, Postgres and SeaweedFS publish none (D61).
-4. `compose.dev.yaml` adds only `127.0.0.1:5433:5432` to `grc-postgres`. It's used only when named with `-f`.
+4. `compose.dev.yaml` is the dev switch (off by default: used only when named with `-f`). It adds only two things: `127.0.0.1:5433:5432` to `grc-postgres` (D61), and SeaweedFS's S3 port on `127.0.0.1` to `grc-seaweedfs` (D132; `127.0.0.1:8333:8333`, SeaweedFS's standard S3 port). Both bind to 127.0.0.1 only. Without the switch, neither is published.
 5. API and worker have `extra_hosts: ["host.docker.internal:host-gateway"]` and get Neo4j and Ollama addresses via `host.docker.internal` (D5).
 6. Memory limits keep the stack's total under 4 GB (D82).
 7. `pnpm setup:secrets` writes `.env` with random values for every secret listed in `.env.example`. It never overwrites an existing value, never prints secrets, and sets file mode 600. The one exception is `NEO4J_DESKTOP_PASSWORD`, which the user supplies (see the M0 questions). The script leaves it empty and says so.
 8. `docker compose -f packages/infra/compose.yaml config` validates.
 
-**Tests to write:** `packages/infra/tests/compose.test.ts` parses the YAML and checks criteria 1–6. `packages/infra/tests/setup-secrets.test.ts` runs the script in a temp folder and checks criterion 7, including a second run that keeps the existing values.
+**Tests to write:** `packages/infra/tests/compose.test.ts` parses the YAML and checks criteria 1–6, including that `compose.dev.yaml` publishes exactly the two 127.0.0.1 ports in criterion 4 and nothing else (D132). `packages/infra/tests/setup-secrets.test.ts` runs the script in a temp folder and checks criterion 7, including a second run that keeps the existing values.
 
 **Test command:** `pnpm --filter infra test -- compose`
 
@@ -123,6 +124,8 @@ Task: M0-004
 
 **Decisions:** D14, D22, D45.2 (graph access behind a small interface), D57 (the admin account only creates databases), D73 (one writer account, one admin account), D125.
 
+**Before running:** the user adds `NEO4J_DESKTOP_PASSWORD` (the Neo4j Desktop `neo4j` account's password) to `.env` themselves before this task runs (Q7). `pnpm setup:secrets` leaves it empty. If it's still empty, hand off `blocked` saying so; never guess or reset the password.
+
 **Files:**
 - Create: `packages/api/src/graph/graph.module.ts`, `packages/api/src/graph/graph.service.ts`, `packages/api/src/graph/org-database.ts`, `packages/infra/scripts/setup-neo4j.ts` (root script `setup:neo4j`).
 
@@ -150,17 +153,18 @@ Task: M0-005
 
 **Goal:** Create the 28 read-only Neo4j accounts (7 roles × 4 clearances) that AI graph queries run as.
 
-**Decisions:** D15, D22, D23, D50, D51 (a link is visible only if both ends are), D52.2, D57, D73 (28 read-only accounts; the audit outbox is hidden from query accounts).
+**Decisions:** D15, D22, D23, D50, D51 (a link is visible only if both ends are), D52.2, D57, D73 (28 read-only accounts; the audit outbox is hidden from query accounts), D131 (our code refuses any AI-written graph query that names a database; the 28 shared read-only accounts stay).
 
-**Blocked on Q2:** a Neo4j query can name a different database inside its own text. With 28 accounts shared by every org, an AI-written query could reach another org's database that way. The fix needs the user's choice.
+**Why D131:** a Neo4j query can name a different database inside its own text (for example `USE org-<other>` or a `db.`-qualified call). The 28 accounts are shared by every org, so the database privileges alone don't stop an AI-written query reaching another org's database. Our code checks the query text before it runs and refuses it.
 
 **Files:**
-- Create: `packages/api/src/graph/query-accounts.ts`, `packages/api/src/graph/privileges.ts` (built from `ROLE_TABLE` in `@grc/shared`, M0-008).
+- Create: `packages/api/src/graph/query-accounts.ts`, `packages/api/src/graph/privileges.ts` (built from `ROLE_TABLE` in `@grc/shared`, M0-008), `packages/api/src/graph/query-guard.ts` (D131).
 - Modify: `packages/infra/scripts/setup-neo4j.ts` (adds the 28 accounts and their privileges, safe to re-run).
 
 **Interfaces (produces):**
 - `queryAccountName(role: Role, clearance: Label): string` returns `grc_ro_<role>_<clearance>`.
 - `GraphService.readAs<T>(orgId, role, clearance, fn, { timeoutMs }): Promise<T>`: a read-only session in `org-<orgId>` as that account, with a transaction timeout.
+- `assertNoDatabaseReference(cypher: string): void` (D131): throws a `GraphQueryRefused` error, before anything is sent to Neo4j, when the query text names a database in any form (a `USE` clause, a composite or database-qualified name, or a call that targets another database). S6's chat Path B runs every AI-written query through it before `readAs`.
 
 **Pass criteria:**
 1. 28 accounts exist, each with read-only privileges.
@@ -169,9 +173,9 @@ Task: M0-005
 4. A node whose `sensitivity` is above the account's clearance is invisible, and so is every relationship that touches it.
 5. `AuditOutbox` nodes are invisible to all 28 accounts.
 6. A query that runs past `timeoutMs` is stopped.
-7. The cross-database rule chosen in Q2 holds: a query run in `org-A` that names `org-B` gets nothing from `org-B`.
+7. D131: `assertNoDatabaseReference` refuses every query that names a database (`USE org-B`, `USE` in any letter case or spacing, a `USE` inside a subquery, a backtick-quoted database name), and lets through ordinary read queries that don't. A refused query never reaches Neo4j, so a query meant for `org-A` that names `org-B` gets nothing from `org-B`.
 
-**Tests to write:** `packages/api/tests/graph-accounts/*.test.ts`: criteria 1–7, looping over all 28 accounts, with fixture nodes of every type and every label in two throwaway org databases.
+**Tests to write:** `packages/api/tests/graph-accounts/*.test.ts`: criteria 1–7, looping over all 28 accounts, with fixture nodes of every type and every label in two throwaway org databases. For criterion 7 (D131), a table of refused and allowed query texts, plus a check that a refused query sends nothing to Neo4j.
 
 **Test command:** `pnpm --filter api test -- graph-accounts`
 
@@ -181,9 +185,9 @@ Task: M0-006
 
 **Goal:** Wire SeaweedFS behind a small file-store interface, with one bucket per org.
 
-**Decisions:** D21, D45.2, D53 (a bucket per org; downloads only through the API), D57 (one backend-only service key), D63.
+**Decisions:** D21, D45.2, D53 (a bucket per org; downloads only through the API), D57 (one backend-only service key), D63, D132 (the dev-only switch that opens Postgres on 5433 also opens SeaweedFS on 127.0.0.1; off by default).
 
-**Blocked on Q3:** SeaweedFS publishes no port (D61), so tests on the Mac can't reach it without a new choice.
+**How tests reach storage (D132):** tests on the Mac reach SeaweedFS's S3 API at `http://127.0.0.1:8333`, published only by the dev switch `packages/infra/compose.dev.yaml` (M0-002). Without the switch, SeaweedFS publishes no port (D61). The endpoint comes from an env var (`S3_ENDPOINT`), so the containers keep using the internal address.
 
 **Files:**
 - Create: `packages/api/src/storage/file-store.ts` (interface), `packages/api/src/storage/seaweed-file-store.ts`, `packages/api/src/storage/storage.module.ts`, `packages/infra/seaweedfs/s3.json` (the service key's identity config, filled from `.env`).
@@ -199,7 +203,7 @@ Task: M0-006
 4. Requests without the service key are refused. Anonymous access is off.
 5. A bad org ID throws before any request.
 
-**Tests to write:** `packages/api/tests/storage/*.test.ts` for criteria 1–5, with the reach set by Q3's answer.
+**Tests to write:** `packages/api/tests/storage/*.test.ts` for criteria 1–5, run against `127.0.0.1:8333` with the dev switch on (D132).
 
 **Test command:** `pnpm --filter api test -- storage`
 
@@ -417,12 +421,12 @@ Task: M0-014
 
 **Goal:** Create an org everywhere at once, safely re-runnable, plus a demo seed for the checkpoint.
 
-**Decisions:** D4, D22, D45.5, D53, D57, D73, D114 (a clickable demo at the checkpoint).
+**Decisions:** D4, D22, D45.5, D53, D57, D73, D114 (a clickable demo at the checkpoint), D133 (a command-line setup command run by the platform operator creates an org and its first Admin, for now).
 
-**Blocked on Q4:** how orgs and their first Admin get created.
+**Entry point (D133):** a command-line setup command, run by the platform operator (the user) on the Mac. There's no web screen or API route for creating orgs in M0.
 
 **Files:**
-- Create: `packages/api/src/identity/provision-org.ts`, plus the entry point chosen in Q4, and `packages/infra/scripts/seed-demo.ts` (root script `seed:demo`).
+- Create: `packages/api/src/identity/provision-org.ts`, `packages/infra/scripts/create-org.ts` (root script `org:create`, taking `--name`, `--slug`, `--admin-email`, `--admin-name`; D133), and `packages/infra/scripts/seed-demo.ts` (root script `seed:demo`).
 
 **Interfaces (consumes):** `createOrgDatabase` (M0-004), `ensureBucket` (M0-006), `createAuditPartition` (M0-012), the M0-009 tables.
 **Interfaces (produces):** `provisionOrg({ name, slug, admin: { email, name } }): Promise<{ orgId }>`.
@@ -432,8 +436,9 @@ Task: M0-014
 2. Re-running with the same slug finishes the missing steps and duplicates nothing. A failure part-way through can be fixed by re-running.
 3. An `org.created` audit event lands in the new org's chain.
 4. `pnpm seed:demo` creates two orgs, each with one user per role (7), at mixed clearances, with a printed login list (passwords from `.env`, never hard-coded).
+5. D133: `pnpm org:create --name … --slug … --admin-email … --admin-name …` calls `provisionOrg` and prints the new org ID. Missing or invalid arguments exit non-zero with a clear message and create nothing. Running it again with the same slug is safe (criterion 2).
 
-**Tests to write:** `packages/api/tests/provision/*.test.ts`, including a failure injected after the Neo4j step and a re-run.
+**Tests to write:** `packages/api/tests/provision/*.test.ts`, including a failure injected after the Neo4j step and a re-run, and the `org:create` command's argument checks and re-run (D133).
 
 **Test command:** `pnpm --filter api test -- provision`
 
@@ -485,27 +490,3 @@ Task: M0-016
 **Tests to write:** `packages/infra/tests/front-door/*.test.ts` (HTTP checks with Caddy's root CA) and `packages/web/e2e/sign-in.spec.ts`.
 
 **Test command:** `pnpm --filter infra test -- front-door`
-
----
-
-Task: M0-017
-
-**Goal:** Per-org SSO (OIDC and SAML) through Better Auth's SSO plugin. When an org turns it on, it replaces passwords for that org's users.
-
-**Decisions:** D49, D54 (SSO can be turned on per org by its Admin, and then replaces passwords), D63 (the API reaches the internet only for SSO).
-
-**Blocked on Q5:** whether SSO is built now or with the Admin slice (S7), and how to test it without an outside sign-in provider.
-
-**Files:**
-- Modify: `packages/api/src/identity/auth.ts` (SSO plugin).
-- Create: `packages/api/src/identity/sso.service.ts`.
-
-**Pass criteria:**
-1. An org with SSO on: password sign-in for its users is refused, and SSO sign-in works.
-2. An org with SSO off is unaffected.
-3. SSO users still land in their own org only, with their member role and clearance.
-4. Turning SSO on or off is audited.
-
-**Tests to write:** `packages/api/tests/sso/*.test.ts` with the test sign-in provider chosen in Q5.
-
-**Test command:** `pnpm --filter api test -- sso`
