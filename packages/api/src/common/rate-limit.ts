@@ -50,7 +50,7 @@ export function registerRateLimit(fastify: FastifyInstance, limiter: RateLimiter
     const decision = limiter.hit(keyOf(request));
     if (decision.allowed) return;
     const seconds = decision.retryAfterSeconds;
-    sendError(reply, 429, 'rate_limited', `Too many requests, try again in ${seconds} s.`, {
+    sendError(request, reply, 429, 'rate_limited', `Too many requests, try again in ${seconds} s.`, {
       'retry-after': String(seconds),
     });
     return reply;

@@ -36,8 +36,10 @@ export function errorBody(code: string, message: string, referenceId = newRefere
   return { error: { code, message, referenceId } };
 }
 
-/** Sends an error in the one format. For errors raised outside Nest's handlers (Fastify hooks). */
+/** Sends an error in the one format, and logs its reference ID. For errors raised outside Nest's
+ * handlers (Fastify hooks). */
 export function sendError(
+  request: FastifyRequest,
   reply: FastifyReply,
   status: number,
   code: string,
@@ -45,6 +47,8 @@ export function sendError(
   headers: Record<string, string> = {},
 ): ErrorBody {
   const body = errorBody(code, message);
+  const where = { referenceId: body.error.referenceId, status, method: request.method, url: request.url };
+  request.log.warn({ ...where, code, detail: message }, 'request refused');
   void reply
     .code(status)
     .headers(headers)
