@@ -1,0 +1,10 @@
+.claude/**
+logs/**
+**/dist/**
+**/node_modules/**
+**/coverage/**
+pnpm-lock.yaml
+
+# Root project docs: CLAUDE.md and memory.md are hand-edited by the user and the
+# planner only (guard rail 5), so Prettier must not ask anyone to rewrite them.
+/*.md
