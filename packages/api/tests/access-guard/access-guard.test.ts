@@ -10,29 +10,33 @@ import {
   type ApiApp,
   type PlatformDb,
 } from '../platform/helpers.js';
+import { signedInApi } from '../auth/helpers.js';
 import { GUARDED, ROLES, ROUTES, accessGuardTestModule, calls } from './helpers.js';
 
 let db: PlatformDb | undefined;
 let app: ApiApp | undefined;
+let session: Awaited<ReturnType<typeof signedInApi>> | undefined;
 let setupError: unknown;
 
 beforeAll(async () => {
   db = await platformDb();
   try {
     app = await startApi({ imports: [await accessGuardTestModule()], logStream: new LogCapture() });
+    session = await signedInApi(app, db);
   } catch (err) {
     setupError = err;
   }
 }, 180_000);
 
 afterAll(async () => {
+  await session?.close();
   await app?.close();
   await db?.drop();
 });
 
 function api(): ApiApp {
-  if (!app) throw new Error(`the API app did not start: ${String(setupError)}`);
-  return app;
+  if (!session) throw new Error(`the API app or its signed-in session did not start: ${String(setupError)}`);
+  return session.api;
 }
 
 const CASES = GUARDED.flatMap((route) =>
@@ -63,7 +67,12 @@ describe('criterion 5: the guard follows the D50 table', () => {
 
 describe('criterion 5: the guard fails safe', () => {
   it('refuses a request with no principal', async () => {
-    const res = await api().inject({ method: 'POST', url: `${ROUTES}/chat`, payload: {} });
+    const res = await api().inject({
+      method: 'POST',
+      url: `${ROUTES}/chat`,
+      headers: { 'x-test-principal': 'none' },
+      payload: {},
+    });
     const body = expectErrorFormat(res, 403);
     expect(body.error.code).toBe('forbidden');
   });
@@ -87,5 +96,25 @@ describe('criterion 5: the guard fails safe', () => {
       payload: {},
     });
     expectErrorFormat(res, 403);
+  });
+});
+
+describe('with the SessionGuard in front (M0-010)', () => {
+  it('a request with no session never reaches the handler: 401', async () => {
+    if (!app) throw new Error(`the API app did not start: ${String(setupError)}`);
+    const before = calls.get('POST chat') ?? 0;
+    const res = await app.inject({
+      method: 'POST',
+      url: `${ROUTES}/chat`,
+      headers: { 'x-test-role': 'admin', 'content-type': 'application/json' },
+      payload: '{}',
+    });
+    expectErrorFormat(res, 401);
+    expect(calls.get('POST chat') ?? 0).toBe(before);
+  });
+
+  it("the signed-in admin's own principal passes an admin-only route", async () => {
+    const res = await api().inject({ method: 'POST', url: `${ROUTES}/users`, payload: {} });
+    expect(res.statusCode, res.body.slice(0, 300)).toBeLessThan(300);
   });
 });

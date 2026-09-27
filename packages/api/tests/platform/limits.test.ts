@@ -2,7 +2,8 @@
 // 3. Bodies over 1 MB get 413 in the error format.
 // 4. Request number 301 within one minute from one person (session user, else client IP) gets 429
 //    with Retry-After and "try again in N s".
-// Sessions arrive with M0-010, so the per-person key tested here is the client IP.
+// Here nobody is signed in, so the person is the client IP. The routes answer 401 without a session
+// (M0-010), which still counts. The per-user key is tested in tests/auth/rate-limit.test.ts.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   PREFIX,
@@ -14,21 +15,33 @@ import {
   type ApiApp,
   type PlatformDb,
 } from './helpers.js';
+import { signedInApi } from '../auth/helpers.js';
 
 let db: PlatformDb | undefined;
 let app: ApiApp | undefined;
+let session: Awaited<ReturnType<typeof signedInApi>> | undefined;
 
 beforeAll(async () => {
   db = await platformDb();
   app = await startApi({ imports: [await testModule()] });
+  session = await signedInApi(app, db);
 }, 180_000);
 
 afterAll(async () => {
+  await session?.close();
   await app?.close();
   await db?.drop();
 });
 
+// Since M0-010 every route except /api/v1/auth/* and /api/v1/health needs a signed-in session
+// with MFA checked, so these requests carry one (signedInApi from the auth helpers).
 function api(): ApiApp {
+  if (!session) throw new Error('the API app or its signed-in session did not start (see beforeAll)');
+  return session.api;
+}
+
+// No session: the per-address counting for people who aren't signed in.
+function anon(): ApiApp {
   if (!app) throw new Error('the API app did not start (see beforeAll)');
   return app;
 }
@@ -79,10 +92,11 @@ describe('criterion 4: 300 requests per minute per person', () => {
   it('lets 300 requests through, refuses number 301 with 429, Retry-After and "try again in N s"', async () => {
     const ip = '10.4.0.1';
     for (let i = 1; i <= 300; i++) {
-      const res = await api().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: ip });
-      if (res.statusCode !== 200) throw new Error(`request ${i} got ${res.statusCode}, expected 200`);
+      const res = await anon().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: ip });
+      if (res.statusCode !== 401)
+        throw new Error(`request ${i} got ${res.statusCode}, expected 401 (let through to the session check)`);
     }
-    const res = await api().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: ip });
+    const res = await anon().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: ip });
     const body = expectErrorFormat(res, 429);
 
     const retryAfter = Number(res.headers['retry-after']);
@@ -96,17 +110,17 @@ describe('criterion 4: 300 requests per minute per person', () => {
   });
 
   it('keeps refusing the same person for the rest of the minute', async () => {
-    const res = await api().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: '10.4.0.1' });
+    const res = await anon().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: '10.4.0.1' });
     expectErrorFormat(res, 429);
   });
 
   it('counts each person separately: another client IP still gets through', async () => {
-    const res = await api().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: '10.4.0.2' });
-    expect(res.statusCode).toBe(200);
+    const res = await anon().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: '10.4.0.2' });
+    expect(res.statusCode).toBe(401);
   });
 
   it('counts every route, not just one: the limited person is refused on /api/v1/health too', async () => {
-    const res = await api().inject({ method: 'GET', url: `${PREFIX}/health`, remoteAddress: '10.4.0.1' });
+    const res = await anon().inject({ method: 'GET', url: `${PREFIX}/health`, remoteAddress: '10.4.0.1' });
     expectErrorFormat(res, 429);
   });
 });

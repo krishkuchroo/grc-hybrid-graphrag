@@ -9,13 +9,14 @@
 //   `@grc/shared`. Refused, or no principal, or an unknown role: 403 in the M0-007 error format
 //   (code `forbidden`), and the handler never runs.
 //
-// The test module sets `request.principal` from an `x-test-role` header in a Fastify onRequest hook,
-// so it is in place before any Nest guard runs. No header means no principal.
+// Since M0-010 every request needs a signed-in session with MFA checked (the global SessionGuard),
+// so the requests carry an admin's session. A test guard that runs after the SessionGuard and
+// before AccessGuard then sets `request.principal` from an `x-test-role` header, or removes it for
+// `x-test-principal: none`.
 import 'reflect-metadata';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Controller, Get, Module, Post, UseGuards } from '@nestjs/common';
-import { HttpAdapterHost } from '@nestjs/core';
 import { API_DIR } from '../db/helpers.js';
 
 export const ROUTES = '/api/v1/access-guard-test';
@@ -89,6 +90,22 @@ export async function accessGuardTestModule(): Promise<unknown> {
   ) => MethodDecoratorFn;
   const AccessGuard = (await load('src/access/access.guard.ts', 'AccessGuard')) as new (...args: never[]) => object;
 
+  // Runs after the global SessionGuard (M0-010) and before AccessGuard: it swaps the signed-in
+  // principal for one with the role named in `x-test-role`, or removes it for
+  // `x-test-principal: none`. No header keeps the session's own principal.
+  class PrincipalFromHeader {
+    canActivate(context: { switchToHttp(): { getRequest(): Record<string, unknown> } }): boolean {
+      const req = context.switchToHttp().getRequest();
+      const headers = req.headers as Record<string, string | undefined>;
+      const role = headers['x-test-role'];
+      if (role !== undefined) {
+        req.principal = { role, clearance: 'internal', userId: `user-${role}`, orgId: ORG_ID };
+      }
+      if (headers['x-test-principal'] === 'none') delete req.principal;
+      return true;
+    }
+  }
+
   class AccessGuardTestController {}
   const proto = AccessGuardTestController.prototype as unknown as Record<string, () => unknown>;
   for (const route of GUARDED) {
@@ -102,27 +119,10 @@ export async function accessGuardTestModule(): Promise<unknown> {
     (route.method === 'GET' ? Get : Post)(route.path)(proto, key, desc);
     Requires(route.subject, route.action)(proto, key, desc);
   }
-  UseGuards(AccessGuard)(AccessGuardTestController);
+  UseGuards(PrincipalFromHeader, AccessGuard)(AccessGuardTestController);
   Controller('access-guard-test')(AccessGuardTestController);
 
-  class PrincipalFromHeader {
-    constructor(private readonly host: HttpAdapterHost) {}
-    onModuleInit(): void {
-      const fastify = this.host.httpAdapter.getInstance() as {
-        addHook(name: 'onRequest', fn: (req: Record<string, unknown>) => Promise<void>): void;
-      };
-      fastify.addHook('onRequest', async (req) => {
-        const headers = req.headers as Record<string, string | undefined>;
-        const role = headers['x-test-role'];
-        if (role !== undefined) {
-          req.principal = { role, clearance: 'internal', userId: `user-${role}`, orgId: ORG_ID };
-        }
-      });
-    }
-  }
-  Reflect.defineMetadata('design:paramtypes', [HttpAdapterHost], PrincipalFromHeader);
-
   class AccessGuardTestModule {}
-  Module({ controllers: [AccessGuardTestController], providers: [PrincipalFromHeader] })(AccessGuardTestModule);
+  Module({ controllers: [AccessGuardTestController] })(AccessGuardTestModule);
   return AccessGuardTestModule;
 }

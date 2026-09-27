@@ -29,6 +29,7 @@
 // dev switch at 127.0.0.1:8333). DATABASE_URL_MIGRATE and the superuser password are never put in
 // the environment the apps see.
 import 'reflect-metadata';
+import { randomBytes } from 'node:crypto';
 import { Body, Controller, Get, Module, Post, Query } from '@nestjs/common';
 import pg from 'pg';
 import { expect } from 'vitest';
@@ -163,6 +164,9 @@ export function prepareEnv(database: string): void {
     const value = optional(name);
     if (value && !process.env[name]) process.env[name] = value;
   }
+  // Better Auth (M0-010): its secret and address. The trusted origin is the front door (D60).
+  process.env.BETTER_AUTH_SECRET ||= optional('BETTER_AUTH_SECRET') || randomBytes(32).toString('base64url');
+  process.env.BETTER_AUTH_URL ||= 'https://grc.localhost';
   process.env.NEO4J_URI ||= 'bolt://127.0.0.1:7687';
   process.env.S3_ENDPOINT ||= 'http://127.0.0.1:8333';
   delete process.env.DATABASE_URL_MIGRATE;
