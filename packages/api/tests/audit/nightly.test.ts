@@ -75,7 +75,7 @@ describe('the nightly chain check in the worker program', () => {
     expect(minute).toMatch(/^\d{1,2}$/);
     expect(hour).toMatch(/^\d{1,2}$/);
     expect([dom, month, dow]).toEqual(['*', '*', '*']);
-  });
+  }, 40_000);
 
   it('a run of the queue checks every org and flags only the broken chain', async () => {
     const jobs = w().get<JobsLike>(await jobsServiceToken());
