@@ -1,7 +1,10 @@
 // M0-006 criterion 3: an object put for org A can't be read through org B's calls (D53, D59 every org pair).
 // Three orgs give every ordered pair (A→B, A→C, B→A, …). Live against 127.0.0.1:8333 (D132, D137).
-import { describe, expect, it } from 'vitest';
-import { liveStore, newOrgId } from './helpers.js';
+import { afterAll, describe, expect, it } from 'vitest';
+import { liveStore, newOrgId, removeTestBuckets } from './helpers.js';
+
+// Empty and delete every bucket this file made, so runs don't fill grc-seaweedfs-data.
+afterAll(removeTestBuckets, 120_000);
 
 describe('storage: org wall (criterion 3)', () => {
   it('no org reads, or sees, another org’s object under the same key', async () => {

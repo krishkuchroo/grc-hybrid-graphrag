@@ -1,7 +1,10 @@
 // M0-006 criterion 1: `ensureBucket` is safe to run twice (D45.5 re-runs are safe, D53 a bucket per org).
 // Live against SeaweedFS at 127.0.0.1:8333 through the dev switch (D132, D137); see helpers.ts.
-import { describe, expect, it } from 'vitest';
-import { bucketFor, liveStore, loadSeaweedFileStore, newOrgId, startRecorder } from './helpers.js';
+import { afterAll, describe, expect, it } from 'vitest';
+import { bucketFor, liveStore, loadSeaweedFileStore, newOrgId, startRecorder, removeTestBuckets } from './helpers.js';
+
+// Empty and delete every bucket this file made, so runs don't fill grc-seaweedfs-data.
+afterAll(removeTestBuckets, 120_000);
 
 describe('storage: ensureBucket (criterion 1)', () => {
   it('creates the org bucket, and a second call resolves without error', async () => {

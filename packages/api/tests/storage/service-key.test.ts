@@ -3,7 +3,7 @@
 // Live against SeaweedFS at 127.0.0.1:8333 through the dev switch (D132, D137); see helpers.ts.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import {
   ROOT,
   anonymous,
@@ -13,7 +13,11 @@ import {
   loadSeaweedFileStore,
   newOrgId,
   startRecorder,
+  removeTestBuckets,
 } from './helpers.js';
+
+// Empty and delete every bucket this file made, so runs don't fill grc-seaweedfs-data.
+afterAll(removeTestBuckets, 120_000);
 
 const REFUSED = [401, 403];
 

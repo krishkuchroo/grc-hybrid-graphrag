@@ -12,7 +12,11 @@
 // subprocess gets a clean environment (no COMPOSE_* or app variables leak in).
 //
 // The dev-switch tests run base + dev together and compare the result with the base
-// alone: the only allowed difference is the two 127.0.0.1 ports (criterion 4).
+// alone: the only allowed differences are the two 127.0.0.1 ports (criterion 4) and, by
+// D141, one dev-only network `grc-dev` (a bridge with outgoing traffic off, i.e. IP
+// masquerade off), defined only in compose.dev.yaml and joined only by grc-postgres and
+// grc-seaweedfs. Docker publishes no port for a container that is only on an internal
+// network, so the dev switch needs that one non-internal, no-internet network.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -29,6 +33,10 @@ const API_DOCKERFILE = join(ROOT, 'packages', 'api', 'Dockerfile');
 
 const REQUIRED_SERVICES = ['grc-postgres', 'grc-seaweedfs', 'grc-caddy', 'grc-api', 'grc-worker'] as const;
 const FOUR_GIB = 4 * 1024 ** 3;
+// D141: the one dev-only network, who joins it, and the driver option that turns outgoing traffic off.
+const DEV_NET = 'grc-dev';
+const DEV_NET_MEMBERS = ['grc-postgres', 'grc-seaweedfs'];
+const NO_MASQUERADE = 'com.docker.network.bridge.enable_ip_masquerade';
 
 type Json = Record<string, unknown>;
 interface Port {
@@ -51,10 +59,17 @@ interface Service {
   deploy?: { resources?: { limits?: { memory?: string | number } } };
   volumes?: { type: string; source?: string }[];
 }
+interface Network {
+  name?: string;
+  internal?: boolean;
+  external?: boolean;
+  driver?: string;
+  driver_opts?: Record<string, string>;
+}
 interface Project {
   name: string;
   services: Record<string, Service>;
-  networks?: Record<string, { name?: string; internal?: boolean; external?: boolean }>;
+  networks?: Record<string, Network>;
   volumes?: Record<string, { name?: string }>;
 }
 
@@ -138,6 +153,10 @@ function svc(p: Project, name: string): Service {
 }
 function netsOf(s: Service): string[] {
   return Object.keys(s.networks ?? {}).sort();
+}
+function without<T>(o: Record<string, T> | undefined, key: string): Record<string, T> | undefined {
+  if (!o) return o;
+  return Object.fromEntries(Object.entries(o).filter(([k]) => k !== key));
 }
 function portKey(p: Port): string {
   return `${p.host_ip ?? '0.0.0.0'}:${p.published ?? ''}:${p.target}`;
@@ -322,19 +341,74 @@ describe('compose: the dev switch (criterion 4, D61, D132, D137)', () => {
     }
   });
 
-  it('changes nothing else: no new services, networks or volumes, and no other service setting', () => {
+  it('changes nothing else: no new services or volumes, no network but grc-dev, and no other service setting', () => {
     const b = stack();
     const d = devStack();
     expect(d.name).toBe(b.name);
     expect(Object.keys(d.services).sort()).toEqual(Object.keys(b.services).sort());
-    expect(d.networks).toEqual(b.networks);
+    expect(without(d.networks, DEV_NET)).toEqual(b.networks);
     expect(d.volumes).toEqual(b.volumes);
     for (const name of Object.keys(b.services)) {
-      const { ports: bp, ...bRest } = b.services[name]!;
-      const { ports: dp, ...dRest } = d.services[name]!;
+      const { ports: bp, networks: bn, ...bRest } = b.services[name]!;
+      const { ports: dp, networks: dn, ...dRest } = d.services[name]!;
       expect(dRest, `settings of ${name}`).toEqual(bRest);
-      if (name !== 'grc-postgres' && name !== 'grc-seaweedfs') expect(dp, `ports of ${name}`).toEqual(bp);
+      if (!DEV_NET_MEMBERS.includes(name)) {
+        expect(dp, `ports of ${name}`).toEqual(bp);
+        expect(dn, `networks of ${name}`).toEqual(bn);
+      } else {
+        expect(without(dn, DEV_NET), `networks of ${name} besides ${DEV_NET}`).toEqual(bn);
+      }
     }
+  });
+});
+
+describe('compose: the dev-only network grc-dev (D141)', () => {
+  it('the base stack has no grc-dev network, and no service in it joins one', () => {
+    expect(Object.keys(stack().networks ?? {})).not.toContain(DEV_NET);
+    for (const [name, s] of Object.entries(stack().services)) {
+      expect(netsOf(s), name).not.toContain(DEV_NET);
+    }
+  });
+
+  it('grc-dev is defined in compose.dev.yaml and not in compose.yaml', () => {
+    expect(readFileSync(COMPOSE_DEV, 'utf8')).toMatch(/^\s+grc-dev:/m);
+    expect(readFileSync(COMPOSE, 'utf8')).not.toMatch(/grc-dev/);
+  });
+
+  it('with the dev switch on, grc-dev is the one network added', () => {
+    const added = Object.keys(devStack().networks ?? {}).filter((k) => !(k in (stack().networks ?? {})));
+    expect(added).toEqual([DEV_NET]);
+  });
+
+  it('grc-dev is named grc-dev and is a bridge network', () => {
+    const n = devStack().networks?.[DEV_NET];
+    expect(n).toBeDefined();
+    expect(n?.name ?? DEV_NET).toBe(DEV_NET);
+    expect(n?.driver ?? 'bridge').toBe('bridge');
+    expect(n?.external ?? false).toBe(false);
+  });
+
+  it('grc-dev has outgoing traffic off: IP masquerade is "false"', () => {
+    const opts = devStack().networks?.[DEV_NET]?.driver_opts ?? {};
+    expect(String(opts[NO_MASQUERADE])).toBe('false');
+  });
+
+  it('grc-dev is not internal, so Docker can publish the two dev ports on it', () => {
+    const n = devStack().networks?.[DEV_NET];
+    expect(n).toBeDefined();
+    expect(n?.internal ?? false).toBe(false);
+  });
+
+  it('only grc-postgres and grc-seaweedfs join grc-dev', () => {
+    const members = Object.entries(devStack().services)
+      .filter(([, s]) => netsOf(s).includes(DEV_NET))
+      .map(([name]) => name)
+      .sort();
+    expect(members).toEqual([...DEV_NET_MEMBERS].sort());
+  });
+
+  it.each(DEV_NET_MEMBERS)('%s is on grc-internal and grc-dev only', (name) => {
+    expect(netsOf(svc(devStack(), name))).toEqual([DEV_NET, 'grc-internal']);
   });
 });
 

@@ -1,8 +1,11 @@
 // M0-006 criterion 2: `put` / `get` / `exists` round-trip bytes exactly.
 // Live against SeaweedFS at 127.0.0.1:8333 through the dev switch (D132, D137); see helpers.ts.
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
-import { liveStore, newOrgId } from './helpers.js';
+import { afterAll, describe, expect, it } from 'vitest';
+import { liveStore, newOrgId, removeTestBuckets } from './helpers.js';
+
+// Empty and delete every bucket this file made, so runs don't fill grc-seaweedfs-data.
+afterAll(removeTestBuckets, 120_000);
 
 describe('storage: put / get / exists (criterion 2)', () => {
   it('returns every byte value 0-255 unchanged', async () => {

@@ -14,6 +14,19 @@
 //
 // The module is loaded with a dynamic import inside each test, so a missing module fails each test
 // on its own with a clear message instead of failing the whole file at load time.
+//
+// Clean-up: every org ID handed out by `newOrgId()` is remembered, and each live test file calls
+// `afterAll(removeTestBuckets)`, which empties and deletes those orgs' buckets on the live SeaweedFS
+// straight through the S3 API with the service key (the FileStore has no delete, by design). Buckets
+// that were never created are skipped. A bucket that is still there afterwards fails the file, so
+// the tests can't quietly fill the grc-seaweedfs-data volume.
+import {
+  DeleteBucketCommand,
+  DeleteObjectCommand,
+  HeadBucketCommand,
+  ListObjectsV2Command,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -94,9 +107,85 @@ export async function liveStore(overrides: Partial<StoreConfig> = {}): Promise<F
   return new SeaweedFileStore({ ...liveConfig(), ...overrides });
 }
 
-/** A fresh org ID per test, so each run uses its own buckets. */
+const handedOut = new Set<string>();
+
+/** A fresh org ID per test, so each run uses its own buckets. Remembered for `removeTestBuckets`. */
 export function newOrgId(): string {
-  return randomUUID();
+  const id = randomUUID();
+  handedOut.add(id);
+  return id;
+}
+
+function isMissingBucket(err: unknown): boolean {
+  const e = err as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  return (
+    e?.name === 'NoSuchBucket' ||
+    e?.Code === 'NoSuchBucket' ||
+    e?.name === 'NotFound' ||
+    e?.$metadata?.httpStatusCode === 404
+  );
+}
+
+async function bucketExists(s3: S3Client, bucket: string): Promise<boolean> {
+  try {
+    await s3.send(new HeadBucketCommand({ Bucket: bucket }));
+    return true;
+  } catch (err) {
+    if (isMissingBucket(err)) return false;
+    if (isUnreachable(err)) return false; // SeaweedFS isn't up, so nothing was made there.
+    throw err;
+  }
+}
+
+function isUnreachable(err: unknown): boolean {
+  const e = err as { code?: string; cause?: { code?: string } };
+  return ['ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND'].includes(e?.code ?? e?.cause?.code ?? '');
+}
+
+/**
+ * Deletes every object and then the bucket of each org ID handed out so far in this file, on the
+ * live SeaweedFS. Throws if any of those buckets is still there at the end.
+ */
+export async function removeTestBuckets(): Promise<void> {
+  const orgs = [...handedOut];
+  handedOut.clear();
+  if (orgs.length === 0) return;
+  let cfg: StoreConfig;
+  try {
+    cfg = liveConfig();
+  } catch {
+    return; // No service key, so no store in this file could have made a bucket.
+  }
+  const s3 = new S3Client({
+    endpoint: cfg.endpoint,
+    region: 'us-east-1',
+    forcePathStyle: true,
+    credentials: { accessKeyId: cfg.accessKey, secretAccessKey: cfg.secretKey },
+  });
+  const left: string[] = [];
+  try {
+    for (const org of orgs) {
+      const bucket = bucketFor(org);
+      if (!(await bucketExists(s3, bucket))) continue;
+      let token: string | undefined;
+      do {
+        const page = await s3.send(new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token }));
+        for (const obj of page.Contents ?? []) {
+          if (obj.Key !== undefined) await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: obj.Key }));
+        }
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+      try {
+        await s3.send(new DeleteBucketCommand({ Bucket: bucket }));
+      } catch (err) {
+        if (!isMissingBucket(err)) throw err;
+      }
+      if (await bucketExists(s3, bucket)) left.push(bucket);
+    }
+  } finally {
+    s3.destroy();
+  }
+  if (left.length > 0) throw new Error(`test buckets left behind on SeaweedFS: ${left.join(', ')}`);
 }
 
 export function bucketFor(orgId: string): string {
