@@ -2,7 +2,7 @@ export const meta = {
   name: 'milestone',
   description: 'Run one GRC milestone: plan it, build its tasks through the agent chain, or tag it',
   whenToUse:
-    'Start with the milestone ID (m0, s1 … s8). Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81). Args: "m0", or { milestone: "m0", step: "build" }.',
+    'Start with the milestone ID (m0, s1 … s8). Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81). Args: "m0", or { milestone: "m0", step: "build", notes?: { "<task ID>": "note for its first test writer" } }.',
   phases: [
     { title: 'Plan', detail: 'the planner splits the milestone into tasks and briefs' },
     { title: 'Build', detail: 'test writer → builder → reviewers → integrator, per task' },
@@ -23,6 +23,9 @@ const MAX_ROUNDS = 3 // test-writer rounds, and reviewer send-backs (D78, D86)
 const given = typeof args === 'string' ? { milestone: args } : args ?? {}
 const milestone = String(given.milestone ?? '').trim().toLowerCase()
 const step = given.step ?? 'plan'
+// Optional { "<task ID>": "note" } for a resumed run: the note goes into that
+// task's first test-writer brief only, so every other brief stays cached.
+const resumeNotes = given.notes ?? {}
 if (!MILESTONES.includes(milestone)) return { error: `the milestone must be one of ${MILESTONES.join(', ')}; got "${given.milestone}"` }
 if (!['plan', 'build', 'tag'].includes(step)) return { error: `the step must be plan, build or tag; got "${step}"` }
 const MS = milestone.toUpperCase()
@@ -219,6 +222,7 @@ async function runTask(t) {
           'test-writer',
           [
             `You work in a fresh worktree. Start with \`git switch ${branch}\` if the branch exists, otherwise \`git switch -c ${branch} main\` (D112, D118).`,
+            rounds === 1 && resumeNotes[id],
             testNote && `The builder says a test is wrong. Fix it if they're right, and say why in your findings either way:\n${testNote}`,
             `Commit your tests with a message starting "${id}:". Then run \`git switch --detach\`, so the builder can take the branch.`,
             'Put the output of `pwd` in `worktree`.',

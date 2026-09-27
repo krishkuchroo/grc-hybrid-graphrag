@@ -1,7 +1,7 @@
 // How a checkout looked when an agent started, and which files changed
 // since, for the hand-in backstop of guard rails 5 and 7.
 import { readFileSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { runGit as git } from './git.mjs';
 import { LOGS_DIR, gitTopLevel, isInside, realish } from './paths.mjs';
 
@@ -70,13 +70,32 @@ function editedByOthers(agentId, since, repo, activityFile) {
   return out;
 }
 
+// Where to diff from. In a worktree, an agent that moves its branch onto the
+// current main brings in commits others made after the worktree was created
+// (M0-001's first run): diff from where its branch meets main instead, but
+// only when that point is later than the start commit. The main checkout
+// always diffs from the start commit.
+function diffBase(repo, head) {
+  try {
+    const gitDir = resolve(repo, git(repo, ['rev-parse', '--git-dir']).trim());
+    const common = resolve(repo, git(repo, ['rev-parse', '--git-common-dir']).trim());
+    if (realish(gitDir) === realish(common)) return head;
+    const base = git(repo, ['merge-base', 'HEAD', 'refs/heads/main']).trim();
+    git(repo, ['merge-base', '--is-ancestor', head, base]);
+    return base || head;
+  } catch {
+    return head;
+  }
+}
+
 // Files this agent changed since it started: anything git sees as changed
-// since the start commit, minus files that were already changed and haven't
-// been touched since, minus files someone else edited.
+// since the start commit (or the diffBase above), minus files that were
+// already changed and haven't been touched since, minus files someone else
+// edited.
 export function changedSince(start, agentId, activityFile = join(LOGS_DIR, 'activity.jsonl')) {
   const { repo, head, dirty = {}, startedAt } = start;
   const names = new Set();
-  if (head) split(git(repo, ['diff', '--name-only', '-z', head])).forEach((p) => names.add(p));
+  if (head) split(git(repo, ['diff', '--name-only', '-z', diffBase(repo, head)])).forEach((p) => names.add(p));
   else {
     split(git(repo, ['diff', '--name-only', '-z', '--cached'])).forEach((p) => names.add(p));
     split(git(repo, ['diff', '--name-only', '-z'])).forEach((p) => names.add(p));

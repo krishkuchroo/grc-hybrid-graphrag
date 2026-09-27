@@ -1,4 +1,4 @@
-import { LOGS, ROOT, input, makeRepo, put, readJsonl } from './helpers.mjs';
+import { LOGS, ROOT, git, input, makeRepo, put, readJsonl } from './helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,6 +32,23 @@ test("lists what the agent changed, not what was already dirty or edited by othe
   const edit = { ts: new Date().toISOString(), event: 'edit', agent_id: null, agent_type: 'main', tool: 'Edit', path: join(repo, 'c.ts') };
   writeFileSync(activity, `${JSON.stringify(edit)}\n`);
   assert.deepEqual(changedSince(start, 'me', activity).sort(), ['a.ts', 'created.ts', 'd.ts']);
+});
+
+test("in a worktree, main's later commits aren't the agent's, but its own branch commits are", () => {
+  const repo = makeRepo(undefined, { 'memory.md': 'm\n', 'a.ts': 'a\n' });
+  const wt = join(repo, '.wt');
+  git(repo, 'worktree', 'add', '-q', '--detach', wt);
+  const start = { ...snapshot(wt), startedAt: new Date().toISOString() };
+  put(repo, 'memory.md', 'a decision made on main\n');
+  git(repo, 'commit', '-qam', 'main moves on');
+  git(wt, 'switch', '-q', '-c', 'task/X', 'main');
+  put(wt, 'a.test.ts', 'the agent\n');
+  git(wt, 'add', '-A');
+  git(wt, 'commit', '-qm', 'X: tests');
+  assert.deepEqual(changedSince(start, 'wt-agent', '/nonexistent'), ['a.test.ts']);
+  put(wt, 'memory.md', 'the agent edits it\n');
+  git(wt, 'commit', '-qam', 'X: sneaky');
+  assert.deepEqual(changedSince(start, 'wt-agent', '/nonexistent').sort(), ['a.test.ts', 'memory.md']);
 });
 
 test('createdSinceStart is true only for files the agent made', () => {
