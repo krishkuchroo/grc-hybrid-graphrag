@@ -10,7 +10,12 @@ export function graphFromEnv(env: NodeJS.ProcessEnv = process.env): GraphService
   const writerPassword = env.NEO4J_WRITER_PASSWORD;
   if (!adminPassword) throw new Error('NEO4J_ADMIN_PASSWORD is not set');
   if (!writerPassword) throw new Error('NEO4J_WRITER_PASSWORD is not set');
-  return new GraphService({ uri: env.NEO4J_URI || 'bolt://127.0.0.1:7687', adminPassword, writerPassword });
+  return new GraphService({
+    uri: env.NEO4J_URI || 'bolt://127.0.0.1:7687',
+    adminPassword,
+    writerPassword,
+    querySecret: env.NEO4J_QUERY_SECRET || undefined,
+  });
 }
 
 export const graphProvider = { provide: GRAPH, useFactory: (): GraphService => graphFromEnv() };
