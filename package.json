@@ -10,7 +10,8 @@
     "lint": "eslint . && prettier --check .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "setup:secrets": "node packages/infra/scripts/setup-secrets.ts"
+    "setup:secrets": "node packages/infra/scripts/setup-secrets.ts",
+    "setup:neo4j": "node packages/infra/scripts/setup-neo4j.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

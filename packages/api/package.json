@@ -13,6 +13,7 @@
     "@grc/shared": "workspace:*",
     "@nestjs/common": "^12.1.0",
     "drizzle-orm": "^0.45.3",
+    "neo4j-driver": "^6.2.0",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
