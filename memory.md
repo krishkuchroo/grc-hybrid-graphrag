@@ -554,6 +554,15 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **D144 Limiting the Neo4j writer account** (2026-09-27, Q37): **(a)** Neo4j 2026.05 can't grant on a name pattern like `org-*`. So grc_writer gets read and write on every database, with write denied on `neo4j`, and it can never change `system`. Our code refuses Cypher with `USE`. M0-004's criterion 1 test checks `neo4j` and `system` only.
 - **D145 Keeping Postgres and SeaweedFS off the internet in dev mode** (2026-09-27, Q38): **(b)** This replaces D141's grc-dev join, because "no masquerade" doesn't block the internet on Docker Desktop. grc-postgres and grc-seaweedfs stay on grc-internal only, always. The dev switch adds one small relay container on grc-internal plus a normal dev network. It publishes 127.0.0.1:5433 and 127.0.0.1:8333 and forwards to them. A live test checks that Postgres can't reach the internet.
 - **D146 Keep going without asking** (2026-09-27): the user: "you dont need me to point for every run, or ask, if the phase is done without problems just go to the next one". The main session starts the next run or step by itself when the last one finished cleanly, and asks only when there's a real decision or a problem it can't fix.
+- **D147 Clean checkpoints go straight on** (2026-09-27): the user: "go straight to S1 if the report is clean".
+  - When a milestone's checkpoint report (D114) is clean, the main session doesn't wait for approval. It:
+    - writes the report
+    - runs the `/insecure-defaults:audit` step (D128)
+    - runs the `tag` step
+    - starts the next milestone's `plan` and `build` steps
+  - The report is sent to the user to read later.
+  - **"Clean" means:** every task is done, the full suite, lint, type checks and scans are clean, and there are no open questions or findings.
+  - If the next plan raises questions for the user, or needs skills that aren't approved yet, the main session stops and asks (D111). Anything else goes to the user as before.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
