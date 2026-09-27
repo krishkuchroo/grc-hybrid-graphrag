@@ -95,6 +95,11 @@ export class GraphService {
     }
   }
 
+  /** Checks that Neo4j answers and accepts the writer account (the health route). */
+  async ping(): Promise<void> {
+    await this.writer.verifyConnectivity();
+  }
+
   async close(): Promise<void> {
     await Promise.all([this.admin.close(), this.writer.close()]);
   }
