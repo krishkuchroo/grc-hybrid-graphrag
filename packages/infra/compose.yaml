@@ -13,8 +13,14 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Read once by postgres/init/01-roles.sql to create grc_app and grc_migrator (D57).
+      DATABASE_URL_APP: ${DATABASE_URL_APP}
+      DATABASE_URL_MIGRATE: ${DATABASE_URL_MIGRATE}
     volumes:
       - grc-postgres-data:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      # D142: marks pgvector 0.8.6 as trusted, so grc_migrator (NOSUPERUSER) can install it.
+      - ./postgres/extension/vector--0.8.6.control:/usr/share/postgresql/18/extension/vector--0.8.6.control:ro
     networks:
       - grc-internal
     healthcheck:
@@ -82,6 +88,8 @@ services:
     command: ['pnpm', '--filter', '@grc/api', 'start:api']
     environment: &app-env
       NODE_ENV: production
+      # The restricted app account only (D57, D73); the migration URL never reaches the runtime.
+      DATABASE_URL_APP: ${DATABASE_URL_APP}
       NEO4J_URI: bolt://host.docker.internal:7687
       NEO4J_ADMIN_PASSWORD: ${NEO4J_ADMIN_PASSWORD}
       NEO4J_WRITER_PASSWORD: ${NEO4J_WRITER_PASSWORD}

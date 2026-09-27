@@ -2,6 +2,7 @@
 // - Every name in `.env.example` that is missing from `.env` is added.
 // - Secrets (names with PASSWORD, SECRET, TOKEN or KEY) get a fresh random, URL-safe value
 //   when missing or empty. A value that is already set is never changed.
+// - DATABASE_URL_APP and DATABASE_URL_MIGRATE get a connection URL with a fresh random password.
 // - NEO4J_DESKTOP_PASSWORD is the user's own Neo4j Desktop password: left empty, and named in
 //   the output so the user knows to fill it in.
 // - Secrets are never printed, and `.env` ends at mode 600.
@@ -29,12 +30,21 @@ const names = readFileSync(examplePath, 'utf8')
 const lines = existsSync(envPath) ? readFileSync(envPath, 'utf8').split('\n') : [];
 if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
 
+// The Postgres account URLs (D57): each holds its own fresh password. The host is the
+// grc-postgres container; tests on the Mac swap in 127.0.0.1:5433 themselves.
+const DATABASE_URLS: Record<string, string> = {
+  DATABASE_URL_APP: 'grc_app',
+  DATABASE_URL_MIGRATE: 'grc_migrator',
+};
+
 function isSecret(name: string): boolean {
-  return SECRET_NAME.test(name) && name !== USER_SUPPLIED;
+  return (SECRET_NAME.test(name) && name !== USER_SUPPLIED) || name in DATABASE_URLS;
 }
 
-function newSecret(): string {
-  return randomBytes(32).toString('base64url');
+function newSecretFor(name: string): string {
+  const password = randomBytes(32).toString('base64url');
+  const user = DATABASE_URLS[name];
+  return user ? `postgres://${user}:${password}@grc-postgres:5432/grc` : password;
 }
 
 function isEmpty(raw: string): boolean {
@@ -52,12 +62,12 @@ lines.forEach((l, i) => {
 for (const name of names) {
   const index = seen.get(name);
   if (index === undefined) {
-    const value = isSecret(name) ? newSecret() : '';
+    const value = isSecret(name) ? newSecretFor(name) : '';
     if (value) generated.push(name);
     lines.push(`${name}=${value}`);
     seen.set(name, lines.length - 1);
   } else if (isSecret(name) && isEmpty(LINE.exec(lines[index]!)![2]!)) {
-    lines[index] = `${name}=${newSecret()}`;
+    lines[index] = `${name}=${newSecretFor(name)}`;
     generated.push(name);
   }
 }
