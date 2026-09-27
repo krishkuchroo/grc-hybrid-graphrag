@@ -102,6 +102,72 @@ describe('assertNoDatabaseReference lets ordinary read queries through (criterio
   });
 });
 
+// Security review round 2 (commit 3d1c875, D55, D144): SHOW commands name no database, but they
+// list other orgs' databases, users and running transactions, and no Neo4j privilege can hide
+// them from an account with ACCESS on `*`. So the guard refuses any SHOW command, and still lets
+// through a query where "show" is only a string, a property, a parameter, a name or a comment.
+const SHOW_REFUSED: [string, string][] = [
+  ['SHOW DATABASES', 'SHOW DATABASES'],
+  ['lower-case show databases', 'show databases'],
+  ['SHOW DATABASES with YIELD and WHERE', "SHOW DATABASES YIELD name WHERE name STARTS WITH 'org-' RETURN name"],
+  ['SHOW DATABASE with a name', 'SHOW DATABASE neo4j'],
+  ['SHOW USERS', 'SHOW USERS'],
+  ['SHOW CURRENT USER', 'SHOW CURRENT USER'],
+  ['SHOW ROLES', 'SHOW ROLES'],
+  ['SHOW PRIVILEGES', 'SHOW PRIVILEGES'],
+  ['SHOW TRANSACTIONS', 'SHOW TRANSACTIONS'],
+  ['SHOW PROCEDURES', 'SHOW PROCEDURES'],
+  ['SHOW FUNCTIONS', 'SHOW FUNCTIONS'],
+  ['SHOW INDEXES', 'SHOW INDEXES'],
+  ['SHOW CONSTRAINTS', 'SHOW CONSTRAINTS'],
+  ['SHOW SETTINGS', 'SHOW SETTINGS'],
+  ['SHOW ALIASES', 'SHOW ALIASES FOR DATABASES'],
+  ['SHOW SERVERS', 'SHOW SERVERS'],
+  ['mixed-case sHoW', 'sHoW DATABASES'],
+  ['SHOW after leading spaces and new lines', '\n\t  SHOW DATABASES'],
+  ['SHOW split over lines', 'SHOW\nDATABASES\nYIELD name\nRETURN name'],
+  ['SHOW after a comment', '/* list */ SHOW DATABASES'],
+  ['SHOW after a line comment', '// list\nSHOW DATABASES'],
+  ['SHOW after a CYPHER version prefix', 'CYPHER 25 SHOW DATABASES'],
+  ['SHOW after EXPLAIN', 'EXPLAIN SHOW DATABASES'],
+  ['SHOW after PROFILE', 'PROFILE SHOW TRANSACTIONS'],
+  ['SHOW in a second statement', 'MATCH (n) RETURN n;\nSHOW DATABASES'],
+  ['SHOW inside a CALL subquery', 'CALL { SHOW DATABASES YIELD name RETURN name } RETURN name'],
+  [
+    'SHOW inside a scoped subquery with no spaces',
+    'CALL (){SHOW TRANSACTIONS YIELD transactionId RETURN transactionId} RETURN 1',
+  ],
+  ['SHOW after UNION', "RETURN 'a' AS name UNION SHOW DATABASES YIELD name RETURN name"],
+];
+
+const SHOW_ALLOWED: [string, string][] = [
+  ['show inside a string', "MATCH (p:Policy) WHERE p.name = 'SHOW DATABASES' RETURN p.name"],
+  ['show inside a double-quoted string', 'MATCH (p:Policy) WHERE p.name CONTAINS "show users" RETURN p.name'],
+  ['a property called show', 'MATCH (a:Asset) WHERE a.show = true RETURN a.name'],
+  ['a property called show in a map', 'MATCH (a:Asset {show: true}) RETURN a.name'],
+  ['a backtick-quoted property called SHOW', 'MATCH (a:Asset) RETURN a.`SHOW` AS shown'],
+  ['a parameter called show', 'MATCH (a:Asset) WHERE a.status = $show RETURN a.name'],
+  ['properties with show in their names', 'MATCH (c:Control) RETURN c.showOnDashboard, c.slideshow, c.show_count'],
+  ['a variable with show in its name', 'MATCH (showcase:Asset) RETURN showcase.name AS shown'],
+  ['show inside a comment', '// show the risks\nMATCH (r:Risk) RETURN r.name'],
+  ['show inside a block comment', '/* SHOW DATABASES */ MATCH (r:Risk) RETURN r.name'],
+];
+
+describe('assertNoDatabaseReference refuses SHOW commands (security review round 2, D144)', () => {
+  it.each(SHOW_REFUSED)('refuses %s', async (_what, cypher) => {
+    const assertNoDatabaseReference = await loadAssertNoDatabaseReference();
+    const GraphQueryRefused = await loadGraphQueryRefused();
+    expect(() => assertNoDatabaseReference(cypher), cypher).toThrow(GraphQueryRefused);
+  });
+});
+
+describe('assertNoDatabaseReference allows queries where show is only text or a name', () => {
+  it.each(SHOW_ALLOWED)('allows %s', async (_what, cypher) => {
+    const assertNoDatabaseReference = await loadAssertNoDatabaseReference();
+    expect(() => assertNoDatabaseReference(cypher)).not.toThrow();
+  });
+});
+
 describe('GraphQueryRefused', () => {
   it('is an Error named GraphQueryRefused', async () => {
     const GraphQueryRefused = await loadGraphQueryRefused();
