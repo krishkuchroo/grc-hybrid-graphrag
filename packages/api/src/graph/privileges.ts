@@ -25,6 +25,9 @@ export const NODE_RECORD_TYPES: Readonly<Record<string, RecordType>> = {
 
 export const AUDIT_OUTBOX_LABEL = 'AuditOutbox';
 
+/** APOC procedures that reach files, URLs, other servers or outside services (D52.2). */
+export const OUTSIDE_PROCEDURES = ['apoc.load.*', 'apoc.import.*', 'apoc.export.*', 'apoc.bolt.*', 'apoc.spatial.*'];
+
 /** The labels at or below `clearance`. */
 function labelsUpTo(clearance: Label): Label[] {
   return LABELS.slice(0, LABELS.indexOf(clearance) + 1);
@@ -43,5 +46,12 @@ export function queryAccountPrivileges(role: Role, clearance: Label): string[] {
   }
   statements.push(`GRANT MATCH {*} ON GRAPH * RELATIONSHIPS * TO ${name}`);
   statements.push(`DENY TRAVERSE ON GRAPH * NODES ${AUDIT_OUTBOX_LABEL} TO ${name}`);
+  // D52.2: a query stays inside the org's database. The built-in PUBLIC role grants LOAD and
+  // EXECUTE on every procedure, so LOAD CSV and the APOC procedures that fetch, write or send
+  // data outside Neo4j are denied (a DENY wins over PUBLIC's grants).
+  statements.push(`DENY LOAD ON ALL DATA TO ${name}`);
+  for (const procedures of OUTSIDE_PROCEDURES) {
+    statements.push(`DENY EXECUTE PROCEDURE ${procedures} ON DBMS TO ${name}`);
+  }
   return statements;
 }

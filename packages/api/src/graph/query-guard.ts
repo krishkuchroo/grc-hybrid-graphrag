@@ -15,11 +15,19 @@ export class GraphQueryRefused extends Error {
 // A backtick-quoted name after USE still leaves the USE keyword itself in the text.
 const NOT_CODE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`]|``)*`|\/\/[^\r\n]*|\/\*[\s\S]*?\*\//g;
 const USE_KEYWORD = /\bUSE\b/i;
+// SHOW commands (SHOW DATABASES, SHOW USERS, SHOW TRANSACTIONS…) name no database but list
+// other orgs' databases and other activity; ACCESS on `*` means no privilege can hide them
+// (D144), so they are refused here too. `n.show` and `$show` are a property and a parameter.
+const SHOW_KEYWORD = /(?<![.$\w])SHOW\b/i;
 
-/** Throws GraphQueryRefused when `cypher` names a database, or isn't text (fail safe). */
+/** Throws GraphQueryRefused when `cypher` names a database or is a SHOW command, or isn't text (fail safe). */
 export function assertNoDatabaseReference(cypher: string): void {
   if (typeof cypher !== 'string') throw new GraphQueryRefused('Graph query must be text');
-  if (USE_KEYWORD.test(cypher.replace(NOT_CODE, ' '))) {
+  const code = cypher.replace(NOT_CODE, ' ');
+  if (USE_KEYWORD.test(code)) {
     throw new GraphQueryRefused('Graph queries may not name a database (USE)');
+  }
+  if (SHOW_KEYWORD.test(code)) {
+    throw new GraphQueryRefused('Graph queries may not run SHOW commands');
   }
 }
