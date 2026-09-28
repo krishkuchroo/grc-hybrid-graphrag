@@ -10,9 +10,12 @@ import {
   MINUTE,
   PROBE,
   Jar,
+  actions,
   advance,
+  auditDuring,
   call,
   enrol,
+  errorCode,
   freezeClock,
   realClock,
   seedOrg,
@@ -153,3 +156,65 @@ describe('the lock keys on the account, not the client address (M0-007 review, D
     expect(await rightPasswordAccepted(target.user, shared)).toBe(true);
   });
 });
+
+// From M0-010's security review (D54): guesses sent at the same time must not slip past the lock.
+// The lock has to count an attempt before its password is checked. The review's repro sent 40
+// sign-ins at once for one account (39 wrong, then the right one) and got every one of them
+// checked, with the right one accepted.
+describe('guesses sent at the same time (M0-010 security review, D54)', () => {
+  it('39 wrong + 1 right sent at once: at most 5 are checked, the account locks, and the right one is refused', async () => {
+    const address = '10.63.0.1'; // its own address, so the 300/min limit plays no part
+    const { user } = await enrolled();
+
+    // What a checked wrong password looks like, taken from a different account.
+    const probe = await enrolled();
+    const checkedWrong = await signInPassword(
+      e().app,
+      new Jar(),
+      probe.user.email,
+      'Definitely-wrong-password-1',
+      '10.63.0.2',
+    );
+    expect(checkedWrong.statusCode, show(checkedWrong)).toBeGreaterThanOrEqual(400);
+    const wrongAnswer = answerOf(checkedWrong);
+
+    // The right password goes last, after the 39 wrong ones.
+    const passwords = [...Array.from({ length: 39 }, (_, i) => `Burst-wrong-password-${i}-x`), user.password];
+    let burst: Awaited<ReturnType<typeof signInPassword>>[] = [];
+    const added = await auditDuring(e().k, org.id, async () => {
+      burst = await Promise.all(passwords.map((pw) => signInPassword(e().app, new Jar(), user.email, pw, address)));
+    });
+    const right = burst[39]!;
+
+    // After the burst the account is locked: this is what a lock refusal looks like.
+    const after = await signInPassword(e().app, new Jar(), user.email, user.password, address);
+    expect(wantsSecondFactor(after), `the account must be locked after the burst: ${show(after)}`).toBe(false);
+    expect(after.statusCode, show(after)).toBeGreaterThanOrEqual(400);
+    const lockAnswer = answerOf(after);
+    expect(lockAnswer, 'a lock refusal is told apart from a checked wrong password').not.toBe(wrongAnswer);
+
+    const answers = burst.map(answerOf);
+    const tally: Record<string, number> = {};
+    for (const a of answers) tally[a] = (tally[a] ?? 0) + 1;
+    const checked = answers.filter((a) => a !== lockAnswer).length;
+    expect(checked, `at most 5 passwords are checked; answers: ${JSON.stringify(tally)}`).toBeLessThanOrEqual(5);
+    for (const a of answers) expect([wrongAnswer, lockAnswer], `answers: ${JSON.stringify(tally)}`).toContain(a);
+    expect(wantsSecondFactor(right), `the right password in the burst must be refused: ${show(right)}`).toBe(false);
+    expect(right.statusCode, show(right)).toBeGreaterThanOrEqual(400);
+
+    // Every attempt is still audited, the lock is written once, and no password counted as right.
+    const acts = actions(added);
+    expect(acts.filter((a) => a === 'auth.sign_in_failed').length, JSON.stringify(acts)).toBe(40);
+    expect(acts.filter((a) => a === 'auth.locked')).toEqual(['auth.locked']);
+    expect(acts).not.toContain('auth.password_verified');
+    expect(acts).not.toContain('auth.sign_in');
+
+    // Still locked 14 min 59 s on.
+    advance(14 * MINUTE + 59_000);
+    expect(await rightPasswordAccepted(user, address)).toBe(false);
+  });
+});
+
+function answerOf(res: Awaited<ReturnType<typeof signInPassword>>): string {
+  return wantsSecondFactor(res) ? 'second factor' : `${res.statusCode} ${String(errorCode(res))}`;
+}

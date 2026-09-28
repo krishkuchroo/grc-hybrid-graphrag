@@ -6,6 +6,10 @@
 // is a member of, with actor type `user` and the user's ID.
 // A complete sign-in is the password plus the second factor: it is one attempt, so it writes one
 // `auth.sign_in` (not one per step). A right password with a wrong code is one failed attempt.
+// D162 (Q41 answer a) adds a sixth event name: when the password is right, `auth.password_verified`
+// is written at once, before the second factor. `auth.sign_in` follows only when the second factor
+// succeeds. A wrong password still writes `auth.sign_in_failed`. A right password whose second
+// factor is never finished is what a stolen password looks like, so it must show in the trail.
 // An unknown email belongs to no org, so it has no org audit chain to go to: it must be logged in
 // the API's own log (pino) as `auth.sign_in_failed`, and write nothing into any org's chain.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -195,6 +199,93 @@ describe('criterion 5: one audit event per sign-in attempt', () => {
     expect(text).not.toContain('Audit-canary-password-5521');
     expect(text).not.toContain('Audit-canary-wrong-5521');
     expect(text).not.toContain(`"${code}"`);
+  });
+});
+
+describe('D162: a right password is audited at once, before the second factor', () => {
+  it('right password and no second factor: exactly one auth.password_verified and no auth.sign_in', async () => {
+    const user = await seedUser(e().k, org);
+    await enrol(e().app, user);
+    advance(MINUTE);
+    const added = await auditDuring(e().k, org.id, async () => {
+      const res = await signInPassword(e().app, new Jar(), user.email, user.password);
+      expect(wantsSecondFactor(res), show(res)).toBe(true);
+    });
+    expect(actions(added)).toEqual(['auth.password_verified']);
+    expectActor(added, user.id);
+  });
+
+  it('right password then the right TOTP: auth.password_verified, then auth.sign_in', async () => {
+    const user = await seedUser(e().k, org);
+    const { mfa } = await enrol(e().app, user);
+    advance(MINUTE);
+    const added = await auditDuring(e().k, org.id, () => signInFull(e().app, user, mfa));
+    expect(actions(added)).toEqual(['auth.password_verified', 'auth.sign_in']);
+    expectActor(added, user.id);
+  });
+
+  it('right password then a wrong TOTP: auth.password_verified, then auth.sign_in_failed', async () => {
+    const user = await seedUser(e().k, org);
+    const { mfa } = await enrol(e().app, user);
+    advance(MINUTE);
+    const added = await auditDuring(e().k, org.id, async () => {
+      const jar = new Jar();
+      expect(wantsSecondFactor(await signInPassword(e().app, jar, user.email, user.password))).toBe(true);
+      const res = await call(e().app, jar, {
+        method: 'POST',
+        url: `${AUTH}/two-factor/verify-totp`,
+        payload: { code: wrongCode(mfa.totp) },
+      });
+      expect(res.statusCode, show(res)).toBeGreaterThanOrEqual(400);
+    });
+    expect(actions(added)).toEqual(['auth.password_verified', 'auth.sign_in_failed']);
+    expectActor(added, user.id);
+  });
+
+  it('a wrong password writes only auth.sign_in_failed; the right one after it writes auth.password_verified', async () => {
+    const user = await seedUser(e().k, org);
+    await enrol(e().app, user);
+    const added = await auditDuring(e().k, org.id, async () => {
+      await signInPassword(e().app, new Jar(), user.email, 'Wrong-password-for-d162-1');
+      // Its right password, sent once more, is what proves the event name is in use.
+      await signInPassword(e().app, new Jar(), user.email, user.password);
+    });
+    expect(actions(added)).toEqual(['auth.sign_in_failed', 'auth.password_verified']);
+  });
+
+  it("auth.password_verified goes to the user's own org, carrying the user and the org", async () => {
+    const user = await seedUser(e().k, org);
+    await enrol(e().app, user);
+    advance(MINUTE);
+    let inOther: AuditRow[] = [];
+    const inOrg = await auditDuring(e().k, org.id, async () => {
+      inOther = await auditDuring(e().k, otherOrg.id, () =>
+        signInPassword(e().app, new Jar(), user.email, user.password),
+      );
+    });
+    expect(inOther).toEqual([]);
+    const verified = inOrg.filter((ev) => ev.action === 'auth.password_verified');
+    expect(verified.length, JSON.stringify(actions(inOrg))).toBe(1);
+    const row = JSON.parse(verified[0]!.text) as Record<string, unknown>;
+    expect(row.org_id).toBe(org.id);
+    expect(row.actor_type).toBe('user');
+    expect(row.actor_id).toBe(user.id);
+  });
+
+  it('auth.password_verified never carries the password or the TOTP code', async () => {
+    const user = await seedUser(e().k, org, { password: 'Verified-canary-password-7731' });
+    const { mfa } = await enrol(e().app, user);
+    advance(MINUTE);
+    const code = totpNow(mfa.totp);
+    const added = await auditDuring(e().k, org.id, () => signInFull(e().app, user, mfa));
+    const verified = added.filter((ev) => ev.action === 'auth.password_verified');
+    expect(verified.length, JSON.stringify(actions(added))).toBe(1);
+    for (const ev of added) {
+      expect(ev.text).not.toContain('Verified-canary-password-7731');
+      expect(ev.text).not.toContain(`"${code}"`);
+    }
+    const text = await allAuditText(e().k);
+    expect(text).not.toContain('Verified-canary-password-7731');
   });
 });
 
