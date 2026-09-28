@@ -102,5 +102,50 @@ export const SECURITY_MATRIX: {
     ...recordRoutes('control', 'controls'),
     ...recordRoutes('policy', 'policies'),
     ...recordRoutes('incident', 'incidents'),
+    // Links (S1-005). Adding one is open to any signed-in user because the D200 rule depends on
+    // both ends; the service checks it.
+    { method: 'POST', path: '/api/v1/links', access: 'any signed-in', orgWalled: true, labels: true },
+    {
+      method: 'GET',
+      path: '/api/v1/assets/:id/links',
+      access: { subject: 'asset', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/risks/:id/links',
+      access: { subject: 'risk', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/controls/:id/links',
+      access: { subject: 'control', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/policies/:id/links',
+      access: { subject: 'policy', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/incidents/:id/links',
+      access: { subject: 'incident', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/assets/:id/map',
+      access: { subject: 'asset', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };
