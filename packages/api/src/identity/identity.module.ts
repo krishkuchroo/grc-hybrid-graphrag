@@ -1,5 +1,5 @@
 // Login, users and sessions (D49, D54): Better Auth, the global SessionGuard, GET /api/v1/me, and
-// machine API keys (M0-011).
+// machine API keys (M0-011), and GET /api/v1/people for the owner picker (S1-004).
 // Better Auth's routes are mounted on Fastify by the API program (src/identity/auth-routes.ts).
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
@@ -13,12 +13,13 @@ import { ApiKeysService } from './api-keys.service.js';
 import { AuthService } from './auth.js';
 import './auth-docs.js';
 import { MeController } from './me.controller.js';
+import { PeopleController } from './people.controller.js';
 import { SessionGuard } from './session.guard.js';
 
 export class IdentityModule {}
 Module({
   imports: [AuditModule],
-  controllers: [MeController, ApiKeysController],
+  controllers: [MeController, ApiKeysController, PeopleController],
   providers: [
     {
       provide: AuthService,

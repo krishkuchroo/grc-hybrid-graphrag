@@ -34,6 +34,21 @@ export interface MatrixRoute {
   labels: boolean;
 }
 
+/** A record kind's five routes (S1-004): list and get need `view`; create, update and retire
+ * need `edit`. All are behind the org wall and the labels. */
+function recordRoutes(subject: Subject, plural: string): MatrixRoute[] {
+  const p = `/api/v1/${plural}`;
+  const view = { subject, action: 'view' as const };
+  const edit = { subject, action: 'edit' as const };
+  return [
+    { method: 'GET', path: p, access: view, orgWalled: true, labels: true },
+    { method: 'GET', path: `${p}/:id`, access: view, orgWalled: true, labels: true },
+    { method: 'POST', path: p, access: edit, orgWalled: true, labels: true },
+    { method: 'PATCH', path: `${p}/:id`, access: edit, orgWalled: true, labels: true },
+    { method: 'POST', path: `${p}/:id/retire`, access: edit, orgWalled: true, labels: true },
+  ];
+}
+
 export const SECURITY_MATRIX: {
   readonly recordTypes: readonly MatrixRecordType[];
   readonly routes: readonly MatrixRoute[];
@@ -80,5 +95,12 @@ export const SECURITY_MATRIX: {
     },
     { method: 'GET', path: '/api/v1/auth/*', access: 'public', orgWalled: false, labels: false },
     { method: 'POST', path: '/api/v1/auth/*', access: 'public', orgWalled: false, labels: false },
+    // S1-004: the owner picker's people list, and the five routes of each record kind.
+    { method: 'GET', path: '/api/v1/people', access: 'any signed-in', orgWalled: true, labels: false },
+    ...recordRoutes('asset', 'assets'),
+    ...recordRoutes('risk', 'risks'),
+    ...recordRoutes('control', 'controls'),
+    ...recordRoutes('policy', 'policies'),
+    ...recordRoutes('incident', 'incidents'),
   ],
 };
