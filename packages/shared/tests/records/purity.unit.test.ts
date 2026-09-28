@@ -23,7 +23,8 @@ function specifiers(code: string): string[] {
   const found: string[] = [];
   const patterns = [
     /\bfrom\s*['"]([^'"]+)['"]/g,
-    /\bimport\s*['"]([^'"]+)['"]/g,
+    // A side-effect import only at the start of a statement, so a string value such as 'import' is not read as one.
+    /(?:^|[;{}])\s*import\s*['"]([^'"]+)['"]/gm,
     /\bimport\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g,
     /\brequire\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g,
   ];
