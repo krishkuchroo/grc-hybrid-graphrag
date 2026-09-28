@@ -29,12 +29,17 @@ describe('criterion 3: /api/v1 goes to the API', () => {
     expect(errorBody(res)?.code).toBeDefined();
   });
 
-  it("the API's OpenAPI document is reachable through the door", async () => {
+  // The OpenAPI document sits behind sign-in and MFA (M0-010, packages/api/tests/auth/mfa.test.ts),
+  // so through the door with no session it must get the API's own 401, not a Caddy answer or a 404.
+  it('GET /api/v1/openapi.json without a session reaches the API and gets its 401 in the error format', async () => {
+    const since = new Date(Date.now() - 1_000);
     const res = await https('/api/v1/openapi.json');
-    expect(res.status).toBe(200);
-    const doc = JSON.parse(res.text) as { openapi?: string; paths?: Record<string, unknown> };
-    expect(doc.openapi).toMatch(/^3\./);
-    expect(Object.keys(doc.paths ?? {})).toContain('/api/v1/health');
+    expect(res.status).toBe(401);
+    const err = errorBody(res);
+    expect(err?.code).toBeDefined();
+    expect(err?.referenceId).toBeTruthy();
+    expect(res.text).not.toContain('"openapi"');
+    expect(await apiLogged('/api/v1/openapi.json', since)).toBe(true);
   });
 
   it('a path that only starts like the API (/api/v10) is not forwarded as /api/v1', async () => {
