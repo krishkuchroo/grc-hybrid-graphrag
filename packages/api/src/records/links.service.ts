@@ -3,6 +3,9 @@
 //   end it is), the ontology must allow the type (400 `link_not_allowed`), and the caller must be
 //   able to edit either end (`canLinkRecords`, 403). The link and its `link.created` audit entry
 //   are saved in one Neo4j transaction (D37, D45.4); the same link twice is 409 `link_exists`.
+// - Removing (S1-011, D201, D207): the same 404 and 403 checks, the link itself must be there (404),
+//   and only `manual` and `import` links go (an `ai` link is 409 `ai_link_review_only`). The
+//   deletion and its `link.removed` entry are saved in one Neo4j transaction.
 // - Reading: our code limits every node to the types the role may view, the labels at or below the
 //   clearance and, for "own" cells, the caller's own records (D50, D51). The read runs as the
 //   caller's read-only role x clearance account (readAs), so Neo4j checks again and hides every
@@ -22,6 +25,7 @@ import {
   canLinkRecords,
   isAllowedLink,
   isRecordVisible,
+  isRemovableLinkOrigin,
   type Label,
   type LinkType,
   type RecordKind,
@@ -32,6 +36,7 @@ import { ApiError } from '../common/errors.js';
 import { createLogger } from '../common/logger.js';
 import type { GraphService } from '../graph/graph.service.js';
 import { buildAssetMap, parseMapDepth, type AssetMap, type MapScope } from './asset-map.js';
+import { linkRemovedAudit } from './link-audit.js';
 import { visibleLabels } from './record-queries.js';
 import type { Caller } from './records.service.js';
 
@@ -45,6 +50,19 @@ export const createLinkSchema = z.strictObject({
   fromId: z.string().min(1).max(200),
   toId: z.string().min(1).max(200),
 });
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The body of POST /api/v1/links/remove (S1-011): one of the six link types, lowercase UUIDs. */
+export const removeLinkSchema = z.strictObject({
+  type: z.enum(TYPE_NAMES),
+  fromId: z.string().regex(UUID, 'must be a lowercase UUID'),
+  toId: z.string().regex(UUID, 'must be a lowercase UUID'),
+});
+
+export const removedLinkSchema = z.object({ type: z.string(), fromId: z.string(), toId: z.string() });
+
+export type RemovedLink = z.infer<typeof removedLinkSchema>;
 
 export const linkSchema = z.object({
   type: z.string(),
@@ -93,6 +111,12 @@ interface End {
 
 const NOT_FOUND = (): ApiError => new ApiError(404, 'not_found', 'The record was not found.');
 const FORBIDDEN = (): ApiError => new ApiError(403, 'forbidden', 'You may not do this.');
+const AI_LINK = (): ApiError =>
+  new ApiError(
+    409,
+    'ai_link_review_only',
+    "This link was found by the AI. It can only be removed through the Analyst's review.",
+  );
 
 const KIND_BY_LABEL: ReadonlyMap<string, RecordKind> = new Map(
   RECORD_KINDS.map((kind) => [NODE_LABELS[kind], kind] as const),
@@ -164,6 +188,43 @@ export function linkTargetId(type: string, fromId: string, toId: string): string
   return `${type}:${fromId}:${toId}`;
 }
 
+/** A stored link between two ends, as read before removing it. */
+interface FoundLink {
+  elementId: string;
+  origin: unknown;
+  createdAt: string;
+  createdBy: string;
+}
+
+/** The one `type` link from `a` to `b` (that direction only), if there is one. With `lock`, the
+ * from end is write-locked first (a property set and removed again, so the record is unchanged),
+ * so two removals of the same link run one after the other and the second finds nothing. */
+async function findLink(
+  tx: ManagedTransaction,
+  type: LinkType,
+  a: Pick<End, 'id' | 'kind'>,
+  b: Pick<End, 'id' | 'kind'>,
+  opts: { lock?: boolean } = {},
+): Promise<FoundLink | null> {
+  if (opts.lock) {
+    await tx.run(`MATCH (a:${NODE_LABELS[a.kind]} {id: $id}) SET a.__lock = true REMOVE a.__lock`, { id: a.id });
+  }
+  const res = await tx.run(
+    `MATCH (a:${NODE_LABELS[a.kind]} {id: $fromId})-[r:${type}]->(b:${NODE_LABELS[b.kind]} {id: $toId})
+     RETURN elementId(r) AS rid, r.origin AS origin, r.createdAt AS createdAt, r.createdBy AS createdBy
+     ORDER BY r.createdAt LIMIT 1`,
+    { fromId: a.id, toId: b.id },
+  );
+  const row = res.records[0];
+  if (!row) return null;
+  return {
+    elementId: row.get('rid') as string,
+    origin: row.get('origin'),
+    createdAt: row.get('createdAt') as string,
+    createdBy: row.get('createdBy') as string,
+  };
+}
+
 /** The only parts of an error a log line may hold (D163): its type and code, never its text. */
 function errorFields(err: unknown): { errorType?: string; errorCode?: string } {
   if (typeof err !== 'object' || err === null) return {};
@@ -230,6 +291,50 @@ export class LinksService {
       if (err instanceof ApiError) throw err;
       const fields = errorFields(err);
       this.log.error({ orgId: caller.orgId, type, fromId, toId, ...fields }, 'link create failed');
+      throw new LinkWriteFailed(fields.errorCode);
+    }
+  }
+
+  /** Removes one link added by mistake (S1-011, D201, D207). The checks run in this order: both
+   * ends visible and the link there (404), `canLinkRecords` (403), a removable origin (409). The
+   * link is deleted with its `link.removed` entry in one transaction, where the checks run again. */
+  async remove(caller: Caller, input: unknown): Promise<RemovedLink> {
+    const { type, fromId, toId } = removeLinkSchema.parse(input);
+    const from = await this.findVisible(caller, fromId);
+    const to = await this.findVisible(caller, toId);
+    if (!from || !to) throw NOT_FOUND();
+    const found = await this.read(caller, [from.kind, to.kind], (tx) => findLink(tx, type, from, to));
+    if (!found) throw NOT_FOUND();
+    if (!canLinkRecords(caller, from, to)) throw FORBIDDEN();
+    if (!isRemovableLinkOrigin(found.origin)) throw AI_LINK();
+
+    try {
+      return await this.outbox.withAuditedWrite(caller.orgId, actorOf(caller), async (tx) => {
+        const a = await this.endForWrite(tx, from.kind, fromId);
+        const b = await this.endForWrite(tx, to.kind, toId);
+        if (!a || !b || !visibleTo(caller, a) || !visibleTo(caller, b)) throw NOT_FOUND();
+        const link = await findLink(tx, type, a, b, { lock: true });
+        if (!link) throw NOT_FOUND();
+        if (!canLinkRecords(caller, a, b)) throw FORBIDDEN();
+        if (!isRemovableLinkOrigin(link.origin)) throw AI_LINK();
+        const res = await tx.run(`MATCH ()-[r]->() WHERE elementId(r) = $rid DELETE r RETURN count(*) AS n`, {
+          rid: link.elementId,
+        });
+        if (Number(res.records[0]?.get('n') ?? 0) !== 1) throw NOT_FOUND();
+        const stored = {
+          type,
+          fromId,
+          toId,
+          createdAt: link.createdAt,
+          createdBy: link.createdBy,
+          origin: link.origin,
+        };
+        return { result: { type, fromId, toId }, audit: linkRemovedAudit(stored, a, b) };
+      });
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      const fields = errorFields(err);
+      this.log.error({ orgId: caller.orgId, type, fromId, toId, ...fields }, 'link remove failed');
       throw new LinkWriteFailed(fields.errorCode);
     }
   }

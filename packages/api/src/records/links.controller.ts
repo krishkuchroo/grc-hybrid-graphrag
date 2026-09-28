@@ -1,10 +1,12 @@
 // The links routes (S1-005):
 //   POST /api/v1/links                 { type, fromId, toId } -> 201 with the link. Any signed-in user
 //                                      may call it; the service decides (D200 depends on both ends).
+//   POST /api/v1/links/remove          { type, fromId, toId } -> 200 with the removed link (S1-011,
+//                                      D201); an `ai` link is 409 `ai_link_review_only` (D207).
 //   GET  /api/v1/<plural>/:id/links    the record's links whose other end the caller can see.
 //   GET  /api/v1/assets/:id/map        the HOSTS/RUNS map around one asset (D204).
 // Decorators are applied as plain calls, so the code runs without decorator syntax support.
-import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { RECORD_KINDS, RECORD_PATHS, ROLE_TABLE, type RecordKind } from '@grc/shared';
 import { AccessGuard } from '../access/access.guard.js';
 import { Requires } from '../access/requires.decorator.js';
@@ -17,8 +19,11 @@ import {
   createLinkSchema,
   linkListSchema,
   linkSchema,
+  removeLinkSchema,
+  removedLinkSchema,
   type LinkItem,
   type LinkOut,
+  type RemovedLink,
 } from './links.service.js';
 import type { Caller } from './records.service.js';
 
@@ -40,12 +45,20 @@ export class LinksController {
   create(request: AuthedRequest, body: unknown): Promise<LinkOut> {
     return this.links.create(callerOf(request), body);
   }
+
+  remove(request: AuthedRequest, body: unknown): Promise<RemovedLink> {
+    return this.links.remove(callerOf(request), body);
+  }
 }
 {
   const p = LinksController.prototype;
   Post()(p, 'create', Object.getOwnPropertyDescriptor(p, 'create')!);
   Req()(p, 'create', 0);
   Body()(p, 'create', 1);
+  Post('remove')(p, 'remove', Object.getOwnPropertyDescriptor(p, 'remove')!);
+  HttpCode(200)(p, 'remove', Object.getOwnPropertyDescriptor(p, 'remove')!);
+  Req()(p, 'remove', 0);
+  Body()(p, 'remove', 1);
   Controller('links')(LinksController);
   Inject(LinksService)(LinksController, undefined, 0);
 }
@@ -106,6 +119,14 @@ documentRoute({
   summary: 'Link two records (D200: the caller can edit either and see both)',
   body: createLinkSchema,
   response: linkSchema,
+});
+documentRoute({
+  method: 'post',
+  path: '/links/remove',
+  summary:
+    'Remove a link added by mistake (D201: the same people who may add it). Answers 404 not_found, 403 forbidden, or 409 ai_link_review_only for a link found by the AI (D207)',
+  body: removeLinkSchema,
+  response: removedLinkSchema,
 });
 for (const kind of RECORD_KINDS) {
   documentRoute({
