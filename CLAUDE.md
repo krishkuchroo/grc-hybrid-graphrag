@@ -28,23 +28,19 @@ It's a portfolio project and research prototype. It **must look like a finished 
 8. **Orchestration layer.** A multi-agent setup that is configured from the finished plan. ✅ Decisions locked 2026-09-26 (D74–D107). ✅ Done 2026-09-27: 9 agents, the hooks, the monitor and the board, verified by smoke tests, with the review's findings fixed (D119).
 9. **Workflow generation.** Build workflows that support the orchestration layer and build out the solid project layer. Decided 2026-09-27 (D109–D121). The milestone workflow is written, and gets a real test after setup. ← *current phase*
 
-## Current state (saved 2026-09-27 19:45 EDT, usage limit hit; resume from here)
-- **M0: 10 of 16 done, merged and pushed.** M0-001 to M0-009 and M0-012. `origin/main` = `91e2f5d` (audit trail). The full suite was green at `c877243`: 1696/1696.
-- **In flight when the limit hit** (workflow run `wf_3790a341-632`; agents may have died mid-work):
-  - **M0-014:** built, 44/44 tests pass. The code and security reviewers were running.
-  - **M0-013:** 28 red tests at `0a1c81e` on `task/M0-013`. The builder was running.
-  - **M0-010 (login):** 110 tests at `9024a1d` on `task/M0-010` (11 skipped by a nested `beforeAll`; reviewers must confirm none stay skipped). The builder was running. Its note: trustProxy and per-user rate limits.
-  - Waiting: M0-011 and M0-015. M0-016 (Caddy) is last.
-- **To resume:** check `/workflows`. If the run is dead, start a **fresh** run (resume caching breaks): `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: "m0", step: "build", from: {"M0-014": "review", "M0-013": "build", "M0-010": "build"}}})`. Before that, check each `task/<ID>` tip (`git log task/<ID>`): commit any partial builder work, and use `from: "review"` if a builder finished. Done tasks are skipped by the board.
-- **Before M0-016:** the user trusts Caddy's cert, adds `127.0.0.1 grc.localhost` to hosts, and stops other projects' containers.
-- **At the M0 checkpoint (D147):** if it's clean, write the report, run `/insecure-defaults:audit`, tag `m0`, then plan and build S1. **Then D160:** rewrite history to strip old Claude lines, force-push once (no agents running; confirm with the user first).
-- **Open:** Q39's context hand-off part. Its "run the suite 3×" part is closed by D171 (see "Testing").
-- **Test approach (2026-09-28, D167, D168, D170–D180):** decided and committed (c893c30). Rules, hooks and agent instructions are updated; TEST-001…003 built the project side and are **merged and pushed** (`b115b47`; full suite 2,450/2,450, e2e 4/4). Open for the user: the flaky 25 MB upload test (keep TEST-003's push + a TEST-004 fix?) and whether the audit viewer hides entries above the reader's clearance.
+## Current state (saved 2026-09-28; resume from here)
+- **M0 is done, approved and tagged `m0`** (D193). All 16 M0 tasks and TEST-001…008 are merged and pushed. The report is `docs/checkpoints/m0.md`.
+- **Checkpoint results:** lint and typecheck clean; `pnpm test` 2,457/2,457 in each of 3 runs (none skipped, none flaky); e2e 4/4; insecure-defaults audit 0 findings; the esbuild advisory is accepted (SF-008, D192).
+- **Open security items:** SF-001…SF-007 in `SECURITY-FINDINGS.md`, left for the user (D184).
+- **D160 history rewrite:** runs right after the tag (D194). The user runs the one force-push from the prompt.
+- **Next: S1**, planned in another session (D195). Then the parallel groups (D181–D183). The user OKs the S1 task list and skills first (D111).
+- **Open:** Q39's context hand-off part.
 - **Environment:**
   - Neo4j DBMS running (127.0.0.1), all 28 query roles have their DENYs.
-  - The Docker stack is up (`grc-postgres`, `grc-seaweedfs`, `grc-dev-relay`); start it from the main checkout only.
+  - The Docker stack is up (`grc-postgres`, `grc-seaweedfs`, `grc-dev-relay`, `grc-caddy`, `grc-api`, `grc-worker`). Start or recreate it from the main checkout only.
   - Monitor at http://127.0.0.1:4800.
   - Errors log: `logs/build-errors.md`.
+  - 21 unmerged worktrees are kept (`monitor-v2` and 20 old M0 workflow attempts, D190).
 
 ## Non-functional requirements
 Consistent · Concurrent · Scalable · Durable · Follows good design principles.

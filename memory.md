@@ -701,6 +701,16 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The main session starts the M0 checkpoint (D114, D147): the integrator runs the full suite 3 times plus every browser test (D171, D172), and the main session runs `/insecure-defaults:audit` on the whole codebase (D128, skill approved for this run under D80).
   - The user confirmed the other session is paused, so no milestone work runs alongside.
   - Still asked separately: D160's one-time force-push, and the S1 task list and skills (D111).
+- **D192 Accept the old esbuild (SF-008)** (2026-09-28, the user: "Accept it"): GHSA-67mh-4wv8-2f99 comes in only through drizzle-kit (better-auth → drizzle-kit → @esbuild-kit), and it's a flaw in esbuild's dev server, which we never run. SF-008 is marked Accepted, and `pnpm audit --prod` counts as clean for M0 with this one advisory. It's rechecked at each checkpoint.
+- **D193 M0 approved and tagged** (2026-09-28, the user: "Approve and tag"):
+  - The M0 checkpoint passed: lint and typecheck clean, `pnpm test` 2,457/2,457 in each of 3 runs (none skipped, no flaky tests), e2e 4/4, and the insecure-defaults audit had 0 findings (11 candidates refuted).
+  - The integrator pushes the waiting commits and tags `m0`.
+  - SF-001 to SF-007 stay Open (D184) and are listed in the report (`docs/checkpoints/m0.md`).
+- **D194 D160's history rewrite runs right after the `m0` tag** (2026-09-28, the user: "Do it after the tag"):
+  - One rewrite of `main` and the `m0` tag strips the Co-Authored-By, Claude-Session and "Generated with" lines. It happens while no agents are running.
+  - The single force-push is blocked by guard rail 3 for every agent and the main session (D84), so the user runs it from the prompt with `!`.
+  - Task branches stay local with their old history, and none is on GitHub.
+- **D195 S1 planning happens in another session** (2026-09-28, the user: "Will run it in a different session just send me that you are done"). This session stops after the tag and D160, and tells the user it's done.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
