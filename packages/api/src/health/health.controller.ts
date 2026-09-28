@@ -1,4 +1,4 @@
-// GET /api/v1/health: whether the API can reach Postgres and Neo4j.
+// GET /api/v1/health: whether the API can reach Postgres and Neo4j. No session needed.
 // Decorators are applied as plain calls, so the code runs without decorator syntax support.
 import { Controller, Get, Inject, Module } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
@@ -8,6 +8,7 @@ import type { Db } from '../db/client.js';
 import { DB } from '../db/db.module.js';
 import { GRAPH } from '../graph/graph.module.js';
 import type { GraphService } from '../graph/graph.service.js';
+import { Public } from '../identity/session.guard.js';
 
 export const healthResponseSchema = z.object({
   status: z.enum(['ok', 'degraded']),
@@ -53,6 +54,8 @@ export class HealthController {
   }
 }
 Controller('health')(HealthController);
+// Open without a session (M0-010), so Caddy and the tests can check it.
+Public()(HealthController);
 Get()(HealthController.prototype, 'check', Object.getOwnPropertyDescriptor(HealthController.prototype, 'check')!);
 Inject(DB)(HealthController, undefined, 0);
 Inject(GRAPH)(HealthController, undefined, 1);

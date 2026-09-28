@@ -15,7 +15,8 @@ export class RateLimiter {
   constructor(
     private readonly limit: number,
     private readonly windowMs = 60_000,
-    private readonly now: () => number = Date.now,
+    // Read at each call, so a replaced clock (the tests' fake Date) is seen.
+    private readonly now: () => number = () => Date.now(),
   ) {}
 
   hit(key: string): RateDecision {

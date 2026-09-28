@@ -5,7 +5,7 @@
 // `organization.id`, and `member`/`invitation` store it in `org_id uuid not null`.
 // `member.role` is one of the 7 roles (D50) and `member.clearance` one of the 4 labels (D51).
 import { sql } from 'drizzle-orm';
-import { boolean, check, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -30,6 +30,8 @@ export const session = pgTable('session', {
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
   activeOrganizationId: uuid('active_organization_id'),
+  // M0-010: set only on sessions made by the two-factor verify routes (migration 0004).
+  mfaVerified: boolean('mfa_verified').notNull().default(false),
 });
 
 export const account = pgTable('account', {
@@ -115,4 +117,8 @@ export const twoFactor = pgTable('two_factor', {
   userId: text('user_id')
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
+  // M0-010: the 2FA plugin's own columns (migration 0004).
+  verified: boolean('verified').default(true),
+  failedVerificationCount: integer('failed_verification_count').default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
 });

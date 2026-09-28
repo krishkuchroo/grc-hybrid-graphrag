@@ -13,21 +13,33 @@ import {
   type InjectResponse,
   type PlatformDb,
 } from './helpers.js';
+import { signedInApi } from '../auth/helpers.js';
 
 let db: PlatformDb | undefined;
 let app: ApiApp | undefined;
+let session: Awaited<ReturnType<typeof signedInApi>> | undefined;
 
 beforeAll(async () => {
   db = await platformDb();
   app = await startApi({ imports: [await testModule()] });
+  session = await signedInApi(app, db);
 }, 180_000);
 
 afterAll(async () => {
+  await session?.close();
   await app?.close();
   await db?.drop();
 });
 
+// Since M0-010 every route except /api/v1/auth/* and /api/v1/health needs a signed-in session
+// with MFA checked, so these requests carry one (signedInApi from the auth helpers).
 function api(): ApiApp {
+  if (!session) throw new Error('the API app or its signed-in session did not start (see beforeAll)');
+  return session.api;
+}
+
+// No session: the per-address counting for people who aren't signed in.
+function anon(): ApiApp {
   if (!app) throw new Error('the API app did not start (see beforeAll)');
   return app;
 }
@@ -108,7 +120,7 @@ describe('criterion 5: security headers on every response', () => {
     const ip = '10.5.0.1';
     let last: InjectResponse | undefined;
     for (let i = 0; i < 301; i++) {
-      last = await api().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: ip });
+      last = await anon().inject({ method: 'GET', url: `${TEST_ROUTES}/ok`, remoteAddress: ip });
     }
     expect(last!.statusCode).toBe(429);
     expectSecurityHeaders(last!);
