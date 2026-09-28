@@ -54,7 +54,16 @@
         "hooks": [
           { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-finish.mjs\"", "timeout": 3600 },
           { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-changed-files.mjs\"", "timeout": 120 },
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/monitor-hook.mjs\"", "timeout": 15 }
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/monitor-hook.mjs\"", "timeout": 15 },
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/record-security-findings.mjs\"", "timeout": 30 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "SubagentHandback|StructuredOutput",
+        "hooks": [
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/record-security-findings.mjs\"", "timeout": 30 }
         ]
       }
     ]

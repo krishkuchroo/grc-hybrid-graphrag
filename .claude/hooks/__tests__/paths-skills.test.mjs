@@ -41,7 +41,7 @@ test('reads the approved plugin:skill names from skills.md', () => {
     'vercel:ai-sdk',
     'mattpocock-skills:code-review',
     'fp-check:fp-check',
-    'insecure-defaults:insecure-defaults',
+    'insecure-defaults:audit',
     'differential-review:differential-review',
     'mattpocock-skills:resolving-merge-conflicts',
     'mattpocock-skills:git-guardrails-claude-code',
