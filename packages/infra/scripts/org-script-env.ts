@@ -151,7 +151,21 @@ export async function connect(): Promise<Connections> {
   };
 }
 
-/** One line for an error, without a stack. */
+/**
+ * One line for an error: its type and code only (D163, D164). Never its message, stack, cause or
+ * other properties, which can hold the org's values (a DrizzleQueryError's params, a pg error's
+ * detail). A thrown non-object prints none of its value.
+ */
 export function describeError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (typeof err !== 'object' || err === null) return 'type=unknown (a non-error value was thrown)';
+  const e = err as { name?: unknown; code?: unknown; cause?: unknown };
+  // The class name: `name`, or the constructor's when `name` is left as 'Error' (DrizzleQueryError).
+  const ctorName = (err as { constructor?: { name?: unknown } }).constructor?.name;
+  let type = 'unknown';
+  if (typeof e.name === 'string' && e.name !== 'Error') type = e.name;
+  else if (typeof ctorName === 'string' && ctorName !== '') type = ctorName;
+  else if (typeof e.name === 'string') type = e.name;
+  const causeCode = typeof e.cause === 'object' && e.cause !== null ? (e.cause as { code?: unknown }).code : undefined;
+  const code = typeof e.code === 'string' ? e.code : typeof causeCode === 'string' ? causeCode : undefined;
+  return code === undefined ? `type=${type}` : `type=${type} code=${code}`;
 }
