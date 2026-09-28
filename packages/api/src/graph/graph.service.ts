@@ -20,6 +20,9 @@ export interface GraphServiceOptions {
 }
 
 const ALREADY_EXISTS = 'Neo.ClientError.Database.ExistingDatabaseFound';
+// Up to 28 query drivers can exist (one per account), so each keeps a small pool. Chat queues for
+// Gemma, so only a few graph queries per account run at once; 28 x 5 = 140 connections at most.
+const QUERY_POOL_SIZE = 5;
 const ONLINE_WAIT_MS = 120_000;
 
 function assertNoUse(query: unknown): void {
@@ -48,7 +51,7 @@ export class GraphService {
   private readonly writer: Driver;
   private readonly uri: string;
   private readonly querySecret: string | undefined;
-  private query: Driver | undefined;
+  private readonly query = new Map<string, Driver>();
 
   constructor(options: GraphServiceOptions) {
     const config = { disableLosslessIntegers: true };
@@ -108,13 +111,11 @@ export class GraphService {
     options: { timeoutMs: number },
   ): Promise<T> {
     const database = orgDatabaseName(orgId);
-    const user = queryAccountName(role, clearance);
     const timeout = options?.timeoutMs;
     if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout <= 0) {
       throw new Error('readAs needs a positive whole timeoutMs');
     }
-    const auth = neo4j.auth.basic(user, queryAccountPassword(this.querySecret ?? '', role, clearance));
-    const session = this.queryDriver().session({ database, defaultAccessMode: neo4j.session.READ, auth });
+    const session = this.queryDriver(role, clearance).session({ database, defaultAccessMode: neo4j.session.READ });
     try {
       return await session.executeRead((tx) => fn(guarded(tx)), { timeout });
     } finally {
@@ -128,20 +129,25 @@ export class GraphService {
   }
 
   async close(): Promise<void> {
-    await Promise.all([this.admin.close(), this.writer.close(), this.query?.close()]);
+    const query = [...this.query.values()];
+    this.query.clear();
+    await Promise.all([this.admin.close(), this.writer.close(), ...query.map((d) => d.close())]);
   }
 
-  /** One driver for the 28 query accounts; each session logs in as its own account. */
-  private queryDriver(): Driver {
-    if (!this.query) {
-      const secret = this.querySecret ?? '';
-      const auth = neo4j.auth.basic(
-        queryAccountName('viewer', 'public'),
-        queryAccountPassword(secret, 'viewer', 'public'),
-      );
-      this.query = neo4j.driver(this.uri, auth, { disableLosslessIntegers: true });
+  /**
+   * One driver per query account, logged in as that account and made on first use (TEST-007).
+   * A shared driver with a login per session re-logs pooled connections in as another account,
+   * which Neo4j's Bolt server can drop mid-login ("Connection was closed by server").
+   */
+  private queryDriver(role: Role, clearance: Label): Driver {
+    const user = queryAccountName(role, clearance);
+    let driver = this.query.get(user);
+    if (!driver) {
+      const auth = neo4j.auth.basic(user, queryAccountPassword(this.querySecret ?? '', role, clearance));
+      driver = neo4j.driver(this.uri, auth, { disableLosslessIntegers: true, maxConnectionPoolSize: QUERY_POOL_SIZE });
+      this.query.set(user, driver);
     }
-    return this.query;
+    return driver;
   }
 
   private session(orgId: string, mode: typeof neo4j.session.READ | typeof neo4j.session.WRITE): Session {
