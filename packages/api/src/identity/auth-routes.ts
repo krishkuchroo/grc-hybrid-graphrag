@@ -103,7 +103,13 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
       if (cookies.length) void reply.header('set-cookie', cookies);
       const code = typeof res.json.code === 'string' && res.json.code ? res.json.code.toLowerCase() : undefined;
       const message = typeof res.json.message === 'string' && res.json.message ? res.json.message : undefined;
-      sendError(request, reply, res.status, code ?? CODES[res.status] ?? 'error', message ?? 'The request was refused.');
+      sendError(
+        request,
+        reply,
+        res.status,
+        code ?? CODES[res.status] ?? 'error',
+        message ?? 'The request was refused.',
+      );
       return reply;
     }
     reply.code(res.status);

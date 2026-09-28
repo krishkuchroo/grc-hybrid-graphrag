@@ -91,7 +91,8 @@ export class SignInLockout {
     if (now - this.lastSweep < 60_000) return;
     this.lastSweep = now;
     for (const [key, entry] of this.entries) {
-      if (entry.pending === 0 && entry.lockedUntil <= now && now - entry.lastSeen >= FORGET_MS) this.entries.delete(key);
+      if (entry.pending === 0 && entry.lockedUntil <= now && now - entry.lastSeen >= FORGET_MS)
+        this.entries.delete(key);
     }
   }
 }
