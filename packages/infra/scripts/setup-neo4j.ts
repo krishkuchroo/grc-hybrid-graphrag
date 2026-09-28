@@ -2,8 +2,10 @@
 // - Logs in once as the Desktop `neo4j` account (NEO4J_DESKTOP_PASSWORD, filled in by the user).
 // - grc_admin (NEO4J_ADMIN_PASSWORD) may create databases and nothing else (D57).
 // - grc_writer (NEO4J_WRITER_PASSWORD) reads and writes graph data, with write denied on the
-//   default `neo4j` database, and holds no database or DBMS management rights, so it can never
-//   change `system` (D144: Neo4j 2026.05 can't grant on a name pattern like `org-*`).
+//   default `neo4j` database, and holds no DBMS management rights, so it can never change
+//   `system` (D144: Neo4j 2026.05 can't grant on a name pattern like `org-*`). D208: it also
+//   holds INDEX and CONSTRAINT MANAGEMENT on DATABASE *, so `ensureOrgSchema` can build each org
+//   database's schema.
 // - The 28 read-only query accounts `grc_ro_<role>_<clearance>` (M0-005, D73), each with its own
 //   role holding the privileges built from ROLE_TABLE in packages/api/src/graph/privileges.ts.
 //   Their passwords derive from NEO4J_QUERY_SECRET (packages/api/src/graph/query-accounts.ts).
@@ -106,6 +108,8 @@ const ACCOUNTS: { user: string; password: string; grants: string[] }[] = [
       'GRANT ACCESS ON DATABASE * TO grc_writer',
       'GRANT ALL GRAPH PRIVILEGES ON GRAPH * TO grc_writer',
       'GRANT NAME MANAGEMENT ON DATABASE * TO grc_writer',
+      'GRANT INDEX MANAGEMENT ON DATABASE * TO grc_writer',
+      'GRANT CONSTRAINT MANAGEMENT ON DATABASE * TO grc_writer',
       'DENY WRITE ON GRAPH neo4j TO grc_writer',
     ],
   },

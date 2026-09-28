@@ -18,6 +18,7 @@
     "setup:neo4j": "node packages/infra/scripts/setup-neo4j.ts",
     "test:env": "node packages/infra/scripts/test-env.ts",
     "org:create": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/create-org.ts",
+    "graph:schema": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/graph-schema.ts",
     "seed:demo": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/seed-demo.ts",
     "gen:api-client": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/web/scripts/gen-api-client.ts"
   },

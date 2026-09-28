@@ -15,6 +15,9 @@
 //   alias or privilege management and no DBMS privileges at all (D144: Neo4j 2026.05
 //   can't grant on a name pattern like `org-*`, so the writer is limited by `neo4j` and
 //   `system` only; our code refuses Cypher with `USE`).
+// - D208: `grc_writer` also holds INDEX MANAGEMENT and CONSTRAINT MANAGEMENT ON DATABASE *,
+//   so `ensureOrgSchema` (S1-002) can build each org database's constraints and indexes.
+//   `grc_admin` stays at CREATE DATABASE only (D57); neither of those two grants goes to it.
 // - Neither account must change its password on first login.
 // - A second run changes nothing: same users, same roles, same privileges, same passwords.
 // - The script never prints a password.
@@ -38,6 +41,25 @@ import {
 } from './helpers.js';
 
 const LONG = 120_000;
+
+async function ownGrants(user: string): Promise<string[]> {
+  const users = await runOn(sup, 'system', 'SHOW USERS YIELD user, roles WHERE user = $u RETURN roles', { u: user });
+  const roles = ((users[0]?.['roles'] as string[]) ?? []).filter((r) => r !== 'PUBLIC');
+  expect(roles.length, `${user} must exist with its own roles`).toBeGreaterThan(0);
+  const grants: string[] = [];
+  for (const role of roles) {
+    const rows = await runOn(sup, 'system', `SHOW ROLE \`${role}\` PRIVILEGES AS COMMANDS`);
+    for (const r of rows) {
+      const cmd = String(r['command']);
+      if (cmd.startsWith('GRANT ')) grants.push(cmd);
+    }
+  }
+  return grants;
+}
+
+const INDEX_MANAGEMENT = /^GRANT INDEX MANAGEMENT ON DATABASE \* TO /;
+const CONSTRAINT_MANAGEMENT = /^GRANT CONSTRAINT MANAGEMENT ON DATABASE \* TO /;
+const ANY_SCHEMA_RIGHT = /^GRANT ((CREATE|DROP) (INDEX|CONSTRAINT)|INDEX MANAGEMENT|CONSTRAINT MANAGEMENT) /;
 const ACCOUNTS = ['grc_admin', 'grc_writer'] as const;
 
 let sup: Driver;
@@ -224,6 +246,27 @@ describe('grc_admin may create databases and nothing else (criterion 1, D57)', (
     expect(rows[0]?.['n']).toBe(0);
   });
 
+  it('holds CREATE DATABASE ON DBMS and no index or constraint right (D57, D208)', async () => {
+    const grants = await ownGrants('grc_admin');
+    expect(
+      grants.some((g) => /^GRANT CREATE DATABASE ON DBMS TO /.test(g)),
+      grants.join('\n'),
+    ).toBe(true);
+    expect(grants.filter((g) => ANY_SCHEMA_RIGHT.test(g))).toEqual([]);
+  });
+
+  it('cannot create an index in an org database (D208)', async () => {
+    await refused(
+      runOn(admin, orgDb, 'CREATE INDEX grc_probe_admin_idx IF NOT EXISTS FOR (n:GrcTestProbe) ON (n.owner)'),
+    );
+    const rows = await runOn(
+      sup,
+      orgDb,
+      "SHOW INDEXES YIELD name WHERE name = 'grc_probe_admin_idx' RETURN count(*) AS n",
+    );
+    expect(rows[0]?.['n']).toBe(0);
+  });
+
   it('cannot read graph data in an org database', async () => {
     let seen = 0;
     try {
@@ -243,6 +286,48 @@ describe('grc_writer reads and writes org databases, never neo4j or system (crit
     const rows = await runOn(writer, orgDb, 'MATCH (n:GrcTestProbe) RETURN n.owner AS owner ORDER BY owner');
     expect(rows.map((r) => r['owner'])).toEqual(['desktop', 'writer']);
   });
+
+  it('holds INDEX MANAGEMENT and CONSTRAINT MANAGEMENT on DATABASE * (D208)', async () => {
+    const grants = await ownGrants('grc_writer');
+    expect(
+      grants.filter((g) => INDEX_MANAGEMENT.test(g)),
+      grants.join('\n'),
+    ).toHaveLength(1);
+    expect(
+      grants.filter((g) => CONSTRAINT_MANAGEMENT.test(g)),
+      grants.join('\n'),
+    ).toHaveLength(1);
+  });
+
+  it(
+    'can create and drop an index and a uniqueness constraint in an org database (D208)',
+    async () => {
+      const idx = 'grc_probe_writer_idx';
+      const con = 'grc_probe_writer_unique';
+      try {
+        await runOn(writer, orgDb, `CREATE INDEX ${idx} IF NOT EXISTS FOR (n:GrcTestProbe) ON (n.owner)`);
+        await runOn(
+          writer,
+          orgDb,
+          `CREATE CONSTRAINT ${con} IF NOT EXISTS FOR (n:GrcTestProbeUnique) REQUIRE n.key IS UNIQUE`,
+        );
+        const idxRows = await runOn(sup, orgDb, 'SHOW INDEXES YIELD name WHERE name = $n RETURN count(*) AS c', {
+          n: idx,
+        });
+        const conRows = await runOn(sup, orgDb, 'SHOW CONSTRAINTS YIELD name WHERE name = $n RETURN count(*) AS c', {
+          n: con,
+        });
+        expect(idxRows[0]?.['c']).toBe(1);
+        expect(conRows[0]?.['c']).toBe(1);
+        await runOn(writer, orgDb, `DROP CONSTRAINT ${con} IF EXISTS`);
+        await runOn(writer, orgDb, `DROP INDEX ${idx} IF EXISTS`);
+      } finally {
+        await runOn(sup, orgDb, `DROP CONSTRAINT ${con} IF EXISTS`).catch(() => undefined);
+        await runOn(sup, orgDb, `DROP INDEX ${idx} IF EXISTS`).catch(() => undefined);
+      }
+    },
+    LONG,
+  );
 
   it('cannot write in the default neo4j database', async () => {
     await refused(runOn(writer, 'neo4j', 'CREATE (:GrcTestProbe {owner: "writer"})'));

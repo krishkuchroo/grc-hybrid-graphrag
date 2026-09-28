@@ -12,6 +12,8 @@
 //   TRAVERSE, READ, MATCH (plus SHOW INDEX/CONSTRAINT and plain EXECUTE FUNCTION/PROCEDURE).
 //   No write, no management, no DBMS rights (no IMPERSONATE, no boosted or admin procedures),
 //   nothing on `system` beyond ACCESS, and no built-in role that can write.
+//   D208 gives INDEX and CONSTRAINT MANAGEMENT to grc_writer only; no query account gets
+//   any index or constraint right beyond SHOW.
 // - Each account can log in with what the builder keeps in `.env`: `GraphService.readAs` works
 //   for all 28.
 //
@@ -174,6 +176,14 @@ describe.each(ACCOUNTS)('$name holds read-only privileges (criterion 1)', (accou
     const { grants } = await grantsOf(account.name);
     expect(grants.length).toBeGreaterThan(0);
     expect(grants.filter((g) => !READING.test(g))).toEqual([]);
+  });
+
+  it("holds no index or constraint management right (D208: those are the writer's only)", async () => {
+    const { roles, grants } = await grantsOf(account.name);
+    expect(roles.length, `${account.name} must exist with its own roles`).toBeGreaterThan(0);
+    expect(
+      grants.filter((g) => /^GRANT ((CREATE|DROP) (INDEX|CONSTRAINT)|INDEX MANAGEMENT|CONSTRAINT MANAGEMENT) /.test(g)),
+    ).toEqual([]);
   });
 
   it('holds nothing on DBMS except plain function and procedure execution', async () => {

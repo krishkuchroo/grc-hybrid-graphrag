@@ -12,6 +12,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { AuditService, createAuditPartition } from '../audit/audit.service.js';
 import type { Db } from '../db/client.js';
+import { ensureOrgSchema, type SchemaGraph } from '../graph/org-schema.js';
 import type { Tx } from '../db/org-context.js';
 import { member, organization, user } from './schema.js';
 
@@ -26,7 +27,7 @@ export interface ProvisionOrgDeps {
   db: Db;
   /** grc_migrator, the migration account: only for the audit partition. */
   migrator: Db;
-  graph: { createOrgDatabase(orgId: string): Promise<void> };
+  graph: SchemaGraph & { createOrgDatabase(orgId: string): Promise<void> };
   files: { ensureBucket(orgId: string): Promise<void> };
 }
 
@@ -126,8 +127,9 @@ export async function provisionOrg(input: ProvisionOrgInput, deps: ProvisionOrgD
     sourceId: `org.created:${orgId}`,
   });
 
-  // 4. The org's graph database and storage bucket (both "create if missing").
+  // 4. The org's graph database with its D73 schema, and its storage bucket (all "if missing").
   await deps.graph.createOrgDatabase(orgId);
+  await ensureOrgSchema(deps.graph, orgId);
   await deps.files.ensureBucket(orgId);
 
   return { orgId };
