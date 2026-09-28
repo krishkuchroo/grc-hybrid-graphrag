@@ -29,18 +29,25 @@ It's a portfolio project and research prototype. It **must look like a finished 
 9. **Workflow generation.** Build workflows that support the orchestration layer and build out the solid project layer. Decided 2026-09-27 (D109–D121). The milestone workflow is written, and gets a real test after setup. ← *current phase*
 
 ## Current state (saved 2026-09-28; resume from here)
-- **M0 is done, approved and tagged `m0`** (D193). All 16 M0 tasks and TEST-001…008 are merged and pushed. The report is `docs/checkpoints/m0.md`.
-- **Checkpoint results:** lint and typecheck clean; `pnpm test` 2,457/2,457 in each of 3 runs (none skipped, none flaky); e2e 4/4; insecure-defaults audit 0 findings; the esbuild advisory is accepted (SF-008, D192).
-- **Open security items:** SF-001…SF-007 in `SECURITY-FINDINGS.md`, left for the user (D184).
-- **D160 history rewrite: done.** GitHub `main` and `m0` = `95969b4`, with no attribution lines. Old task branches and worktrees still carry the pre-rewrite history, so never merge them as they are.
-- **Next: S1**, planned in another session (D195). Then the parallel groups (D181–D183). The user OKs the S1 task list and skills first (D111).
-- **Open:** Q39's context hand-off part.
+- **M0 is done, approved and tagged `m0`** (D193). The report is `docs/checkpoints/m0.md`. The D160 history rewrite is done: old task branches and worktrees carry the pre-rewrite history, so never merge them as they are.
+- **S1 build is running.** Workflow run `wf_b6a20329-94d`, started with `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: "s1", step: "build"}})`.
+  - 12 tasks, S1-001 to S1-012, planned and approved (D196–D205). S1-001 and S1-002 start first. No real-Gemma steps.
+  - If the run dies: start a **fresh** build run with the same args (done tasks are skipped by the board). A task stuck mid-stage restarts with `from: {"S1-00x": "build" | "review"}` and a note in `notes`.
+  - Watch it with the main session's event watcher (scratchpad `wait-event.mjs` on the run's `journal.jsonl`), the monitor at http://127.0.0.1:4800, or `/workflows`.
+- **Then:** the S1 checkpoint (suite 3×, browser tests, `/insecure-defaults:audit`, an easy-to-read report, the user's approval, tag `s1`). Then **S2 + S3 + S7 in one run** (`milestone: ["s2","s3","s7"]`), then S4, then **S5 + S6**, then S8 (D181–D183).
+- **Workflow for parallel slices (D183):** `milestone.js` takes a list of slices; 8 agents shared; hot-file locks from build to merge; one integrator at a time; migration numbers given at merge; one tag per slice.
+- **Open, not blocking:**
+  - May a Control Owner hand their control to another owner (D199 as written: yes)?
+  - For S4/S5: can AI-made links be removed through `POST /api/v1/links/remove`, or only through the Analyst's false-positive handling?
+  - The planner's S1 readings to confirm: the S1-Q6 split into S1-011/S1-012; names `POST /api/v1/links/remove`, `canLinkRecords`, `linkRemovedAudit`, `FIRST_NUMBER`, `MAP_*`; values stored lowercase with `_`.
+  - Q39's context hand-off part.
+- **Open security items:** SF-001…SF-007 in `SECURITY-FINDINGS.md`, left for the user (D184). S1-004 fixes SF-006.
 - **Environment:**
   - Neo4j DBMS running (127.0.0.1), all 28 query roles have their DENYs.
-  - The Docker stack is up (`grc-postgres`, `grc-seaweedfs`, `grc-dev-relay`, `grc-caddy`, `grc-api`, `grc-worker`). Start or recreate it from the main checkout only.
-  - Monitor at http://127.0.0.1:4800.
-  - Errors log: `logs/build-errors.md`.
-  - 21 unmerged worktrees are kept (`monitor-v2` and 20 old M0 workflow attempts, D190).
+  - Docker stack up (`grc-postgres`, `grc-seaweedfs`, `grc-dev-relay`, `grc-caddy`, `grc-api`, `grc-worker`). Start or recreate it from the main checkout only.
+  - `.env` has BETTER_AUTH_SECRET and DEMO_USER_PASSWORD (the values the demo users were seeded with). `pnpm test:env` checks the test environment (D180).
+  - Caddy's local root is trusted on the Mac; `127.0.0.1 grc.localhost` is in /etc/hosts.
+  - Errors log: `logs/build-errors.md`. Security findings: `SECURITY-FINDINGS.md` (D169).
 
 ## Non-functional requirements
 Consistent · Concurrent · Scalable · Durable · Follows good design principles.
