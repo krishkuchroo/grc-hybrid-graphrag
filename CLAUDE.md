@@ -30,7 +30,8 @@ It's a portfolio project and research prototype. It **must look like a finished 
 
 ## Current state (saved 2026-09-28; resume from here)
 - **M0 is done, approved and tagged `m0`** (D193). The report is `docs/checkpoints/m0.md`. The D160 history rewrite is done: old task branches and worktrees carry the pre-rewrite history, so never merge them as they are.
-- **S1 build is running.** Workflow run `wf_b6a20329-94d`, started with `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: "s1", step: "build"}})`.
+- **S1 build is paused, waiting on the user's answer to Q-S1-002.** Run `wf_b6a20329-94d` ended: S1-001 merged (60d422c); S1-002 blocked because no Neo4j service account may create indexes and constraints (code at ab3fb27 on `task/S1-002`); every other S1 task waits on it. Options: (a) grant INDEX and CONSTRAINT MANAGEMENT on `DATABASE *` to grc_writer in `setup-neo4j.ts` (recommended: the running API already holds both passwords), (b) grant them to grc_admin, (c) a schema-only account. After the answer: record it, change `setup-neo4j.ts` through S1-002 (the user reruns `pnpm setup:neo4j` if the auto-mode check refuses it), then start a fresh run with `args: {milestone: "s1", step: "build", from: {"S1-002": "build"}, notes: {"S1-002": "<the decision>"}}`.
+- **S1 build, how it runs:** `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: "s1", step: "build"}})`.
   - 12 tasks, S1-001 to S1-012, planned and approved (D196–D205). S1-001 and S1-002 start first. No real-Gemma steps.
   - If the run dies: start a **fresh** build run with the same args (done tasks are skipped by the board). A task stuck mid-stage restarts with `from: {"S1-00x": "build" | "review"}` and a note in `notes`.
   - Watch it with the main session's event watcher (scratchpad `wait-event.mjs` on the run's `journal.jsonl`), the monitor at http://127.0.0.1:4800, or `/workflows`.
