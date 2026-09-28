@@ -1,8 +1,8 @@
 export const meta = {
   name: 'milestone',
-  description: 'Run one GRC milestone: plan it, build its tasks through the agent chain, or tag it',
+  description: 'Run one GRC milestone, or a parallel group of slices: plan it, build its tasks through the agent chain, or tag it',
   whenToUse:
-    'Start with the milestone ID (m0, s1 … s8). Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81). Args: "m0", or { milestone: "m0", step: "build", notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "review" } }.',
+    'Start with the milestone ID (m0, s1 … s8), or a parallel group of slices (D181), e.g. ["s2", "s3", "s7"]. Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81, D182). Args: "s1", or { milestone: "s1" | ["s2", "s3", "s7"], step: "build", notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "review" } }.',
   phases: [
     { title: 'Plan', detail: 'the planner splits the milestone into tasks and briefs' },
     { title: 'Build', detail: 'test writer → builder → reviewers → integrator, per task' },
@@ -11,17 +11,19 @@ export const meta = {
   ],
 }
 
-// One workflow per milestone (D109, D116). The chain, the retry limits and
-// the stops come from D78, D86, D109–D118; CLAUDE.md ("Orchestration") has
-// the summary.
+// One workflow per milestone, or per parallel group of slices (D109, D116,
+// D181–D183). The chain, the retry limits and the stops come from D78, D86,
+// D109–D118; CLAUDE.md ("Orchestration") has the summary.
 
 const MILESTONES = ['m0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8']
 const BUILDERS = ['builder-platform', 'builder-backend', 'builder-frontend', 'builder-data']
-const MAX_AT_ONCE = 8 // agents at once (D79, D110)
+const MAX_AT_ONCE = 8 // agents at once, shared by every slice in the run (D79, D110, D183)
 const MAX_ROUNDS = 3 // test-writer rounds, and reviewer send-backs (D78, D86)
 
-const given = typeof args === 'string' ? { milestone: args } : args ?? {}
-const milestone = String(given.milestone ?? '').trim().toLowerCase()
+const given = typeof args === 'string' || Array.isArray(args) ? { milestone: args } : args ?? {}
+// One milestone, or a parallel group of slices built in one run (D181, D183).
+const group = (Array.isArray(given.milestone) ? given.milestone : [given.milestone]).map((m) => String(m ?? '').trim().toLowerCase())
+const milestone = group.join('+')
 const step = given.step ?? 'plan'
 // Optional { "<task ID>": "note" }: the note goes into that task's first
 // test-writer brief only, and a task blocked on the board runs again.
@@ -30,9 +32,23 @@ const resumeNotes = given.notes ?? {}
 // when its tests (and, for review, its code) are already on its branch. Its
 // note, if any, goes to the first agent of that stage.
 const startFrom = given.from ?? {}
-if (!MILESTONES.includes(milestone)) return { error: `the milestone must be one of ${MILESTONES.join(', ')}; got "${given.milestone}"` }
+const badMs = group.filter((m) => !MILESTONES.includes(m))
+if (!group.length || badMs.length || new Set(group).size !== group.length) {
+  return { error: `the milestone must be one of ${MILESTONES.join(', ')}, or a list of different ones; got ${JSON.stringify(given.milestone)}` }
+}
+if (group.length > 1 && group.includes('m0')) return { error: 'm0 runs on its own' }
 if (!['plan', 'build', 'tag'].includes(step)) return { error: `the step must be plan, build or tag; got "${step}"` }
 const MS = milestone.toUpperCase()
+const others = (m) => group.filter((x) => x !== m).map((x) => x.toUpperCase())
+
+// The conflict rules for slices built side by side (D183), given to the
+// planner and the integrator.
+const PARALLEL_RULES = group.length > 1
+  ? [
+      `This run builds ${group.map((m) => m.toUpperCase()).join(', ')} side by side (D181, D183).`,
+      'Each slice owns its own folders (for example S2 `frameworks/`, S3 `intake/`, S7 `admin/`). A task never changes another slice\'s folders; what it needs from another slice goes through a small shared interface, or the task waits on that slice\'s task (`dependsOn` may name tasks of the other slices in this run).',
+    ]
+  : []
 
 // The hand-off object from CLAUDE.md ("Hand-off"), plus any extra fields.
 const HANDOFF = {
@@ -58,6 +74,8 @@ const TASK = {
     owner: { type: 'string', enum: BUILDERS },
     dependsOn: { type: 'array', items: { type: 'string' } },
     boardStatus: { type: 'string' },
+    // Files many tasks touch; only one task at a time changes each (D183).
+    hotFiles: { type: 'array', items: { type: 'string' } },
     realGemma: {
       type: 'object',
       properties: { owner: { type: 'string', enum: BUILDERS }, run: { type: 'string' } },
@@ -89,7 +107,24 @@ function limiter(n) {
 }
 const slot = limiter(MAX_AT_ONCE)
 const boardLock = limiter(1) // one planner edits TASKS.md at a time
-const mainLock = limiter(1) // one integrator in the main checkout at a time
+const mainLock = limiter(1) // the merge queue: one integrator at a time (D183)
+
+// Hot-file locks (D183): a task holds its hot files from the builder until it
+// is merged or blocked. Taken in sorted order, so two tasks can't wait on
+// each other.
+const hotLocks = new Map()
+async function holdHotFiles(files) {
+  const releases = []
+  for (const f of [...new Set(files)].sort()) {
+    if (!hotLocks.has(f)) hotLocks.set(f, limiter(1))
+    releases.push(
+      await new Promise((got) => {
+        hotLocks.get(f)(() => new Promise((release) => got(release)))
+      }),
+    )
+  }
+  return () => releases.reverse().forEach((r) => r())
+}
 
 // Every brief starts with `Task: <ID>` (D91).
 const brief = (id, lines) => [`Task: ${id}`, ...lines.filter(Boolean)].join('\n')
@@ -124,37 +159,46 @@ function record(id, from, h, boardStatus) {
 // ---- plan -------------------------------------------------------------------
 if (step === 'plan') {
   phase('Plan')
-  const h = await handIn(
-    MS,
-    'planner',
-    [
-      `Plan milestone ${MS} (your "When you plan a milestone" steps).`,
-      'Each task has one builder as its owner; the test writer, the reviewers and the integrator take part in every task.',
-      'Also return every task in `tasks`: its ID, its owner, and the IDs of the tasks it waits on (`dependsOn`, [] if none).',
-      'If a pass criterion needs the real Gemma (D82, D113), add `realGemma` with the builder that runs it and the pnpm command. Leave it out otherwise.',
-      'Put each open question for the user in `questions`, in plain words.',
-    ],
-    { label: `plan:${MS}`, phase: 'Plan', schema: handoffSchema({ tasks: TASKS, questions: { type: 'array', items: { type: 'string' } } }, ['tasks']) },
-  )
+  // One planner per slice, one after another: they all edit TASKS.md, and
+  // each later one sees the tasks the earlier ones planned.
+  const plans = []
+  for (const m of group) {
+    const M = m.toUpperCase()
+    const h = await handIn(
+      M,
+      'planner',
+      [
+        `Plan milestone ${M} (your "When you plan a milestone" steps).`,
+        ...PARALLEL_RULES,
+        others(m).length ? `Plan only ${M}. The other slices of this run (${others(m).join(', ')}) are planned separately; read their tasks on the board if they are there already.` : '',
+        'Each task has one builder as its owner; the test writer, the reviewers and the integrator take part in every task.',
+        'Also return every task in `tasks`: its ID, its owner, and the IDs of the tasks it waits on (`dependsOn`, [] if none).',
+        "List each task's hot files in `hotFiles` and in its brief: files many tasks touch, such as the API app module, the generated API client, the web router and menu, the role table, the security matrix, and `package.json`/`pnpm-lock.yaml` when it adds a package. Only one task at a time may change each (D183).",
+        'Never fix a database migration number in a brief. Say "a new migration"; the integrator gives it the next number when it merges (D183).',
+        'If a pass criterion needs the real Gemma (D82, D113), add `realGemma` with the builder that runs it and the pnpm command. Leave it out otherwise.',
+        'Put each open question for the user in `questions`, in plain words.',
+      ],
+      { label: `plan:${M}`, phase: 'Plan', schema: handoffSchema({ tasks: TASKS, questions: { type: 'array', items: { type: 'string' } } }, ['tasks']) },
+    )
+    plans.push({ milestone: m, status: h.status, tasks: h.tasks ?? [], questions: h.questions ?? [], findings: h.findings })
+  }
   return {
     milestone,
     step,
-    status: h.status,
-    tasks: h.tasks ?? [],
-    questions: h.questions ?? [],
-    findings: h.findings,
-    next: 'Show the user the task list and the questions, and get their OK and the skills approval (D88, D111). Then run step "build".',
+    plans,
+    next: 'Show the user the task lists and the questions, and get their OK and the skills approval (D88, D111). Then run step "build".',
   }
 }
 
 // ---- tag --------------------------------------------------------------------
 if (step === 'tag') {
   phase('Tag')
+  // One tag per slice, even after a combined checkpoint (D182).
   const h = await handIn(
     MS,
     'integrator',
     [
-      `The user approved the ${MS} checkpoint. Tag \`main\` as \`${milestone}\` and push the tag with a normal push: \`git push origin ${milestone}\` (D81).`,
+      `The user approved the ${MS} checkpoint. Tag \`main\` as ${group.map((m) => `\`${m}\``).join(', ')} and push each tag with a normal push: ${group.map((m) => `\`git push origin ${m}\``).join(', ')} (D81, D182).`,
       'Merge nothing. Hand off with status "done", or "blocked" with what stopped you.',
     ],
     { label: `tag:${milestone}`, phase: 'Tag' },
@@ -168,14 +212,16 @@ const listing = await handIn(
   MS,
   'planner',
   [
-    `List milestone ${MS}'s tasks from TASKS.md. Change nothing.`,
-    'Return every task in `tasks` with its board status in `boardStatus`, its owner, `dependsOn`, and `realGemma` where its brief has a real-Gemma step.',
+    `List the tasks of ${group.map((m) => `milestone ${m.toUpperCase()}`).join(' and ')} from TASKS.md. Change nothing.`,
+    'Return every task in `tasks` with its board status in `boardStatus`, its owner, `dependsOn`, its `hotFiles` from its brief ([] if none), and `realGemma` where its brief has a real-Gemma step.',
     'Hand off with status "done".',
   ],
   { label: `list:${MS}`, schema: handoffSchema({ tasks: TASKS }, ['tasks']) },
 )
 const tasks = listing.tasks ?? []
 if (listing.status !== 'done' || !tasks.length) return { milestone, step, error: 'the planner could not list the tasks', findings: listing.findings }
+const outside = tasks.filter((t) => !group.some((m) => t.id.toUpperCase().startsWith(`${m.toUpperCase()}-`)))
+if (outside.length) return { milestone, step, error: `the listing has tasks outside ${MS}: ${outside.map((t) => t.id).join(', ')}` }
 
 // Check the list before anything runs: known owners, known dependencies, no loops.
 const byId = new Map(tasks.map((t) => [t.id, t]))
@@ -223,6 +269,8 @@ async function runTask(t) {
   const startAt = startFrom[id]
   let needTests = !startAt
   let skipBuild = startAt === 'review'
+  let releaseHot = null
+  try {
   while (true) {
     if (needTests) {
       rounds += 1
@@ -246,6 +294,8 @@ async function runTask(t) {
       needTests = false
     }
 
+    // From the builder until the merge, this task alone changes its hot files (D183).
+    if (!releaseHot) releaseHot = await holdHotFiles(t.hotFiles ?? [])
     if (skipBuild) {
       skipBuild = false
     } else {
@@ -295,16 +345,22 @@ async function runTask(t) {
     reviewNote = [code, security].filter((h) => h.status === 'sent-back').map((h) => h.findings).join('\n\n')
   }
 
-  // Merge, full suite, push; then the task's worktrees go and the branch stays (D118).
+  // The merge queue: merge, full suite, push; then the task's worktrees go
+  // and the branch stays (D118, D183).
   const merged = await mainLock(() =>
     handIn(id, 'integrator', [
       `Merge \`${branch}\` into \`main\` in the main checkout (your steps).`,
+      'If the branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only this task\'s own new migration (D183).',
+      group.length > 1 ? `Other slices (${group.map((m) => m.toUpperCase()).join(', ')}) are merging in this same queue, so \`main\` may have moved since the branch started: merge \`main\` in first and run the full suite on the result.` : '',
       worktrees.length ? `After a successful push, remove this task's worktrees that still exist: ${worktrees.map((w) => `\`git worktree remove --force ${w}\``).join(', ')}. Keep the branch (D118).` : '',
     ]),
   )
   if (merged.status !== 'done') return blocked('integrator', merged)
   record(id, 'integrator', merged, 'done')
   return { status: 'done', findings: merged.findings, worktrees }
+  } finally {
+    if (releaseHot) releaseHot()
+  }
 }
 
 // Tasks start as soon as the ones they wait on are done. A blocked task holds
