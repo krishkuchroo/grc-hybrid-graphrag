@@ -39,7 +39,7 @@ It's a portfolio project and research prototype. It **must look like a finished 
 - **Before M0-016:** the user trusts Caddy's cert, adds `127.0.0.1 grc.localhost` to hosts, and stops other projects' containers.
 - **At the M0 checkpoint (D147):** if it's clean, write the report, run `/insecure-defaults:audit`, tag `m0`, then plan and build S1. **Then D160:** rewrite history to strip old Claude lines, force-push once (no agents running; confirm with the user first).
 - **Open:** Q39's context hand-off part. Its "run the suite 3×" part is closed by D171 (see "Testing").
-- **Test approach (2026-09-28, D167, D168, D170–D180):** decided and committed (c893c30). Rules, hooks and agent instructions are updated; TEST-001…003 (`TASKS.md`) build the project side. Don't start S1's build until they're merged (D179).
+- **Test approach (2026-09-28, D167, D168, D170–D180):** decided and committed (c893c30). Rules, hooks and agent instructions are updated; TEST-001…003 built the project side and are **merged and pushed** (`b115b47`; full suite 2,450/2,450, e2e 4/4). Open for the user: the flaky 25 MB upload test (keep TEST-003's push + a TEST-004 fix?) and whether the audit viewer hides entries above the reader's clearance.
 - **Environment:**
   - Neo4j DBMS running (127.0.0.1), all 28 query roles have their DENYs.
   - The Docker stack is up (`grc-postgres`, `grc-seaweedfs`, `grc-dev-relay`); start it from the main checkout only.
