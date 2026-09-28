@@ -175,6 +175,12 @@ test('a fix to tests that already exist on main is allowed without builder code 
   put(repo, 'a.test.ts', 'steady\n');
   git(repo, 'commit', '-qam', 'F2: steady');
   assert.deepEqual(fixProblems({}, fix, repo), []);
+  git(repo, 'switch', '-q', 'main'); // main moves on after the branch left it
+  put(repo, 'memory.md', 'a later decision\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-qm', 'main moves on');
+  git(repo, 'switch', '-q', 'task/F2');
+  assert.deepEqual(fixProblems({}, fix, repo), []);
   put(repo, 'b.test.ts', 'a brand-new test\n'); // new tests must still go red first
   assert.match(fixProblems({}, fix, repo).join('\n'), /isn't a fix/);
 });

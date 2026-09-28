@@ -238,9 +238,12 @@ export function fixProblems(input, handoff, repo, git = runGit) {
   if (!code) {
     // A correction to tests that already exist on main, whose code is
     // merged (D185): every changed file is an existing test file.
+    // Compared from where the branch left main, so main's later commits
+    // aren't counted as the test writer's.
     const changed = new Set();
     try {
-      list(git(repo, ['diff', '--name-only', '-z', 'refs/heads/main'])).forEach((p) => changed.add(p));
+      const base = git(repo, ['merge-base', 'HEAD', 'refs/heads/main']).trim();
+      list(git(repo, ['diff', '--name-only', '-z', base])).forEach((p) => changed.add(p));
       list(git(repo, ['ls-files', '--others', '--exclude-standard', '-z'])).forEach((p) => changed.add(p));
     } catch {}
     const onMain = (p) => {
