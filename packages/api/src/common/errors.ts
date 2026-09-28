@@ -1,7 +1,8 @@
 // One error format, with a reference ID (D47):
 //   { "error": { "code": string, "message": string, "referenceId": string } }
 // Used for every error, including 404s, validation errors and unexpected errors. The reference ID
-// also goes into the pino log line, and only the log holds the detail of an unexpected error.
+// also goes into the pino log line. For an unexpected error the log holds only its type or code,
+// never its message or stack (SF-006, D163, D164).
 import { randomUUID } from 'node:crypto';
 import { HttpException, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -112,7 +113,20 @@ function describe(exception: unknown): Described {
   return { status: 500, code: 'internal_error', message: UNEXPECTED_MESSAGE };
 }
 
-/** The global filter: every error Nest sees leaves in the one format. */
+/** What an unexpected error's log line may hold: its type and code, never its message or stack,
+ * which can quote record or audit values (SF-006, D163, D164). */
+export function errorKind(err: unknown): { errorType?: string; errorCode?: string } {
+  if (typeof err !== 'object' || err === null) return { errorType: typeof err };
+  const e = err as { name?: unknown; code?: unknown; constructor?: { name?: unknown } };
+  const fields: { errorType?: string; errorCode?: string } = {};
+  const type = typeof e.name === 'string' && e.name !== 'Error' ? e.name : e.constructor?.name;
+  if (typeof type === 'string' && type !== '') fields.errorType = type;
+  if (typeof e.code === 'string' || typeof e.code === 'number') fields.errorCode = String(e.code);
+  return fields;
+}
+
+/** The global filter: every error Nest sees leaves in the one format. An unexpected error is
+ * logged with its type or code, the reference ID, the method and the URL only. */
 export class ErrorFilter implements ExceptionFilter {
   constructor(private readonly log: Logger) {}
 
@@ -124,7 +138,7 @@ export class ErrorFilter implements ExceptionFilter {
     const body = errorBody(code, message);
     const where = { referenceId: body.error.referenceId, status, method: request.method, url: request.url };
     if (status >= 500) {
-      this.log.error({ ...where, err: exception }, 'unexpected error');
+      this.log.error({ ...where, ...errorKind(exception) }, 'unexpected error');
     } else {
       this.log.warn({ ...where, code, detail: message }, 'request refused');
     }
