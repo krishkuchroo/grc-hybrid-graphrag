@@ -2,11 +2,9 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { changedSince } from './checkout.mjs';
 import { runGit } from './git.mjs';
 import { PROJECT_DIR, realish } from './paths.mjs';
 import { parseCommand } from './shell.mjs';
-import { readState } from './state.mjs';
 import { isTestPath } from './testfiles.mjs';
 
 export const LIMITS_MS = {
@@ -220,24 +218,31 @@ export function placeProblem(handoff, repo, git = runGit) {
 }
 
 // A test writer's fix (D167) is allowed only when the builder's code is
-// already on the branch and the test writer changed test files only.
+// already on the branch and, since the newest commit that touched code,
+// only test files changed (committed or not). It reads the branch itself,
+// not the agent's start snapshot, so a resumed test writer isn't blamed
+// for the builder's commit.
 export function fixProblems(input, handoff, repo, git = runGit) {
-  const problems = [];
-  const branch = `task/${handoff.taskId}`;
-  let onBranch = [];
+  const list = (text) => text.split('\0').filter(Boolean);
+  let commits = [];
   try {
-    onBranch = git(repo, ['diff', '--name-only', '-z', `refs/heads/main...refs/heads/${branch}`]).split('\0').filter(Boolean);
+    commits = git(repo, ['rev-list', 'refs/heads/main..HEAD']).split('\n').filter(Boolean);
   } catch {}
-  if (!onBranch.some((p) => !isTestPath(p))) {
-    problems.push(`there's no builder code on ${branch} yet, so this isn't a fix: new tests must fail first (D167). Drop \`fixReason\` and show them red`);
-  }
-  const start = readState(input.agentId, 'start');
-  if (start?.repo) {
-    let mine = [];
+  const code = commits.find((c) => {
     try {
-      mine = changedSince(start, input.agentId).filter((p) => !isTestPath(p));
-    } catch {}
-    if (mine.length) problems.push(`a fix may change test files only (D167); you also changed: ${mine.join(', ')}`);
+      return list(git(repo, ['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', c])).some((p) => !isTestPath(p));
+    } catch {
+      return false;
+    }
+  });
+  if (!code) {
+    return [`there's no builder code on task/${handoff.taskId} yet, so this isn't a fix: new tests must fail first (D167). Drop \`fixReason\` and show them red`];
   }
-  return problems;
+  const since = new Set();
+  try {
+    list(git(repo, ['diff', '--name-only', '-z', code])).forEach((p) => since.add(p));
+    list(git(repo, ['ls-files', '--others', '--exclude-standard', '-z'])).forEach((p) => since.add(p));
+  } catch {}
+  const mine = [...since].filter((p) => !isTestPath(p));
+  return mine.length ? [`a fix may change test files only (D167); since the builder's commit these changed too: ${mine.join(', ')}`] : [];
 }

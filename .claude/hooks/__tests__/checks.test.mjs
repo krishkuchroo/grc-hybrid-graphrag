@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { snapshot } from '../lib/checkout.mjs';
-import { writeState } from '../lib/state.mjs';
 import { BUILDER_RUNS, evaluate, failedCount, fixProblems, placeProblem, runCommand, skippedCount, testCommandArgv } from '../lib/checks.mjs';
 
 test("accepts only plain pnpm test runs as the task's test command", () => {
@@ -151,27 +149,21 @@ test('the checks run only in the task\'s own copy (D168)', () => {
   assert.equal(placeProblem(h, other, (repo, args) => (args[0] === 'rev-parse' ? 'abc123\n' : '')), null);
 });
 
-test('a fix needs builder code on the branch, and may change test files only (D167)', () => {
+test('a fix needs builder code on the branch, and only test files after it (D167)', () => {
   const repo = makeRepo(undefined, { 'a.ts': 'a\n' });
-  git(repo, 'branch', 'task/F1');
-  const wt = join(repo, '.tw');
-  git(repo, 'worktree', 'add', '-q', '--detach', wt, 'task/F1');
+  git(repo, 'switch', '-q', '-c', 'task/F1');
+  put(repo, 'a.test.ts', 'the first tests\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-qm', 'F1: tests');
   const fix = { taskId: 'F1', fixReason: 'x' };
-  const tw = { agentId: 'fix-tw-1' };
-  writeState(tw.agentId, 'start', { ...snapshot(wt), startedAt: new Date().toISOString() });
-  assert.match(fixProblems(tw, fix, wt).join('\n'), /no builder code on task\/F1/);
+  assert.match(fixProblems({}, fix, repo).join('\n'), /no builder code on task\/F1/);
 
-  // The builder's code lands on the branch; the test writer then fixes a test.
-  git(repo, 'switch', '-q', 'task/F1');
   put(repo, 'b.ts', 'the builder\n');
   git(repo, 'add', '-A');
   git(repo, 'commit', '-qm', 'F1: code');
-  git(repo, 'switch', '-q', 'main');
-  const tw2 = { agentId: 'fix-tw-2' };
-  git(wt, 'switch', '-q', '--detach', 'task/F1');
-  writeState(tw2.agentId, 'start', { ...snapshot(wt), startedAt: new Date().toISOString() });
-  put(wt, 'b.test.ts', 'the corrected test\n');
-  assert.deepEqual(fixProblems(tw2, fix, wt), []);
-  put(wt, 'b.ts', 'the test writer sneaks in code\n');
-  assert.match(fixProblems(tw2, fix, wt).join('\n'), /test files only[\s\S]*b\.ts/);
+  put(repo, 'a.test.ts', 'the corrected test\n');
+  git(repo, 'commit', '-qam', 'F1: fix');
+  assert.deepEqual(fixProblems({}, fix, repo), []); // the builder's commit isn't the test writer's (resumed agents too)
+  put(repo, 'b.ts', 'the test writer sneaks in code\n');
+  assert.match(fixProblems({}, fix, repo).join('\n'), /test files only[\s\S]*b\.ts/);
 });
