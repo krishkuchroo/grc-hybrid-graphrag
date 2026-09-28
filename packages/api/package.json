@@ -7,8 +7,8 @@
     "test": "sh -c '[ \"$1\" = -- ] && shift; exec vitest run \"$@\"' vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
-    "start:api": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./src/ts-resolve.ts src/main.api.ts",
-    "start:worker": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./src/ts-resolve.ts src/main.worker.ts"
+    "start:api": "tsx src/main.api.ts",
+    "start:worker": "tsx src/main.worker.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",
@@ -26,6 +26,7 @@
     "pino": "^10.3.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "tsx": "4.23.15",
     "zod": "^4.6.5"
   },
   "devDependencies": {
