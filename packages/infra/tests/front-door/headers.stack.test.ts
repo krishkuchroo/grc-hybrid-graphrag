@@ -94,11 +94,17 @@ describe('criterion 4: the D64 security headers on every response', () => {
   });
 
   it("the door's own 413 for an upload over 25 MB", async () => {
+    // The door refuses by the declared size and closes. With the body already streaming, our write
+    // error (EPIPE) could beat the 413 and lose the answer (the race TEST-006 fixed in
+    // body-size.stack.test.ts, D171). So declare the size and wait to be asked for the body
+    // (Expect: 100-continue): the door answers before any of it is sent. A door that let the
+    // upload through would ask for the body, get all of it, and not answer with its own 413.
     const res = await https('/api/v1/intake/uploads', {
       method: 'POST',
       headers: { 'content-type': 'application/octet-stream' },
       bodyBytes: UPLOAD_CAP_BYTES + 1,
       timeoutMs: 60_000,
+      expectContinue: true,
     });
     expect(res.status).toBe(413);
     expectD64Headers(res, 'POST 25 MB + 1 byte');
