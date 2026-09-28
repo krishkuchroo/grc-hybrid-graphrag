@@ -687,6 +687,11 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The planner marks **hot files** that many tasks touch (the app module list, the generated API client, the web router and menu, the role table, the security matrix); only one task at a time may change each.
   - Database migrations get their numbers at merge time from the integrator, never fixed in the plan.
 - **D184 The open M0 security items are left for the user** (2026-09-28, Q-D: "i will do it later when i get the time"): SF-001 (MFA guessing speed), SF-002 (shared rate-limit counter behind Caddy) and SF-003 (API key change and audit entry in separate transactions) stay Open in `SECURITY-FINDINGS.md` and are not scheduled into S1. The checkpoint reports keep listing them.
+- **D185 The flaky 25 MB upload test gets its own fix task** (2026-09-28, answer a): TEST-003's push stands (its code was green; the one failure was `front-door/body-size.stack.test.ts`, which TEST-003 didn't touch). **TEST-004:** a test writer makes that test reliable (D171). It likely failed when another agent's run used the shared stack at the same moment.
+  - To make this possible, a D167 **fix** is also allowed when every changed test file already exists on `main` (a correction to existing tests whose code is already merged), not only when the builder's code is on the task branch.
+- **D186 The audit viewer hides what the reader isn't cleared for** (2026-09-28, answer a; raised by TEST-003's security review): an audit entry about a record above the reader's clearance still shows that it exists (who, when, which record number, the action), but not its before/after contents. The chain stays checkable, and labels hold everywhere (D51, D56).
+  - The security matrix's `audit_trail` row gets `labels: true`. **TEST-005:** a test pins the label value of every non-record row (uploads, review_queue, chat and audit_trail true; admin false), which TEST-003's security review found unpinned.
+  - The viewer itself is built in S7 (D76), and S7's briefs carry this rule.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions

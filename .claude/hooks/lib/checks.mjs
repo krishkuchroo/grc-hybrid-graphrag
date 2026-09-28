@@ -217,7 +217,7 @@ export function placeProblem(handoff, repo, git = runGit) {
   return null;
 }
 
-// A test writer's fix (D167) is allowed only when the builder's code is
+// A test writer's fix (D167) is allowed when the builder's code is
 // already on the branch and, since the newest commit that touched code,
 // only test files changed (committed or not). It reads the branch itself,
 // not the agent's start snapshot, so a resumed test writer isn't blamed
@@ -236,7 +236,25 @@ export function fixProblems(input, handoff, repo, git = runGit) {
     }
   });
   if (!code) {
-    return [`there's no builder code on task/${handoff.taskId} yet, so this isn't a fix: new tests must fail first (D167). Drop \`fixReason\` and show them red`];
+    // A correction to tests that already exist on main, whose code is
+    // merged (D185): every changed file is an existing test file.
+    const changed = new Set();
+    try {
+      list(git(repo, ['diff', '--name-only', '-z', 'refs/heads/main'])).forEach((p) => changed.add(p));
+      list(git(repo, ['ls-files', '--others', '--exclude-standard', '-z'])).forEach((p) => changed.add(p));
+    } catch {}
+    const onMain = (p) => {
+      try {
+        git(repo, ['cat-file', '-e', `refs/heads/main:${p}`]);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const existing = changed.size > 0 && [...changed].every((p) => isTestPath(p) && onMain(p));
+    return existing
+      ? []
+      : [`there's no builder code on task/${handoff.taskId}, and not every changed file is a test that already exists on main, so this isn't a fix: new tests must fail first (D167, D185). Drop \`fixReason\` and show them red`];
   }
   const since = new Set();
   try {

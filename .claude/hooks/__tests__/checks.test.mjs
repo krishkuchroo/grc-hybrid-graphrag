@@ -167,3 +167,14 @@ test('a fix needs builder code on the branch, and only test files after it (D167
   put(repo, 'b.ts', 'the test writer sneaks in code\n');
   assert.match(fixProblems({}, fix, repo).join('\n'), /test files only[\s\S]*b\.ts/);
 });
+
+test('a fix to tests that already exist on main is allowed without builder code on the branch (D185)', () => {
+  const repo = makeRepo(undefined, { 'a.ts': 'a\n', 'a.test.ts': 'flaky\n' });
+  git(repo, 'switch', '-q', '-c', 'task/F2');
+  const fix = { taskId: 'F2', fixReason: 'flaky' };
+  put(repo, 'a.test.ts', 'steady\n');
+  git(repo, 'commit', '-qam', 'F2: steady');
+  assert.deepEqual(fixProblems({}, fix, repo), []);
+  put(repo, 'b.test.ts', 'a brand-new test\n'); // new tests must still go red first
+  assert.match(fixProblems({}, fix, repo).join('\n'), /isn't a fix/);
+});
