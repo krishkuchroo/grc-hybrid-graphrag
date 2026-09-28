@@ -11,7 +11,7 @@
 // grc-caddy cat …` for the root certificate and `docker logs grc-api` to see which requests
 // reached the API. They never start, stop or change a container, and touch only grc-* ones.
 import { spawnSync } from 'node:child_process';
-import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
+import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { connect as tlsConnect, type DetailedPeerCertificate } from 'node:tls';
 import { dirname, resolve } from 'node:path';
@@ -62,6 +62,9 @@ export interface Reply {
   rawHeaders: string[];
   body: Buffer;
   text: string;
+  /** Set only with `cutShortOk`: the write error that ended the exchange while the body was still
+   * being sent. When it came before the answer, status is 0 and there is no answer. */
+  cutShort?: string;
 }
 
 export interface SendOptions {
@@ -72,38 +75,70 @@ export interface SendOptions {
   /** Or a body of this many bytes, streamed in 1 MB pieces with a Content-Length header. */
   bodyBytes?: number;
   timeoutMs?: number;
+  /**
+   * For a big body the far side may stop reading. The API answers a request it won't read (today
+   * its 404, later its own 1 MB cap) and the connection is closed while the body is still being
+   * sent. The answer and our write error (EPIPE or ECONNRESET) then arrive about 1 ms apart, and if
+   * this process is slow to read its socket (a busy full-suite run), the write error wins and the
+   * answer is lost. With this set, that write error ends the exchange (see `Reply.cutShort`)
+   * instead of failing it. Use it only where the answer isn't what the test checks.
+   */
+  cutShortOk?: boolean;
 }
+
+const WRITE_CUT = new Set(['EPIPE', 'ECONNRESET']);
 
 function collect(req: ReturnType<typeof httpsRequest>, opts: SendOptions, what: string): Promise<Reply> {
   return new Promise((resolvePromise, reject) => {
     let answered = false;
+    let settled = false;
+    let res: IncomingMessage | undefined;
+    const chunks: Buffer[] = [];
+    let cutShort: string | undefined;
+    const settle = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const body = Buffer.concat(chunks);
+      resolvePromise({
+        status: res?.statusCode ?? 0,
+        headers: res?.headers ?? {},
+        rawHeaders: res?.rawHeaders ?? [],
+        body,
+        text: body.toString('utf8'),
+        ...(cutShort ? { cutShort } : {}),
+      });
+    };
     const timer = setTimeout(() => {
       req.destroy(new Error(`no reply from ${what} within ${opts.timeoutMs ?? 30_000} ms`));
     }, opts.timeoutMs ?? 30_000);
-    req.on('response', (res) => {
+    req.on('response', (r) => {
       answered = true;
-      const chunks: Buffer[] = [];
-      res.on('data', (c: Buffer) => chunks.push(c));
-      res.on('end', () => {
-        clearTimeout(timer);
-        const body = Buffer.concat(chunks);
-        resolvePromise({
-          status: res.statusCode ?? 0,
-          headers: res.headers,
-          rawHeaders: res.rawHeaders,
-          body,
-          text: body.toString('utf8'),
-        });
-      });
-      res.on('error', (e) => {
+      res = r;
+      r.on('data', (c: Buffer) => chunks.push(c));
+      r.on('end', settle);
+      r.on('error', (e: NodeJS.ErrnoException) => {
+        if (opts.cutShortOk && e.code && WRITE_CUT.has(e.code)) {
+          cutShort = e.code;
+          return;
+        }
         clearTimeout(timer);
         reject(e);
       });
     });
+    if (opts.cutShortOk) {
+      // The exchange is over once the connection has closed, whatever arrived by then.
+      req.on('close', () => {
+        if (cutShort) settle();
+      });
+    }
     req.on('error', (e: NodeJS.ErrnoException) => {
       // A server that refuses a big body may answer and close before the whole body is sent.
       // Once the answer has arrived, a write error on the rest of the body is expected.
-      if (answered && (e.code === 'EPIPE' || e.code === 'ECONNRESET')) return;
+      if (e.code && WRITE_CUT.has(e.code) && (answered || opts.cutShortOk)) {
+        if (opts.cutShortOk) cutShort = e.code;
+        return;
+      }
       clearTimeout(timer);
       reject(
         new Error(

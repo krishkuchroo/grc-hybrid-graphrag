@@ -14,12 +14,13 @@ import { API_CAP_BYTES, MB, UPLOAD_CAP_BYTES, apiLogged, apiLogsSince, errorBody
 
 const UPLOAD = '/api/v1/intake/uploads';
 
-function upload(marker: string, bytes: number) {
+function upload(marker: string, bytes: number, cutShortOk = false) {
   return https(`${UPLOAD}?probe=${marker}`, {
     method: 'POST',
     headers: { 'content-type': 'application/octet-stream' },
     bodyBytes: bytes,
     timeoutMs: 90_000,
+    cutShortOk,
   });
 }
 
@@ -34,7 +35,10 @@ describe('criterion 5: 25 MB at the door, 1 MB at the API', () => {
   it('an upload of exactly 25 MB passes the door and reaches the API', async () => {
     const marker = randomUUID();
     const since = new Date(Date.now() - 1_000);
-    await upload(marker, UPLOAD_CAP_BYTES);
+    // The API answers without reading the 25 MB (no upload route yet, then its own 1 MB cap) and the
+    // connection is closed mid-body, so our write error can beat its answer by ~1 ms (TEST-004,
+    // D171). What this test checks is the API log, so that race must not fail it (cutShortOk).
+    await upload(marker, UPLOAD_CAP_BYTES, true);
     expect(await apiLogged(marker, since)).toBe(true);
   });
 
