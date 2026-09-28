@@ -51,6 +51,7 @@ import {
   type Org,
   type SignedIn,
 } from '../auth/helpers.js';
+import { setting } from '../db/helpers.js';
 import { dropDatabases, runOn, superDriver } from '../graph/helpers.js';
 import {
   LogCapture,
@@ -83,6 +84,10 @@ export interface LinksEnv {
 export async function setUpLinks(): Promise<LinksEnv> {
   const db = await platformDb();
   const logs = new LogCapture();
+  // The list and map reads run through GraphService.readAs, whose query accounts' passwords derive
+  // from NEO4J_QUERY_SECRET (M0-005). prepareEnv copies only the admin and writer passwords, so the
+  // in-process app gets the query secret here, from the environment or the nearest `.env`.
+  process.env.NEO4J_QUERY_SECRET ||= setting('NEO4J_QUERY_SECRET');
   let app: ApiApp;
   try {
     app = await startApi({ logStream: logs });
