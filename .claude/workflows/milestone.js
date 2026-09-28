@@ -263,6 +263,7 @@ async function runTask(t) {
   // Test writer, then builder. A test the builder shows is wrong goes back to
   // the test writer (D89), up to MAX_ROUNDS times.
   let testNote = ''
+  let codeNote = ''
   let reviewNote = ''
   let rounds = 0
   let sendBacks = 0
@@ -283,15 +284,23 @@ async function runTask(t) {
             rounds === 1 && resumeNotes[id],
             testNote && `The builder says a test is wrong. Fix it if they're right, and say why in your findings either way:\n${testNote}`,
             testNote && "If the builder's code is already on the branch, your corrected tests may pass at once: then hand in with `fixReason` saying why (D167). Never fake a red.",
+            testNote && "If your fixed tests are right but a finish check fails only in the builder's code, commit your tests, hand off as \"blocked\", set `codeProblem` to true, and say what the builder must change. It goes back to the builder.",
             `Commit your tests with a message starting "${id}:". Then run \`git switch --detach\`, so the builder can take the branch.`,
             'Put the output of `pwd` in `worktree`.',
           ],
-          { schema: handoffSchema(WORKTREE), isolation: 'worktree' },
+          { schema: handoffSchema({ ...WORKTREE, codeProblem: { type: 'boolean' } }), isolation: 'worktree' },
         ),
       )
-      if (tw.status !== 'done') return blocked('test-writer', tw)
-      record(id, 'test-writer', tw, 'in progress')
       needTests = false
+      // A check that fails only in the builder's code goes back to the builder.
+      if (tw.status === 'blocked' && tw.codeProblem && testNote && rounds < MAX_ROUNDS) {
+        record(id, 'test-writer', tw, 'in progress')
+        codeNote = tw.findings
+        skipBuild = false
+      } else {
+        if (tw.status !== 'done') return blocked('test-writer', tw)
+        record(id, 'test-writer', tw, 'in progress')
+      }
     }
 
     // From the builder until the merge, this task alone changes its hot files (D183).
@@ -307,6 +316,7 @@ async function runTask(t) {
           `You work in a fresh worktree. Start with \`git switch ${branch}\`; the tests are committed there (D112).`,
           startAt === 'build' && rounds === 0 && !reviewNote && resumeNotes[id],
           reviewNote && `The reviewers sent it back. Fix these:\n${reviewNote}`,
+          codeNote && `The test writer fixed the tests, but a check fails in your code. Fix it:\n${codeNote}`,
           `Commit your code with a message starting "${id}:". Then run \`git switch --detach\`, so the reviewers can take the branch.`,
           'If a test looks wrong, hand off as "blocked", set `testProblem` to true, and say why in your findings. It goes back to the test writer.',
           'Put the output of `pwd` in `worktree`.',
@@ -314,6 +324,7 @@ async function runTask(t) {
         { schema: handoffSchema({ ...WORKTREE, testProblem: { type: 'boolean' } }), isolation: 'worktree' },
       ),
     )
+    codeNote = ''
     if (b.status === 'blocked' && b.testProblem && rounds < MAX_ROUNDS) {
       record(id, t.owner, b, 'in progress')
       testNote = b.findings
