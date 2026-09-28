@@ -123,3 +123,25 @@ test('after a restart, runs are read back and queued ones wait again', () => {
   again.reconcile();
   assert.equal(again.list().find((r) => r.sessionId === q.sessionId).status, 'queued');
 });
+
+test('a run that cannot start fails alone, and the next one still starts', () => {
+  const { spawnFn, calls } = fakeSpawn();
+  let first = true;
+  const flaky = (...a) => {
+    if (first) {
+      first = false;
+      throw Object.assign(new Error('too many open files'), { code: 'EMFILE' });
+    }
+    return spawnFn(...a);
+  };
+  const l = createLauncher({ spawnFn: flaky, maxConcurrent: 1, execFn: () => '' });
+  const a = l.launch({ agent: 'planner', prompt: 'one' });
+  const b = l.launch({ agent: 'planner', prompt: 'two' });
+  const byId = (id) => l.list().find((r) => r.sessionId === id);
+  assert.equal(byId(a.sessionId).status, 'failed');
+  assert.match(byId(a.sessionId).result.text, /too many open files/);
+  assert.equal(byId(b.sessionId).status, 'running');
+  assert.equal(calls.length, 1);
+  // An error while it ends is logged, not thrown into the event loop.
+  calls[0].child.emit('exit', 0);
+});

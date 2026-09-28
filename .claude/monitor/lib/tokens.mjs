@@ -6,13 +6,12 @@
 import { readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { LOGS_DIR, follow, readJson, writeJson } from './core.mjs';
-import { projectFolders, taskIdFromTranscript } from './transcripts.mjs';
+import { lookUpTaskId, projectFolders } from './transcripts.mjs';
 
 const CACHE_FILE = () => join(LOGS_DIR, 'state', 'monitor-tokens.json');
 const CACHE_VERSION = 1;
 const RECENT_IDS = 32;
 const BURN_WINDOW_MS = 5 * 60_000;
-const MAX_TASK_TRIES = 20;
 
 const zero = () => ({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0 });
 const add = (a, b, sign = 1) => {
@@ -121,11 +120,7 @@ export function createTokenStore({ folders = () => projectFolders(), launchedTyp
           track(rec);
           records.set(file, rec);
         }
-        if (rec.kind !== 'main' && !rec.taskId && rec.taskTries < MAX_TASK_TRIES) {
-          const found = taskIdFromTranscript(file);
-          rec.taskTries = found === undefined ? rec.taskTries + 1 : MAX_TASK_TRIES;
-          rec.taskId = found ?? null;
-        }
+        if (rec.kind !== 'main') ({ taskId: rec.taskId, tries: rec.taskTries } = lookUpTaskId({ taskId: rec.taskId, tries: rec.taskTries }, [file]));
         if (rec.kind === 'launched') rec.agentType = launchedType(rec.sessionId) ?? rec.agentType;
         if (rec.read()) changed = true;
       }

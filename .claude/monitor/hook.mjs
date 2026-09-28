@@ -21,9 +21,8 @@ import {
   readState,
   writeState,
 } from './lib/core.mjs';
-import { HAND_IN_TOOLS, describeTool, taskIdFromTranscript } from './lib/transcripts.mjs';
+import { HAND_IN_TOOLS, describeTool, lookUpTaskId } from './lib/transcripts.mjs';
 
-const MAX_TASK_TRIES = 20;
 // additionalContext is capped at 10,000 characters (hooks docs).
 const MAX_CONTEXT = 9000;
 
@@ -67,18 +66,12 @@ function transcriptCandidates(input) {
   return out;
 }
 
-// Cached in state "task"; looked up at most MAX_TASK_TRIES times.
+// Cached in state "task".
 function taskIdFor(input) {
-  const state = readState(input.agentId, 'task') ?? { taskId: null, tries: 0 };
-  if (state.taskId || state.tries >= MAX_TASK_TRIES) return state.taskId;
-  let found;
-  for (const file of transcriptCandidates(input)) {
-    found = taskIdFromTranscript(file);
-    if (found !== undefined) break;
-  }
-  // A brief without "Task:" is final; a transcript not written yet is retried.
-  writeState(input.agentId, 'task', { taskId: found ?? null, tries: found === undefined ? state.tries + 1 : MAX_TASK_TRIES });
-  return found ?? null;
+  const state = readState(input.agentId, 'task');
+  const next = lookUpTaskId(state, transcriptCandidates(input));
+  if (next.tries !== state?.tries) writeState(input.agentId, 'task', next);
+  return next.taskId;
 }
 
 const clock = (ts) => {

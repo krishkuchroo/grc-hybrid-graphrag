@@ -422,7 +422,6 @@ const KEY = document.querySelector('meta[name="monitor-key"]').content;
 const $ = (id) => document.getElementById(id);
 let state = null;
 let tokenData = null;
-let healthData = null;
 let settings = { agentColors: {}, guardRails: {}, maxConcurrent: 2 };
 
 function h(tag, props, ...children) {
@@ -1113,7 +1112,7 @@ async function connect() {
   source.addEventListener('open', () => { retry = 1000; setConn('Live', 'ok'); });
   source.addEventListener('state', (event) => applyState(JSON.parse(event.data)));
   source.addEventListener('tokens', (event) => renderIfChanged('tokens', JSON.parse(event.data), renderTokens));
-  source.addEventListener('health', (event) => { healthData = JSON.parse(event.data); renderHealth(healthData); });
+  source.addEventListener('health', (event) => renderHealth(JSON.parse(event.data)));
   // The ticket works once, so reconnecting needs a new one.
   source.addEventListener('error', () => {
     source.close();

@@ -62,6 +62,22 @@ export function taskIdFromTranscript(file) {
   return undefined;
 }
 
+const MAX_TASK_TRIES = 20;
+
+// One more try at a task ID, given the last result ({ taskId, tries }). A brief
+// without "Task:" is final; a transcript not written yet is retried, at most
+// MAX_TASK_TRIES times.
+export function lookUpTaskId(prev, files) {
+  const { taskId = null, tries = 0 } = prev ?? {};
+  if (taskId || tries >= MAX_TASK_TRIES) return { taskId, tries };
+  let found;
+  for (const file of files) {
+    found = taskIdFromTranscript(file);
+    if (found !== undefined) break;
+  }
+  return { taskId: found ?? null, tries: found === undefined ? tries + 1 : MAX_TASK_TRIES };
+}
+
 function shownPath(p, cwd) {
   if (!p) return '';
   const s = String(p);

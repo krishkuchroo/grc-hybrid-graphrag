@@ -271,7 +271,13 @@ function broadcast(event, data, force = false) {
   const body = JSON.stringify(data);
   if (!force && lastSent.get(event) === body) return;
   lastSent.set(event, body);
-  for (const res of clients) res.write(`event: ${event}\ndata: ${body}\n\n`);
+  for (const res of clients) {
+    try {
+      res.write(`event: ${event}\ndata: ${body}\n\n`);
+    } catch {
+      clients.delete(res); // a page that went away
+    }
+  }
 }
 
 function pushState() {
@@ -312,16 +318,31 @@ function refreshTokensAndPush() {
 }
 
 setInterval(() => {
-  launcher.poll();
+  try {
+    launcher.poll();
+  } catch (error) {
+    console.error(error);
+  }
   if (clients.size) pushState();
 }, 5000).unref();
 setInterval(() => {
   if (clients.size) refreshHealth().catch((error) => console.error(error));
 }, Math.max(5, config.health.intervalSeconds) * 1000).unref();
 setInterval(() => {
-  if (clients.size) refreshTokensAndPush();
+  if (!clients.size) return;
+  try {
+    refreshTokensAndPush();
+  } catch (error) {
+    console.error(error);
+  }
 }, 10_000).unref();
-setInterval(() => tokens.save(), 60_000).unref();
+setInterval(() => {
+  try {
+    tokens.save();
+  } catch (error) {
+    console.error(error);
+  }
+}, 60_000).unref();
 
 // ------------------------------------------------------------------- the API
 
@@ -515,10 +536,12 @@ function openStream(req, res, url) {
   res.write('retry: 3000\n\n');
   clients.add(res);
   const ping = setInterval(() => res.write(': ping\n\n'), 20_000);
-  req.on('close', () => {
+  const drop = () => {
     clearInterval(ping);
     clients.delete(res);
-  });
+  };
+  req.on('close', drop);
+  res.on('error', drop);
   // The first page after a quiet spell brings everything up to date.
   if (!tokenSummary) refreshTokens(readBoard(config).tasks);
   res.write(`event: state\ndata: ${JSON.stringify(buildState())}\n\n`);

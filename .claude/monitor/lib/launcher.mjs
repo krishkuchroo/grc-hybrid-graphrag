@@ -91,6 +91,14 @@ export function createLauncher({ maxConcurrent = 2, agentsDir = '.claude/agents'
   const queue = [];
   const children = new Map();
 
+  // Event handlers and timers call in here; an error must not end the server.
+  const safely = (fn) => {
+    try {
+      fn();
+    } catch (error) {
+      console.error(error);
+    }
+  };
   const save = (run) => writeJson(join(runDir(run.sessionId), 'run.json'), run);
   const running = () => [...runs.values()].filter((r) => r.status === 'running').length;
 
@@ -110,9 +118,10 @@ export function createLauncher({ maxConcurrent = 2, agentsDir = '.claude/agents'
     const env = { ...process.env };
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
-    const fds = [openSync(promptFile, 'r'), openSync(join(dir, `out-${round}.jsonl`), 'a'), openSync(join(dir, `err-${round}.log`), 'a')];
+    const fds = [];
     let child;
     try {
+      fds.push(openSync(promptFile, 'r'), openSync(join(dir, `out-${round}.jsonl`), 'a'), openSync(join(dir, `err-${round}.log`), 'a'));
       child = spawnFn('claude', args, { cwd, env, detached: true, stdio: fds });
     } finally {
       for (const fd of fds) closeSync(fd);
@@ -123,14 +132,21 @@ export function createLauncher({ maxConcurrent = 2, agentsDir = '.claude/agents'
     for (const id of run.pendingNoteIds ?? []) logNote({ id, agent_id: run.agentId, event: 'delivered' });
     run.pendingNoteIds = undefined;
     save(run);
-    child.on('error', (error) => finish(run, { ok: false, text: `It couldn't start: ${error.message}` }));
-    child.on('exit', () => finish(run));
+    child.on('error', (error) => safely(() => finish(run, { ok: false, text: `It couldn't start: ${error.message}` })));
+    child.on('exit', () => safely(() => finish(run)));
   }
 
   function pump() {
     while (queue.length && running() < maxConcurrent) {
       const run = queue.shift();
-      if (run.status === 'queued') start(run);
+      if (run.status !== 'queued') continue;
+      try {
+        start(run);
+      } catch (error) {
+        // A run that can't start (disk full, too many open files) fails alone.
+        Object.assign(run, { status: 'failed', endedAt: now(), result: { ok: false, text: `It couldn't start: ${error.message}` } });
+        safely(() => save(run));
+      }
     }
   }
 
@@ -243,7 +259,7 @@ export function createLauncher({ maxConcurrent = 2, agentsDir = '.claude/agents'
   // Runs started before a restart have no exit event: check they're alive.
   function poll() {
     for (const run of runs.values()) {
-      if (run.status === 'running' && !children.has(run.sessionId) && !alive(run.pid, run.sessionId, execFn)) finish(run);
+      if (run.status === 'running' && !children.has(run.sessionId) && !alive(run.pid, run.sessionId, execFn)) safely(() => finish(run));
     }
     pump();
   }
