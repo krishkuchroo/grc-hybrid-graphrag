@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "sh -c '[ \"$1\" = -- ] && shift; exec vitest run \"$@\"' vitest",
+    "test": "sh -c '[ \"$1\" = -- ] && shift; node ../infra/scripts/has-tests.ts unit db stack \"$@\"; s=$?; [ $s -eq 3 ] && [ $# -eq 0 ] && exit 0; [ $s -eq 3 ] && { echo \"no test file matches: $*\" >&2; exit 1; }; [ $s -eq 0 ] || exit 1; pnpm run test:unit -- \"$@\" && pnpm run test:db -- \"$@\" && pnpm run test:stack -- \"$@\"' test",
+    "test:unit": "sh -c '[ \"$1\" = -- ] && shift; exec vitest run --project unit \"$@\"' vitest",
+    "test:db": "sh -c '[ \"$1\" = -- ] && shift; node ../infra/scripts/has-tests.ts db \"$@\" || exit $(( $? == 3 ? 0 : 1 )); pnpm -w test:env && exec vitest run --project db \"$@\"' vitest",
+    "test:stack": "sh -c '[ \"$1\" = -- ] && shift; node ../infra/scripts/has-tests.ts stack \"$@\" || exit $(( $? == 3 ? 0 : 1 )); pnpm -w test:env && exec vitest run --project stack \"$@\"' vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "start:api": "tsx src/main.api.ts",

@@ -9,6 +9,8 @@ import { defineConfig } from '@playwright/test';
 setDefaultCACertificates([...getCACertificates('bundled'), ...getCACertificates('system')]);
 export default defineConfig({
   testDir: './e2e',
+  // Browser tests only (D177): not the Vitest .unit/.db/.stack files, nor .spec or .test files.
+  testMatch: /\.e2e\.ts$/,
   fullyParallel: false,
   workers: 1,
   retries: 0,

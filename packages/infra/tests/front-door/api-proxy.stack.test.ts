@@ -29,7 +29,7 @@ describe('criterion 3: /api/v1 goes to the API', () => {
     expect(errorBody(res)?.code).toBeDefined();
   });
 
-  // The OpenAPI document sits behind sign-in and MFA (M0-010, packages/api/tests/auth/mfa.test.ts),
+  // The OpenAPI document sits behind sign-in and MFA (M0-010, packages/api/tests/auth/mfa.db.test.ts),
   // so through the door with no session it must get the API's own 401, not a Caddy answer or a 404.
   it('GET /api/v1/openapi.json without a session reaches the API and gets its 401 in the error format', async () => {
     const since = new Date(Date.now() - 1_000);

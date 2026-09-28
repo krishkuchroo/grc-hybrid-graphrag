@@ -3,7 +3,7 @@
 // 4. Request number 301 within one minute from one person (session user, else client IP) gets 429
 //    with Retry-After and "try again in N s".
 // Here nobody is signed in, so the person is the client IP. The routes answer 401 without a session
-// (M0-010), which still counts. The per-user key is tested in tests/auth/rate-limit.test.ts.
+// (M0-010), which still counts. The per-user key is tested in tests/auth/rate-limit.db.test.ts.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   PREFIX,
