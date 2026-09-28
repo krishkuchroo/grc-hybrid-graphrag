@@ -84,6 +84,15 @@ export interface SendOptions {
    * instead of failing it. Use it only where the answer isn't what the test checks.
    */
   cutShortOk?: boolean;
+  /**
+   * Send `Expect: 100-continue` with the headers and hold the body back until the server asks for
+   * it (RFC 9110 §10.1.1), the way curl sends any body over 1 MB. A door that refuses the declared
+   * size answers before a byte of the body is sent, so there is no write to race the answer and
+   * the answer is always read (TEST-006). If the server asks for the body instead ("100
+   * Continue"), the whole body is sent as usual, so a door that lets the request through is still
+   * caught. Needs `bodyBytes`.
+   */
+  expectContinue?: boolean;
 }
 
 const WRITE_CUT = new Set(['EPIPE', 'ECONNRESET']);
@@ -95,10 +104,13 @@ function collect(req: ReturnType<typeof httpsRequest>, opts: SendOptions, what: 
     let res: IncomingMessage | undefined;
     const chunks: Buffer[] = [];
     let cutShort: string | undefined;
+    let continued = false;
     const settle = (): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      // Answered before the body was asked for: the body is never sent, so the request is closed.
+      if (opts.expectContinue && !continued) req.destroy();
       const body = Buffer.concat(chunks);
       resolvePromise({
         status: res?.statusCode ?? 0,
@@ -163,7 +175,15 @@ function collect(req: ReturnType<typeof httpsRequest>, opts: SendOptions, what: 
         }
         req.end();
       };
-      pump();
+      if (opts.expectContinue) {
+        req.once('continue', () => {
+          continued = true;
+          pump();
+        });
+        req.flushHeaders();
+      } else {
+        pump();
+      }
     } else {
       req.end(opts.body);
     }
@@ -174,6 +194,10 @@ function headersFor(opts: SendOptions): Record<string, string | number> {
   const headers: Record<string, string | number> = { host: HOST, ...(opts.headers ?? {}) };
   if (opts.bodyBytes !== undefined) headers['content-length'] = opts.bodyBytes;
   else if (opts.body !== undefined) headers['content-length'] = Buffer.byteLength(opts.body);
+  if (opts.expectContinue) {
+    if (opts.bodyBytes === undefined) throw new Error('expectContinue needs bodyBytes');
+    headers.expect = '100-continue';
+  }
   return headers;
 }
 
