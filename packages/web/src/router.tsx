@@ -3,6 +3,8 @@
 // - Every other screen sits inside the shell, which asks the API who is signed in on every move
 //   between screens. A 401 there sends the person to sign-in; if they were signed in a moment ago,
 //   the session ended while they were away, and sign-in says so.
+// - /risks is the Risk register (its filters in the search params), /risks/new the create form and
+//   /risks/$id a risk's page (S1-006). The other screens show their empty state until their slice.
 // Security is checked by the API (D7); these redirects only decide which screen to show.
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
@@ -13,6 +15,8 @@ import { SCREENS } from '@/app/screens';
 import { MfaCheckPage } from '@/features/auth/MfaCheckPage';
 import { MfaSetupPage } from '@/features/auth/MfaSetupPage';
 import { SignInPage } from '@/features/auth/SignInPage';
+import { NewRiskPage, RiskPage } from '@/features/records/risks/RiskPage';
+import { RiskRegister, validateRiskSearch } from '@/features/records/risks/RiskRegister';
 import { fetchMe, isUnauthorized, ME_KEY } from '@/features/auth/session';
 
 export interface RouterContext {
@@ -84,7 +88,34 @@ export function createAppRouter(queryClient: QueryClient) {
     component: HomePage,
   });
 
-  const screenRoutes = SCREENS.map((screen) =>
+  const risksRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/risks',
+    validateSearch: validateRiskSearch,
+    component: function RisksRoute() {
+      const search = risksRoute.useSearch();
+      const navigate = risksRoute.useNavigate();
+      return <RiskRegister search={search} onSearchChange={(next) => void navigate({ search: next, replace: true })} />;
+    },
+  });
+
+  const newRiskRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/risks/new',
+    component: NewRiskPage,
+  });
+
+  const riskRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/risks/$id',
+    component: function RiskRoute() {
+      const { id } = riskRoute.useParams();
+      return <RiskPage key={id} id={id} />;
+    },
+  });
+
+  const RECORD_SCREENS = new Set(['/risks']);
+  const screenRoutes = SCREENS.filter((screen) => !RECORD_SCREENS.has(screen.path)).map((screen) =>
     createRoute({
       getParentRoute: () => shellRoute,
       path: screen.path,
@@ -96,7 +127,7 @@ export function createAppRouter(queryClient: QueryClient) {
     signInRoute,
     mfaCheckRoute,
     mfaSetupRoute,
-    shellRoute.addChildren([homeRoute, ...screenRoutes]),
+    shellRoute.addChildren([homeRoute, risksRoute, newRiskRoute, riskRoute, ...screenRoutes]),
   ]);
 
   return createRouter({
