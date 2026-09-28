@@ -16,6 +16,8 @@ test('reads the last handoff block of a report', () => {
     filesChanged: ['a.ts'],
     tests: { run: 'pnpm test', passed: 3, failed: 0 },
     findings: 'ok',
+    fixReason: '',
+    skips: [],
   });
 });
 
@@ -53,4 +55,12 @@ test('falls back to the last message at SubagentStop', () => {
     input({ hook_event_name: 'SubagentStop', last_assistant_message: block({ taskId: 'S2-001', status: 'approved' }), agent_id: 'h3', agent_type: 'code-reviewer' }),
   );
   assert.equal(r.handoff.status, 'approved');
+});
+
+test('reads a fix reason and the listed skips (D167, D173)', () => {
+  const h = parseHandoff(
+    handback(block({ taskId: 'S1-003', status: 'done', fixReason: ' contradicted M0-010 ', skips: [{ test: 'a > b', reason: 'needs Gemma' }, { test: 'no reason' }, 'x'] })),
+  ).handoff;
+  assert.equal(h.fixReason, 'contradicted M0-010');
+  assert.deepEqual(h.skips, [{ test: 'a > b', reason: 'needs Gemma' }]);
 });

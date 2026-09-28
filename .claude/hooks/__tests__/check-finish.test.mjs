@@ -10,6 +10,7 @@ const report = (obj) => `Done.\n\`\`\`handoff\n${JSON.stringify(obj)}\n\`\`\``;
 const pass = () => ({ ok: true, lines: ['lint: pass'], failures: [] });
 const fail = () => ({ ok: false, lines: ['tests: fail'], failures: [{ label: 'tests', message: "the task's tests fail", output: 'FAIL  1 failed' }] });
 const noChecks = () => assert.fail('no checks should run');
+const here = () => []; // the agent is in its task's own copy (D168)
 const taskLog = (id) => readFileSync(join(LOGS, 'tasks', `${id}.md`), 'utf8');
 
 let count = 0;
@@ -41,8 +42,8 @@ test("a builder finishes when its checks pass, and isn't checked again when it s
     runs += 1;
     return pass();
   };
-  assert.equal(decideFinish(a.handIn(report({ taskId: 'S1-001', status: 'done', tests: { run: 'pnpm test' } })), checks), null);
-  assert.equal(decideFinish(a.stop(''), checks), null);
+  assert.equal(decideFinish(a.handIn(report({ taskId: 'S1-001', status: 'done', tests: { run: 'pnpm test' } })), checks, here), null);
+  assert.equal(decideFinish(a.stop(''), checks, here), null);
   assert.equal(runs, 1);
   assert.match(taskLog('S1-001'), /## Hand-in 1 · builder-backend[\s\S]*checks passed/);
 });
@@ -52,7 +53,7 @@ test('failed checks send a builder back; after 3, only a blocked hand-off finish
   const done = report({ taskId: 'S8-002', status: 'done', tests: { run: 'pnpm test' } });
   for (let k = 1; k <= MAX_FAILED_CHECKS; k += 1) {
     const expected = k < MAX_FAILED_CHECKS ? `failed check ${k} of 3` : 'only finish by handing in with status "blocked"';
-    assert.ok(decideFinish(a.handIn(done), fail).reason.includes(expected), expected);
+    assert.ok(decideFinish(a.handIn(done), fail, here).reason.includes(expected), expected);
   }
   assert.equal(readState(a.id, 'finish').attempts, 3);
   assert.match(taskLog('S8-002'), /sent back \(failed check 3 of 3\)[\s\S]*FAIL {2}1 failed/);
@@ -79,4 +80,18 @@ test("a task ID that isn't safe as a file name is replaced", () => {
   const planner = agent('planner');
   assert.equal(decideFinish(planner.handIn(report({ taskId: '../../etc', status: 'done' })), noChecks), null);
   assert.equal(readState(planner.id, 'finish').taskId, `unknown-${planner.id}`);
+});
+
+test('a test writer or builder outside its task\'s copy is sent back before any check runs (D168)', () => {
+  const a = agent('test-writer');
+  const away = () => ["you're in the main checkout, not your task's worktree (D168)"];
+  const r = decideFinish(a.handIn(report({ taskId: 'S1-007', status: 'done', tests: { run: 'pnpm test' } })), noChecks, away);
+  assert.match(r.reason, /main checkout[\s\S]*failed check 1 of 3/);
+});
+
+test('a fix is logged with its reason (D167)', () => {
+  const a = agent('test-writer');
+  const h = report({ taskId: 'S1-008', status: 'done', fixReason: 'contradicted M0-010', tests: { run: 'pnpm test' } });
+  assert.equal(decideFinish(a.handIn(h), pass, here), null);
+  assert.match(taskLog('S1-008'), /fix \(D167\): contradicted M0-010/);
 });

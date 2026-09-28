@@ -636,6 +636,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The finish check then accepts green only if all three hold: the builder's code is already on the task branch; the test writer changed test files only; the task's tests pass.
   - With no builder code on the branch yet, the normal red rule applies.
   - The code reviewer confirms the fix's reason. The test's first version already proved it could fail.
+  - **How "test files only" is measured** (found 2026-09-28 on TEST-002's first fix): from the newest commit on the branch that touches code (the builder's), not from the agent's start snapshot. A resumed test writer was blamed for the builder's commit under the snapshot method.
 - **D168 The finish check runs only on the task's own copy** (2026-09-28, Q48 answer a): before running the tests, guard rail 4 checks where a test writer or builder is.
   - Why: a hand-launched test writer with no worktree ran its check in the main checkout on `main`, missed its new file and saw green (build-errors 20).
   - It refuses if the agent is in the main checkout, or if the agent's current commit isn't the tip of `task/<ID>` (agents detach after committing, so it compares commits, not the branch name). The message tells the agent to move to its task's worktree and hand in again.

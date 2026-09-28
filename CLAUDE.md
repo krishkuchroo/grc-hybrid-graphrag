@@ -38,8 +38,8 @@ It's a portfolio project and research prototype. It **must look like a finished 
 - **To resume:** check `/workflows`. If the run is dead, start a **fresh** run (resume caching breaks): `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: "m0", step: "build", from: {"M0-014": "review", "M0-013": "build", "M0-010": "build"}}})`. Before that, check each `task/<ID>` tip (`git log task/<ID>`): commit any partial builder work, and use `from: "review"` if a builder finished. Done tasks are skipped by the board.
 - **Before M0-016:** the user trusts Caddy's cert, adds `127.0.0.1 grc.localhost` to hosts, and stops other projects' containers.
 - **At the M0 checkpoint (D147):** if it's clean, write the report, run `/insecure-defaults:audit`, tag `m0`, then plan and build S1. **Then D160:** rewrite history to strip old Claude lines, force-push once (no agents running; confirm with the user first).
-- **Open:** Q39 (context hand-offs; run the suite 3× before each push?).
-- **Uncommitted:** `TASKS.md` (board edits by the workflow) and `memory.md` (D148–D160; the other session commits them).
+- **Open:** Q39's context hand-off part. Its "run the suite 3×" part is closed by D171 (see "Testing").
+- **Test approach (2026-09-28, D167, D168, D170–D180):** decided and committed (c893c30). Rules, hooks and agent instructions are updated; TEST-001…003 (`TASKS.md`) build the project side. Don't start S1's build until they're merged (D179).
 - **Environment:**
   - Neo4j DBMS running (127.0.0.1), all 28 query roles have their DENYs.
   - The Docker stack is up (`grc-postgres`, `grc-seaweedfs`, `grc-dev-relay`); start it from the main checkout only.
@@ -306,4 +306,27 @@ Every agent ends its report with one hand-off block (D91). The hooks read it at 
   - The reviewers use `approved` or `sent-back`.
 - **Blocked:** a `blocked` hand-off needs findings that say what was tried and what's blocking. It can always finish (D86).
 - **Test command:** the test writer and builders put the task's test command in `tests.run`, as a pnpm test run. The finish check runs it (D97).
+- **Optional fields:**
+  - `fixReason`: a test writer's reason for a fix to tests the code already meets (D167).
+  - `skips`: `[{"test": "…", "reason": "…"}]`, each skipped test for the reviewers to approve (D173).
 - **Workflows:** a workflow that runs our agents gives them this object as their output schema.
+
+## Testing (locked 2026-09-28; details in memory.md D167, D168, D170–D180)
+- **Test kinds, named by what they need (D177):**
+  - `*.unit.test.ts`: nothing. The default kind.
+  - `*.db.test.ts`: Postgres, Neo4j or SeaweedFS, through throwaway databases.
+  - `*.stack.test.ts`: the running stack (containers, Caddy, the API).
+  - `e2e/*.e2e.ts`: Playwright through `https://grc.localhost`.
+  - Commands: `pnpm test:unit`, `test:db`, `test:stack`, `test:e2e`. `pnpm test` runs unit + db + stack.
+- **Environment check (D180):** `pnpm test:env` checks the stack, migrations, Neo4j DENYs, `.env` keys (names only), Caddy's cert and the hosts line. It changes nothing, and db/stack runs call it first. Missing items go to the main session or the user.
+- **Mac scripts (D170):** host-side scripts swap the container host for 127.0.0.1:5433 themselves. `.env` keeps one set of addresses.
+- **Guard rail 4:**
+  - New tests must be red. A **fix** (`fixReason`) may be green, but only when the builder's code is already on the branch and the test writer changed test files only (D167).
+  - The check runs only in the task's own worktree, at the tip of `task/<ID>` (D168).
+  - Builders' tests run 3 times (D171).
+  - A skipped test fails unless it's listed in `skips` (D173).
+- **Flaky tests (D171):** no retries anywhere. A test that fails and then passes is a bug for the test writer. The integrator runs the full suite once before each push. The checkpoint runs it 3 times, plus every browser test.
+- **Browser tests (D172):** the integrator runs `pnpm test:e2e` when a task touched the web app, the API or Caddy.
+- **Agreement (D174):** a test writer names the earlier tests and decisions its tests agree with, and the code reviewer checks.
+- **Security matrix (D175):** `packages/shared/src/access/security-matrix.ts` lists every record type and route. A test fails when the code has one the matrix lacks. The security reviewer checks it on every task.
+- **Never** weaken live privileges, secrets, the certificate or the running stack to prove a test (D176).

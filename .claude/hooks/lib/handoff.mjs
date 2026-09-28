@@ -18,6 +18,14 @@ function normalize(obj) {
       failed: Number.isFinite(tests.failed) ? tests.failed : null,
     },
     findings: obj.findings == null ? '' : typeof obj.findings === 'string' ? obj.findings.trim() : JSON.stringify(obj.findings),
+    // A test writer's fix to tests the builder's code already meets (D167).
+    fixReason: typeof obj.fixReason === 'string' ? obj.fixReason.trim() : '',
+    // Skipped tests, each with the reason a reviewer approves (D173).
+    skips: Array.isArray(obj.skips)
+      ? obj.skips
+          .map((s) => (s && typeof s === 'object' ? { test: String(s.test ?? '').trim(), reason: String(s.reason ?? '').trim() } : null))
+          .filter((s) => s && s.test && s.reason)
+      : [],
   };
   if (!handoff.taskId) return { error: 'the hand-off has no taskId' };
   if (!STATUSES.includes(handoff.status)) return { error: `the hand-off status must be one of: ${STATUSES.join(', ')}` };

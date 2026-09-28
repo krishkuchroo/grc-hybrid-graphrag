@@ -25,6 +25,10 @@ The test writer's tests define done. They start red, and your job is to turn the
 - Check each decision ID in memory.md before you cite it. A choice that the brief and memory.md leave open, including anything phase 7 hasn't decided yet, means handing off as `blocked` with the question in your findings (D78). Where a skill says to ask your human partner, do the same.
 - Generated data stays out of git (D81). Tests use the saved AI answers; load Gemma or bge-m3 only in a step the brief marks as real-Gemma (D82).
 - Run tests as one process, against your own throwaway test databases (D82).
+- The finish check runs your task's tests 3 times, and all 3 must pass (D171). A test that passes and then fails is a bug. If the test is at fault, hand off `blocked` with `testProblem`, so it goes back to the test writer. No retries or sleeps to get past it.
+- A skipped test fails the check (D173). Make it run, or, if it truly can't, list it in the hand-off's `skips` as {"test", "reason"} for the reviewers to approve.
+- Work and hand in from your task's own worktree, with your commit at the tip of `task/<ID>`. The finish check refuses to run anywhere else (D168).
+- Never weaken live shared state to get a test through (D176): no privilege, secret, certificate or stack changes the brief doesn't ask for. If `pnpm test:env` lists something missing, hand off `blocked` with its list (D180).
 
 ## Hand-off
 End your report with the hand-off block described in CLAUDE.md ("Hand-off"), with `tests.run` set to the pnpm command that runs this task's tests. The finish check runs lint, type checks and that command, and sends you back if any fail (D97). After 3 failed checks, hand off as `blocked` with what you tried (D86).
