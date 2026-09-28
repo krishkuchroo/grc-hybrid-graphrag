@@ -563,6 +563,118 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The report is sent to the user to read later.
   - **"Clean" means:** every task is done, the full suite, lint, type checks and scans are clean, and there are no open questions or findings.
   - If the next plan raises questions for the user, or needs skills that aren't approved yet, the main session stops and asks (D111). Anything else goes to the user as before.
+- **D148 Agent monitor v2** (2026-09-27): extends D100–D103. The user: "i wanna improvise it where it is efficient and allows me to do a lot of things", "lightweight but useful and easily integrable with any other projects".
+  - New abilities:
+    - answer open questions and blocked tasks on the page
+    - send a note to several agents at once, with delivery status per agent
+    - live updates pushed by the server instead of polling every 2 s, plus search and filters for activity and guard-rail blocks
+    - a system-health panel: grc-* containers, ports, Neo4j, Ollama, memory
+    - token use
+    - each agent's conversation shown as a chat
+    - launching agents from the page
+  - Ideas taken from GitHub tools ranked by stars: vibe-kanban, opcode, ccusage, Claude-Code-Usage-Monitor, claude-squad, disler multi-agent-observability, sniffly.
+  - Still one plain page and a tiny Node server using only Node's built-ins, with no build step, on 127.0.0.1 only (D102 and D103 kept).
+- **D149 Reusing the monitor in other projects** (2026-09-27): **(a) Copy one folder and one config file.**
+  - Everything project-specific lives in `.claude/monitor/monitor.config.json`: the board file and its columns, milestone IDs, agent colors, guard-rail labels, health checks, where open questions come from, and the launch limit. If the file is missing, safe defaults apply.
+  - The monitor's hook and the few helpers it needs move into `.claude/monitor/`. Another project needs only that folder, one hook block in its settings, and a config edit.
+- **D150 Monitor v2 design** (2026-09-27): **the middle path** (design 3 of the 3 compared: smallest change, clean modules, middle path), plus the one-folder copy from the clean design.
+  - A few small modules under `.claude/monitor/lib/`: config, answers, health, tokens, launcher, live updates. The page stays one file.
+  - Updates are pushed when a log file changes. Heavy views (a conversation, token detail) load only when opened.
+  - The live connection uses a short-lived, single-use ticket, so the main key never appears in a URL.
+- **D151 Launching agents from the page** (2026-09-27):
+  - Runs in auto permission mode, with the same safety check as the main session. Never "skip permissions", and never `--bare`, so every guard rail runs.
+  - Only agents listed in `.claude/agents/` can be launched.
+  - The server fixes the command's flags.
+- **D152 Launched runs and worktrees** (2026-09-27): each launched run works in its own git worktree.
+- **D153 Reply anytime** (2026-09-27):
+  - While a launched run is working, the user's message reaches it at its next step, like notes.
+  - After it finishes, a reply continues the same conversation.
+- **D154 Launch limit** (2026-09-27): at most 2 launched runs at a time. Extra launches wait in a queue. The number is set in the config.
+- **D155 Answers to open questions** (2026-09-27):
+  - Answers given on the page are saved to a log.
+  - The next time the user types to the main session, a hook adds the new answers to that message. The main session hands them to the planner to record.
+  - In this project, open questions are read from CLAUDE.md's "Open questions for the user". The source is set in the config.
+- **D156 Token display, the Stop button, and who builds it** (2026-09-27):
+  - Tokens per agent, per task, per milestone and for today, split into new input, cache write, cache read and output, plus a tokens-per-minute burn rate.
+  - No dollar costs, because it's a subscription with no API key.
+  - Read from Claude Code's saved conversations, counting each reply once.
+  - A Stop button for runs launched from the page. It stops only runs the monitor started.
+  - The main session builds monitor v2, not the milestone workflow, because guard rail 5 closes `.claude/` to agents.
+- **D157 Splitting the monitor hook** (2026-09-27): the user chose "Split it in two" over keeping it as is.
+  - Found while building D149: `.claude/hooks/monitor-hook.mjs` also serves guard rails 5 and 7. It saves how the checkout looked when an agent started (read by `check-changed-files.mjs` and `guard-test-files.mjs`). It also logs file edits to `logs/activity.jsonl`, which `check-changed-files.mjs` reads to tell other agents' edits apart.
+  - The guard rails get their own small hook in `.claude/hooks/`. It saves the start picture and logs edits, which is what they need.
+  - The monitor's hook moves into `.claude/monitor/`. It handles steps, notes, answers and launched runs.
+  - Guard rails never depend on the monitor, and the monitor folder is copy-and-go. Two small hooks run per step instead of one.
+- **D158 Launched runs count as agents in the guard rails** (2026-09-27): the user chose "Treat them as agents" over "only read-only agents" or "drop launching for now".
+  - Found by a probe before building D151: a run started with `claude -p --agent <name>` reaches the hooks with no agent_id (only agent_type = the agent's name and its own session_id). So guard rail 5 (protected files), guard rail 4 (finish checks), the 5/7 hand-in backstop and the fail-safe block would have treated it like the main session.
+  - The shared hook-input code gives a run started with `--agent` an agent identity from its session ID.
+  - The finish checks and the changed-files backstop also run when a launched run ends (the Stop hook), not only on subagent hand-ins.
+  - So all 7 guard rails and the fail-safe apply to launched runs exactly as to workflow agents. New guard-rail tests cover this.
+  - Also found: launched runs fire UserPromptSubmit too, so answers (D155) go only to the real main session (no agent type).
+- **D159 No Claude mentions on GitHub** (2026-09-27): the user: "i dont like mention of claude publishing in github".
+  - From now on, commit messages and PR text never mention Claude, Anthropic or AI tooling. That means no `Co-Authored-By`, `Claude-Session` or "Generated with" lines.
+  - This overrides the tool's default attribution. CLAUDE.md says so, and `.claude/githooks/commit-msg` strips such lines from every commit, agents' included.
+  - The 61 commits already on GitHub still carry the lines. Removing them means rewriting history and a force-push, which D84 forbids, so that's for the user to decide.
+- **D160 Remove the old Claude lines from GitHub history** (2026-09-27, Q40): **(b)** Rewrite history to strip the attribution lines from the commits already pushed, with a one-time force-push the user allows.
+  - When: after M0, while no agents are running and no task branches are open, so nothing breaks.
+  - Until then, D84's no-force-push rule stands.
+- **D161 Launched runs may edit files in their own worktree** (2026-09-27): the user chose "Own worktree only" over accept-edits mode or no edits.
+  - Found in a sandbox test: in auto mode a headless run can't write any file in its worktree, because Claude Code treats everything under `.claude/` as protected and nobody is there to approve.
+  - So launched runs get one extra permission rule, `Edit(./**)`: file edits allowed inside their own worktree only. Tested: writes there work, a write outside was refused, and guard rails 5 and 7 still block protected and test files. Everything else stays in auto mode (D151).
+  - Also fixed in the same test: for a run started with `--worktree`, Claude Code points CLAUDE_PROJECT_DIR at the worktree, so the hooks wrote their logs into the worktree. The guard rails and the monitor now treat `…/.claude/worktrees/<name>` as the main project when finding `logs/`, as they already do for workflow agents.
+  - The sandbox test also confirmed D158: guard rail 5 blocked a launched builder's edit of CLAUDE.md, and guard rail 4 held its finish twice until the hand-off block was valid.
+- **D162 Audit a correct password straight away** (2026-09-27, Q41, M0-010): **(a)** When the password is right, write `auth.password_verified` at once, before the second factor. `auth.sign_in` follows only when the second factor succeeds.
+  - Why: a right password with an MFA step that's never finished is what a stolen password looks like, and it must show in the audit trail. (b), writing a failure when the pending challenge runs out, needed expiry machinery and could miss.
+  - This adds a sixth login event name to the M0-010 brief's five.
+- **D163 Audit data stays out of error logs** (2026-09-27, Q42, from M0-013's security review): when the outbox relay fails to copy an entry, log only the error type (class/code) and the entry's ID, never its contents. It applies to any log line about an audit entry.
+- **D165 M0-016 wires the API into Docker** (2026-09-27, Q44 answer a): M0-016 adds the `start:api`/`start:worker` scripts in `packages/api/package.json`, sets `HOST: 0.0.0.0` on grc-api/grc-worker in `compose.yaml` (still no published ports, D63; only Caddy is reachable), and passes `BETTER_AUTH_SECRET` to them. `setup:secrets` generates `BETTER_AUTH_SECRET` and `DEMO_USER_PASSWORD` into `.env`, adding only missing keys, never changing existing ones or printing values (D57).
+- **D166 The API and worker start with tsx** (2026-09-27, Q45 answer b): `start:api`/`start:worker` run the TypeScript through the `tsx` package (a dev-tooling dependency of `packages/api`, exact version pinned, covered by the dependency scan), not the M0-016 builder's own `ts-resolve.ts` hook, which is removed. The user chose it for fewer surprises later (well tested, handles more import cases); it adds tsx and esbuild to the trusted packages.
+- **D164 D163 covers the operator scripts too** (2026-09-27, Q43 answer a): `org:create` and `seed:demo` (M0-014) print only the error type/code and IDs when a write fails, never the database error's message (Drizzle puts the query values there: org name, slug, first Admin ID). The rule: no audit entry contents in any log or error output. S1 briefs apply it to the API error handler (`common/errors.ts`) once routes write audit entries.
+- **D167 Handing in a test fixed after the code exists** (2026-09-28, test-approach round, Q47 answer a): the test writer can hand in a **fix** that passes straight away.
+  - Why: a test corrected after the builder's code exists, or changed only for formatting, is green at once, so guard rail 4's "new tests must be red" (D97) stranded the test writer (M0-005, M0-009, M0-016).
+  - The test writer marks the hand-off as a fix and gives the reason (for example "the builder showed it contradicted M0-010").
+  - The finish check then accepts green only if all three hold: the builder's code is already on the task branch; the test writer changed test files only; the task's tests pass.
+  - With no builder code on the branch yet, the normal red rule applies.
+  - The code reviewer confirms the fix's reason. The test's first version already proved it could fail.
+- **D168 The finish check runs only on the task's own copy** (2026-09-28, Q48 answer a): before running the tests, guard rail 4 checks where a test writer or builder is.
+  - Why: a hand-launched test writer with no worktree ran its check in the main checkout on `main`, missed its new file and saw green (build-errors 20).
+  - It refuses if the agent is in the main checkout, or if the agent's current commit isn't the tip of `task/<ID>` (agents detach after committing, so it compares commits, not the branch name). The message tells the agent to move to its task's worktree and hand in again.
+  - The main session always gives hand-launched test writers and builders their own worktree.
+- **D180 A check-only test environment doctor** (2026-09-28, Q49 answer a; numbered D180 because the other session took D169 the same day): one command, `pnpm test:env`, checks everything the live tests need and changes nothing.
+  - It checks: the grc-* stack and dev relay are up, migrations are applied, Neo4j's DENY rules are on all 28 grc_ro_* roles (read-only SHOW), the `.env` keys exist (names only, never values), Caddy's root is trusted and the `grc.localhost` hosts line is there.
+  - It prints one line per item (OK or missing). The live tests run it first and stop at once with that list if anything's missing.
+  - The main session or the user fixes what's missing. It never grants, revokes or changes privileges, secrets or the certificate.
+- **D170 Mac scripts find the databases themselves** (2026-09-28, Q50 answer b): host-side scripts (`seed:demo`, `org:create` and later ones) swap the container host in `DATABASE_URL_*` for the dev relay at 127.0.0.1:5433 themselves, the way the test helpers already do. `.env` keeps one set of addresses. Fixes build-errors 25.
+- **D171 Repeat runs and flaky tests** (2026-09-28, Q52 answer a; **closes Q39**):
+  - The builder's finish check runs the task's tests 3 times; all 3 must pass.
+  - The integrator runs the full suite once before each push, and 3 times at each milestone checkpoint.
+  - No automatic retries anywhere (Vitest and Playwright `retries: 0`).
+  - A test that fails and then passes is a bug: it goes back to the test writer to fix, like the D72 retry test (build-errors 15, 17).
+- **D172 When the browser tests run** (2026-09-28, Q53 answer a): the integrator runs the Playwright tests before a push when the task changed the web app, the API or Caddy. The full browser set runs at every checkpoint.
+- **D173 Skipped tests count as failures** (2026-09-28, Q54 answer a): in every finish check, a skipped test fails the check, unless it carries a written reason that a reviewer approved. Why: a failing nested `beforeAll` hid 11 of M0-010's tests as skipped.
+- **D174 New tests must agree with older ones** (2026-09-28, Q55 answer a): before handing in, the test writer runs the existing tests near its change, and its hand-off says which earlier tests and decisions its tests agree with. The code reviewer checks this. Why: M0-016's first OpenAPI test expected 200, against M0-010's 401.
+- **D175 The D59 security matrix can't fall behind** (2026-09-28, Q56 answer a): one table lists every record type and route with its role, org and label rules. A test fails if the code has a record type or route that isn't in the table, so new features can't skip the D59 tests. The security reviewer checks it on every task.
+- **D177 Test names say what the test needs** (2026-09-28, Q51 answer a; the user asked for clearer names than "live"):
+  - `*.unit.test.ts`: needs nothing, runs in seconds.
+  - `*.db.test.ts`: needs the databases (Postgres, Neo4j, SeaweedFS).
+  - `*.stack.test.ts`: needs the whole running stack (containers, Caddy, the API).
+  - `e2e/*.e2e.ts`: browser tests through `https://grc.localhost`.
+  - Commands: `pnpm test:unit`, `pnpm test:db`, `pnpm test:stack`, `pnpm test:e2e`. `pnpm test` runs unit, db and stack. A check fails if any test file has no type.
+- **D178 How the test changes get built** (2026-09-28, Q58 answer a):
+  - **Part 1, the main session:** guard rail 4, the agent instructions, the milestone workflow and CLAUDE.md, with hook tests (agents can't edit `.claude/`).
+  - **Part 2, through the normal chain on `task/TEST-001`:** the test-env doctor, the scripts' host swap, the renames and new commands, `retries: 0` and the D59 completeness test. It uses the existing test-writer and builder-platform agents, started by hand one at a time with their own worktrees, then both reviewers and the integrator. No new workflow and no milestone run, so the paused session isn't affected.
+- **D179 Build the test changes in parallel** (2026-09-28): the user: "to make it faster lets use multiple agents".
+  - Part 1 stays with the main session, because guard rail 5 blocks every agent from `.claude/`. The new hooks are built and tested in a scratch copy, then copied in at once, so running agents never see a half-edited guard rail.
+  - Part 2 is split into three tasks that run side by side, each through the normal chain in its own worktree:
+    - **TEST-001:** names and commands (D177), `retries: 0` (D171), with the db/stack runs calling the doctor first.
+    - **TEST-002:** the test-env doctor (D180) and the scripts' host swap (D170).
+    - **TEST-003:** the security-matrix completeness test (D175).
+  - The integrator merges TEST-002, then TEST-003, then TEST-001 last, because TEST-001 renames files and calls TEST-002's doctor.
+- **D176 The agent instructions carry the test rules** (2026-09-28, Q57 answer a): the test writer, builder, reviewer, integrator and planner instructions are updated with D167, D168, D170–D180, plus one rule: **never weaken live database privileges or shared state to prove a test** (build-errors 19). Prove red on a throwaway copy or in the worktree's code instead.
+- **D169 Security findings are kept in `SECURITY-FINDINGS.md`** (2026-09-28, the user: "create a .md for security findings so that we can review them later and add a hook which when a security issue is identified the details are stored in a doc").
+  - `SECURITY-FINDINGS.md` (repo root, committed) has a summary table and one entry per issue with a review status (Open, Fixed, Accepted, Won't fix). Entries are never deleted. It starts with the 12 M0 items (SF-001 to SF-012).
+  - The `record-security-findings` hook (PostToolUse on the report tool, plus SubagentStop as a backup) appends an entry once per hand-off when a security reviewer sends work back, is blocked on a question, or approves with a non-blocking point; and for any agent's `Security notes:`. It never blocks; its errors go to guardrails.jsonl.
+  - The security reviewer now puts non-blocking points after `Security notes:`. The main session adds each checkpoint's insecure-defaults audit results by hand and commits the file at checkpoints.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
@@ -587,6 +699,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **D108 is still unrecorded.** It's the user's OK for the workflow smoke test ("resterted the session , do a workflow test"). The permission check refused the main session's edit, so the user adds it or confirms it again.
 
 - **Phase 8, round 5 (the agent monitor):** answered on 2026-09-26 (D100–D103). All four answers were (a).
+- **Agent monitor v2 round:** answered on 2026-09-27 (D148–D158, D161).
 - **Deferred phases** (the user said on 2026-09-25: "note down the next phases, we will continue them later"):
   - **Phase 7, stress test and benchmark: deferred.** Resume from the Q73 proposal, which was not yet answered. The recommendation was option (a):
     - **Plan:**
