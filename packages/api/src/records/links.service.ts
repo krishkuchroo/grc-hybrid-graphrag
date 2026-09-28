@@ -6,8 +6,9 @@
 // - Reading: our code limits every node to the types the role may view, the labels at or below the
 //   clearance and, for "own" cells, the caller's own records (D50, D51). The read runs as the
 //   caller's read-only role x clearance account (readAs), so Neo4j checks again and hides every
-//   link with a hidden end (D45.3, D59). A role with an "own" cell (the Control Owner) reads as the
-//   writer instead, because no shared account can know who owns what (S1 shared notes).
+//   link with a hidden end (D45.3, D59). A read that can reach a type that is an "own" cell for the
+//   role (for the Control Owner, a Control) runs as the writer instead, because no shared account
+//   can know who owns what (S1 shared notes); every other read stays on the read-only account.
 // - Log lines about a failed write hold only the error's type and code and the IDs (D163, D164).
 import type { ManagedTransaction } from 'neo4j-driver';
 import type { Logger } from 'pino';
@@ -106,9 +107,20 @@ function kindOf(labels: unknown): RecordKind | undefined {
   return undefined;
 }
 
-/** Whether the role has an "own" cell on any record type: its reads then run as the writer. */
-function readsAsWriter(role: Role): boolean {
-  return RECORD_KINDS.some((kind) => ROLE_TABLE[kind][role] === 'edit_own');
+/** Whether a query that can reach these record types must run as the writer: only when one of
+ * them is an "own" cell for the role (S1 shared notes; records.service does the same). */
+function readsAsWriter(role: Role, kinds: readonly RecordKind[]): boolean {
+  return kinds.some((kind) => ROLE_TABLE[kind][role] === 'edit_own');
+}
+
+/** The record types a link from or to this type can join it to (the ontology, LINK_TYPES). */
+function neighboursOf(kind: RecordKind): RecordKind[] {
+  const out = LINK_TYPES.flatMap((row): RecordKind[] => {
+    if (row.from === kind) return [row.to];
+    if (row.to === kind) return [row.from];
+    return [];
+  });
+  return RECORD_KINDS.filter((k) => out.includes(k));
 }
 
 /** The caller's scope as a Cypher condition on a node: a type the role may view (an "own" cell
@@ -225,8 +237,9 @@ export class LinksService {
   async list(caller: Caller, kind: RecordKind, id: string): Promise<{ items: LinkItem[] }> {
     if (ROLE_TABLE[kind][caller.role] === 'none') throw FORBIDDEN();
     const self = scopeOf(caller, [kind]);
-    const other = scopeOf(caller);
-    const items = await this.read(caller, async (tx) => {
+    const others = neighboursOf(kind);
+    const other = scopeOf(caller, others);
+    const items = await this.read(caller, [kind, ...others], async (tx) => {
       const found = await tx.run(
         `MATCH (n:${NODE_LABELS[kind]} {id: $id}) WHERE ${self.where('n')} RETURN n.id AS id`,
         { ...self.params, id },
@@ -271,7 +284,7 @@ export class LinksService {
     const depth = parseMapDepth(query);
     if (ROLE_TABLE.asset[caller.role] === 'none') throw FORBIDDEN();
     const scope = scopeOf(caller, ['asset']);
-    const map = await this.read(caller, (tx) => buildAssetMap(tx, id, depth, scope));
+    const map = await this.read(caller, ['asset'], (tx) => buildAssetMap(tx, id, depth, scope));
     if (!map) throw NOT_FOUND();
     return map;
   }
@@ -283,7 +296,7 @@ export class LinksService {
       (kind) => `MATCH (n:${NODE_LABELS[kind]} {id: $id}) WHERE ${scope.where('n')} RETURN n`,
     );
     if (branches.length === 0) return null;
-    const found = await this.read(caller, async (tx) => {
+    const found = await this.read(caller, RECORD_KINDS, async (tx) => {
       const res = await tx.run(
         `CALL () { ${branches.join(' UNION ')} } RETURN labels(n) AS labels, properties(n) AS p LIMIT 1`,
         { ...scope.params, id },
@@ -329,10 +342,14 @@ export class LinksService {
     };
   }
 
-  /** Runs a read as the caller's read-only account, or as the writer for a role with an "own"
-   * cell; every query also carries the caller's scope. */
-  private read<T>(caller: Caller, fn: (tx: ManagedTransaction) => Promise<T>): Promise<T> {
-    if (readsAsWriter(caller.role)) return this.graph.read(caller.orgId, fn);
+  /** Runs a read as the caller's read-only account, or as the writer when the query can reach a
+   * type that is an "own" cell for the role; every query also carries the caller's scope. */
+  private read<T>(
+    caller: Caller,
+    kinds: readonly RecordKind[],
+    fn: (tx: ManagedTransaction) => Promise<T>,
+  ): Promise<T> {
+    if (readsAsWriter(caller.role, kinds)) return this.graph.read(caller.orgId, fn);
     return this.graph.readAs(caller.orgId, caller.role, caller.clearance, fn, { timeoutMs: LINK_READ_TIMEOUT_MS });
   }
 }
