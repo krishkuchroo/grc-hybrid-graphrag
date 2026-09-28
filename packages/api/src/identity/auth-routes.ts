@@ -10,8 +10,9 @@
 // - a session without MFA may only finish MFA set-up or sign out (403 `mfa_required`);
 // - MFA can't be turned off, and "trust this device" is ignored (MFA for everyone, D54);
 // - the 5-failure lock (lockout.ts), keyed on the account;
-// - one audit event per sign-in attempt, in the user's org (D56). An unknown email has no org
-//   chain, so it goes to the API's pino log instead. Passwords and codes are never recorded.
+// - one audit event per sign-in attempt, in the user's org (D56), plus `auth.password_verified`
+//   as soon as a password is right (D162). An unknown email has no org chain, so it goes to the
+//   API's pino log instead. Passwords and codes are never recorded.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 import { CODES, sendError } from '../common/errors.js';
@@ -155,8 +156,11 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
     }
     if (res.status === 200) {
       if (key) lockout.succeed(key);
-      // With MFA on, the attempt finishes at the second factor.
-      if (res.json.twoFactorRedirect !== true) {
+      // With MFA on, the attempt finishes at the second factor. The right password is audited at
+      // once, so one whose second factor never comes still shows in the trail (D162).
+      if (res.json.twoFactorRedirect === true) {
+        await auth.auditUser(await auth.userIdByEmail(key), 'auth.password_verified', { method: 'password' });
+      } else {
         const user = res.json.user as { id?: unknown } | undefined;
         await auth.auditUser(typeof user?.id === 'string' ? user.id : null, 'auth.sign_in', { method: 'password' });
       }

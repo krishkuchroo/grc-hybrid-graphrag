@@ -98,7 +98,12 @@ export interface ResolvedSession {
 }
 
 export type SignInEvent =
-  'auth.sign_in' | 'auth.sign_in_failed' | 'auth.locked' | 'auth.sign_out' | 'auth.mfa_enrolled';
+  | 'auth.sign_in'
+  | 'auth.password_verified'
+  | 'auth.sign_in_failed'
+  | 'auth.locked'
+  | 'auth.sign_out'
+  | 'auth.mfa_enrolled';
 
 /** Better Auth plus what the API needs around it: session checks, memberships and sign-in audit. */
 export class AuthService {
