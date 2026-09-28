@@ -714,6 +714,32 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **D160 done** (2026-09-28): the user ran the rewrite of `main` and `m0` and the single force-push. GitHub `main` and `m0` are both at `95969b4`, with 156 commits, 0 attribution lines, and the same files as `cf5d64a`.
   - git's backup of the old refs is under `refs/original/`.
   - The local task branches and the 21 kept worktrees still carry the old history. Never merge them into `main` as they are: cherry-pick or rebase onto the new `main` first.
+- **D196 Record numbers** (2026-09-28, S1-Q1, the user: "Ok begin working", accepting the recommendation): prefixes RSK (risks), AST (assets), CTL (controls), POL (policies) and INC (incidents), each followed by 7 digits. Numbers count separately per org and per type, starting at 0001001 like ServiceNow (so the first risk is `RSK0001001`).
+  - Why: matches the ServiceNow look (D2) and D68's `RSK0001014` example.
+- **D197 Record field values** (2026-09-28, S1-Q2, the recommendation):
+  - Risk: impact and likelihood are each 1 to 5; the rating is impact × likelihood, shown as Low (1–4), Medium (5–9), High (10–16) or Critical (17–25). Financial exposure is a whole-dollar amount.
+  - Asset: type is one of server, application, database, network device, cloud service or endpoint; criticality is low, medium, high or critical.
+  - Control: status is not implemented, planned or implemented.
+  - Incident: severity is low, medium, high or critical; status is new, investigating, contained, resolved or closed.
+  - Why: a standard 5×5 risk matrix and short, familiar lists that the generators (S3) and filters can share.
+- **D198 No label above one's own clearance** (2026-09-28, S1-Q3, the recommendation): saving a record with a label higher than the saver's own clearance is refused.
+  - Why: otherwise the person could no longer see the record they just saved (D51).
+- **D199 Control Owners don't create controls** (2026-09-28, S1-Q4, the recommendation): a Control Owner only edits the controls assigned to them ("Edit own", D50). Creating a control needs full Edit on controls (Admin, Compliance Manager).
+  - Why: "own" needs an owner, and a new control has none until someone with full Edit assigns it.
+- **D200 Who may add a link** (2026-09-28, S1-Q5, the recommendation): anyone who can edit either of the two records and can see both.
+  - Why: a Risk Manager can then link their risk to a control they can't edit, and nobody links to a record they can't see (D51).
+- **D201 A link added by mistake can be removed** (2026-09-28, S1-Q6, the recommendation: yes): the same people who may add a link (D200) may remove it. The removal and a copy of the link go into the audit trail, with the action `link.removed`.
+  - This is separate from false-positive handling (D24, D38, S5), where AI findings are hidden but kept in Postgres.
+  - It adds a task to S1 (S1-011, with the web part in S1-012).
+- **D202 Evidence and Audit findings come with S3** (2026-09-28, S1-Q7, the recommendation): they're built with S3 (uploads), where they first arrive, not in S1.
+- **D203 S1 leaves the name embedding empty** (2026-09-28, S1-Q8, the recommendation): S1 never sets `nameEmbedding` and never loads bge-m3. S4's embedding step fills it in for new and changed records.
+- **D204 The asset dependency map** (2026-09-28, S1-Q9, the recommendation): centred on one asset and opened from that asset's page. It shows what the asset hosts or runs and what hosts or runs it, 2 steps out by default, with 1 to 3 selectable. It's capped at 200 assets, with a notice when it's cut short.
+  - Why: with about 2,000 assets per org (D48), a map of everything would be unreadable.
+- **D205 S1 plan approved** (2026-09-28, the user: "Ok begin working"; D111, D88):
+  - The S1 task list S1-001 to S1-010 in `TASKS.md` (plus the tasks D201 adds).
+  - The planner's readings 1–7: S1 covers screens 2–6; S1 needs no Postgres migration ("a new migration" if one turns up); the renamed fields `controlStatus`, `incidentStatus`, `policyVersion`, `occurredAt` and `assetType`; the opt-in "own" flag on the access guard; 404 for any record the caller can't see and 403 on the list of a type the role can never view; S1-004 closes SF-006.
+  - The new names: `pnpm graph:schema`, `ensureOrgSchema`, the error codes `stale_version`, `link_exists` and `link_not_allowed`, the route `GET /api/v1/people`, and the audit actions `record.created`, `record.updated`, `record.retired` and `link.created`.
+  - The skills for S1: the same set as M0 (D136).
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions

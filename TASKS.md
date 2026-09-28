@@ -28,6 +28,18 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | TEST-006 | TEST | builder-platform | done | The three size-cap tests in `front-door/body-size.stack.test.ts` (25 MB + 1 byte → 413 at the door, 40 MB → 413 at the door, JSON just over 1 MB → the API's 413 in the D47 format) give the same answer every time (D187, D171). The test writer finds each cause from the code, never by changing shared state (D176), and says whether a real person could get 502 instead of 413. Test-only cause: fix the existing tests with `fixReason`, same checks, no retries, sleeps, longer timeouts or `cutShortOk` on status checks (D185). Real cause: a reliably red test, then the smallest Caddy or API change so the answer is always 413 in the D47 format; limits stay 25 MB at the door and 1 MB at the API (D188, D53, D64). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack`, none skipped; integrator pushes main (with TEST-004's d56f2f9 and 7c8199b) only after one clean full `pnpm test` | Tests 7470dcc (`expectContinue` in the door helpers, new `body-size-502.stack.test.ts`); API fix cf5cca1 by builder-backend (onError hook in `packages/api/src/common/errors.ts` drops `Connection: close` for FST_ERR_CTP_BODY_TOO_LARGE, so over-limit JSON always gets the API's 413, not Caddy's 502). Code and security reviewers approved. Merged 257da61, pushed (origin/main 21ad9c5..257da61); integrator: lint and typecheck clean, `pnpm test` 2,456/2,456, e2e 4/4. The finish check's rerun of `pnpm test` then failed one unrelated test, now TEST-007. Reviewer notes, none blocking: grc-worker was recreated with grc-api (shared image); the cast at errors.ts:67 may not be needed; security, phase 7: the API has no requestTimeout (Fastify default 0), so the 25 MB drain bound holds only behind Caddy. | `logs/tasks/TEST-006.md` |
 | TEST-007 | TEST | test-writer | done | Flaky (D171): `packages/api/tests/graph-accounts/accounts.db.test.ts`, "grc_ro_auditor_restricted holds read-only privileges (criterion 1) > logs in through GraphService.readAs" failed once with `Neo4jError: Connection was closed by server` during Bolt login. The test writer finds the cause from the code, never by changing live Neo4j privileges, passwords or settings (D176). Test-only cause: fix the existing test with `fixReason`, same checks (D167, D185). Real cause: a reliably red test, then the smallest builder fix. No retries or longer timeouts to hide it. Tests: `pnpm --filter api test -- graph-accounts` (3 runs green), none skipped | Cause: a Neo4j Bolt server race when a pooled connection is logged in again as another account (NullPointerException in AuthenticationTimeoutConnectionListener, seen in debug.log); a real user could hit it through chat Path B. Red test 6f7e707 (`one-account-per-connection.db.test.ts`); fix 39d46a2 by builder-platform: one driver per query account, cached by account name, maxConnectionPoolSize 5 (QUERY_POOL_SIZE), all closed in close(). Code and security reviewers approved. Merged af08458, pushed with TEST-008 (origin/main 257da61..af08458); integrator: grc-api and grc-worker recreated from the main checkout, lint and typecheck clean, `pnpm test` 2,457/2,457 in one run with none skipped, e2e 4/4. Reviewer notes, none blocking, for phase 7: worst case 280 query connections across the API and worker (check against Neo4j's Bolt limits); a 6th concurrent query for the same account waits for a free connection (load-test it); a readAs after close() creates a new driver (shutdown only); each driver keeps its account's password in memory, acceptable under D57. | `logs/tasks/TEST-007.md` |
 | TEST-008 | TEST | test-writer | done | `packages/infra/tests/front-door/headers.stack.test.ts:96` ("the door's own 413 for an upload over 25 MB") uses the `expectContinue` option, so the client's EPIPE can't race the door's 413 (same race TEST-006 fixed in `body-size.stack.test.ts`). Test-only fix with `fixReason`; still checks status 413 and the D64 headers, nothing loosened (D171, D185). Tests: `pnpm --filter infra test -- headers` (3 runs green) and `pnpm --filter infra test:stack`, none skipped | Test-only fix 6114c28 by the test writer, with `fixReason`: `expectContinue` added to the 25 MB + 1 byte test in `headers.stack.test.ts`. Code and security reviewers approved. Merged cd7aa0f, pushed with TEST-007 (origin/main 257da61..af08458); integrator: grc-api and grc-worker recreated from the main checkout, lint and typecheck clean, `pnpm test` 2,457/2,457 in one run with none skipped, e2e 4/4. Security note, not blocking: this test doesn't prove the 413 came from the door; `body-size.stack.test.ts` covers that. | `logs/tasks/TEST-008.md` |
+| S1-001 | S1 | builder-backend | to do | Shared record and link model in `@grc/shared`: Zod schemas for Asset, Risk, Control, Policy and Incident (common D73 fields plus each type's own), the D197 value lists, record numbers RSK/AST/CTL/POL/INC + 7 digits (D196), the 5×5 risk rating with Low/Medium/High/Critical bands (D197), and the ontology table of allowed links (the spec's six). Tests (unit): `pnpm --filter shared test -- records` | | `logs/tasks/S1-001.md` |
+| S1-002 | S1 | builder-platform | to do | Every org's Neo4j database gets the D73 schema: unique ID and number per type, lookups on type, framework, status, label and owner, a full-text index on names and source IDs, a 1024-dim cosine vector index on name embeddings, and a source-document index on every link type. Made by org provisioning and by `pnpm graph:schema` for existing orgs; safe to re-run. Tests (unit + db): `pnpm --filter api test -- org-schema` | | `logs/tasks/S1-002.md` |
+| S1-003 | S1 | builder-backend | to do | Records service for the five types: create (number from 0001001 per org and type, default label, owner), read and list (paged, filtered, sorted) through the role x clearance read-only accounts, update with a version check (stale save refused), label rules (no label above the saver's clearance, D198), retire; Control Owners edit only their own controls and can't create (D199); every change and its audit entry in one Neo4j transaction. Tests (db): `pnpm --filter api test -- records-service` | | `logs/tasks/S1-003.md` |
+| S1-004 | S1 | builder-backend | to do | REST routes for the five types (`/api/v1/assets`, `/risks`, `/controls`, `/policies`, `/incidents`: list, get, create, update, retire) plus `GET /api/v1/people`; "own" cells pass the guard and are checked in the service; security-matrix rows; every role cell, org pair and clearance x label pair tested (D59); error log carries no record or audit values (D164, SF-006). Tests (db + unit): `pnpm --filter api test -- records-api` | | `logs/tasks/S1-004.md` |
+| S1-005 | S1 | builder-backend | to do | Links: `POST /api/v1/links` (ontology check, both ends visible, the D200 rule: can edit either end and see both, audited in the same transaction), `GET /api/v1/<type>/:id/links` (only links whose both ends are visible), and `GET /api/v1/assets/:id/map` (HOSTS/RUNS around one asset, depth 1–3, default 2, cap 200 assets with `truncated`, D204); security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- links` | | `logs/tasks/S1-005.md` |
+| S1-006 | S1 | builder-frontend | to do | Web records kit (paged, sortable, filterable table; detail; create and edit forms from the shared schemas; stale-save message; retire; label and owner pickers; buttons follow the role table) and the Risk register at `/risks` with its rating. Tests (unit): `pnpm --filter web test -- records` | | `logs/tasks/S1-006.md` |
+| S1-007 | S1 | builder-frontend | to do | Controls, Policies, Assets and Incidents screens built on the kit (lists with each type's columns and filters, detail, create and edit); a Control Owner sees only their own controls; Incidents hidden from roles with no access. Tests (unit): `pnpm --filter web test -- record-screens` | | `logs/tasks/S1-007.md` |
+| S1-008 | S1 | builder-frontend | to do | Related records on every detail page (for example "Controls that treat this risk"), and an "Add link" dialog that offers only the link types the ontology allows and only to people allowed to add them. Tests (unit): `pnpm --filter web test -- record-links` | | `logs/tasks/S1-008.md` |
+| S1-009 | S1 | builder-frontend | to do | Asset dependency map (React Flow) on the asset page: HOSTS and RUNS around the asset, depth picker 1–3 (default 2), click-through, a notice when the map is cut short at 200 assets (D204). Tests (unit): `pnpm --filter web test -- asset-map` | | `logs/tasks/S1-009.md` |
+| S1-010 | S1 | builder-platform | to do | `seed:demo` adds a fixed, re-runnable set of records and links to each demo org (audited, mixed labels, controls owned by the demo Control Owner); `docs/demo/s1.md` click-through; Playwright journeys through `https://grc.localhost` (risk register, adding and removing a link, stale save, own controls, other org and low clearance see nothing). Tests (db + unit + e2e): `pnpm --filter api test -- seed-records`, `pnpm --filter infra test -- demo-doc`, `pnpm test:e2e` | | `logs/tasks/S1-010.md` |
+| S1-011 | S1 | builder-backend | to do | Removing a link added by mistake (D201): `POST /api/v1/links/remove` with `{ type, fromId, toId }`; the D200 rule (can edit either end and see both); the link is deleted from Neo4j and a `link.removed` audit entry holding a copy of it is written in the same transaction; hidden or missing link 404; re-adding afterwards works; security-matrix row and D59 tests. Tests (unit + db): `pnpm --filter api test -- link-removal` | | `logs/tasks/S1-011.md` |
+| S1-012 | S1 | builder-frontend | to do | "Remove" on each row of the related-records groups (D201), shown only to people the D200 rule allows, with a confirmation that says the removal is recorded; 404 and 403 answers give clear messages; the group refreshes after a removal. Tests (unit): `pnpm --filter web test -- link-removal` | | `logs/tasks/S1-012.md` |
 
 **Moved out of M0 (planned with slice 7, no task yet):**
 - SSO (OIDC/SAML) is planned for S7, with the Admin screens. Its tests will use a small stand-in sign-in provider that runs locally (D134).
@@ -799,3 +811,615 @@ Task: TEST-008
 **Tests to write:** No new test file. Fix the existing test (kind: `stack`; it needs the running stack and Caddy).
 
 **Test command:** `pnpm --filter infra test -- headers`
+
+---
+
+### S1 shared notes (every S1 brief includes these)
+S1 is slice 1, "Records and the risk register" (D76). It runs alone, before the S2+S3+S7 group (D181). The M0 shared notes above (layout, test ownership, throwaway databases, one test process, names) still apply.
+
+- **Scope (planner's reading, D27, D76):** the five core record types of the spec's ontology (Asset, Risk, Control, Policy, Incident), their links, and their screens: the Risk register (screen 2), Controls (3), Policies (4), Assets with the dependency map (5) and Incidents (6). No other slice owns screens 3–6. Framework, Requirement, SATISFIES and MAPS_TO come with S2. Evidence and AuditFinding come with S3 (D202). There's no real Gemma or bge-m3 anywhere in S1.
+- **The user's S1 answers (2026-09-28):** D196 (record numbers), D197 (field values and risk rating), D198 (no label above one's own clearance), D199 (Control Owners don't create controls), D200 (who may add a link), D201 (removing a link added by mistake), D202 (Evidence and Audit findings in S3), D203 (name embedding left empty), D204 (the asset map), D205 (the plan, readings, names and skills).
+- **Folders S1 owns (D183):** `packages/api/src/records/`, `packages/shared/src/records/`, `packages/web/src/features/records/`, plus the files each brief names.
+- **Code style already in the repo:**
+  - Nest decorators are applied as plain calls, not `@` syntax. Copy `packages/api/src/identity/me.controller.ts` and `api-keys.controller.ts`.
+  - Each route is documented with `documentRoute` (`packages/api/src/common/openapi.ts`). Inputs and outputs are Zod schemas.
+  - Errors use `ApiError(status, code, message)` and leave in the one D47 format (`packages/api/src/common/errors.ts`).
+  - Lists use `pageQuerySchema` and `Paged<T>` (`packages/api/src/common/paging.ts`).
+- **The graph (D26, D37, D45.4, D73):**
+  - Every write goes through `AuditOutbox.withAuditedWrite(orgId, actor, fn)` (`packages/api/src/audit/outbox.ts`), as `grc_writer`, in `org-<orgId>`. The change and its audit entry land in one Neo4j transaction, and the worker's relay copies the entry to Postgres within 5 s.
+  - Reads go through `GraphService.readAs(orgId, role, clearance, fn, { timeoutMs })`. That runs as the role × clearance read-only account, so Neo4j itself hides record types the role can't view and records above the clearance, and it hides every link with a hidden end. That's the second check D45.3 and D59 ask for.
+  - **One exception, the "own" cells:** `packages/api/src/graph/privileges.ts` gives the `control_owner` accounts no MATCH on `Control`, because a shared account can't know who owns what. So a Control Owner's control reads run as the writer, always with `owner = <their user ID>` **and** `sensitivity IN <labels at or below their clearance>` in the query.
+  - Never pass Cypher with `USE`, and never change Neo4j privileges or accounts (D131, D144, D176).
+- **Record properties in Neo4j (D68, D69, D73):**
+  - The node labels are `Asset`, `Risk`, `Control`, `Policy` and `Incident`.
+  - Every record has these properties:
+    - `id`: a lowercase UUID, the internal ID and the same one Postgres uses.
+    - `number`: the on-screen number, for example `RSK0001014`.
+    - `sourceIds`: a list of strings, empty for records made by hand.
+    - `name`.
+    - `sensitivity`: the D51 label. The query accounts filter on this exact property name, and a node without it is invisible.
+    - `status`: `active` or `retired`.
+    - `owner`: a user ID.
+    - `version`: an integer that starts at 1 and goes up by 1 on every change.
+    - `createdAt`, `createdBy`, `updatedAt` and `updatedBy`.
+    - `origin`: `manual`, `import` or `ai`. S1 only makes `manual` records.
+    - `nameEmbedding`: a list of 1024 floats. S1 never sets it and never loads bge-m3; S4's embedding step fills it for new and changed records (D203).
+  - Each type's own fields. They're renamed where they would clash with the record's own `status`, `version` or type:
+
+    | Type | Fields |
+    |---|---|
+    | Asset | `assetType`, `criticality`, `dataClassification` |
+    | Risk | `impact`, `likelihood`, `financialExposure` |
+    | Control | `code`, `framework` (plain text until S2), `controlStatus`, `lastTestedDate` |
+    | Policy | `policyVersion`, `effectiveDate` |
+    | Incident | `severity`, `incidentStatus`, `occurredAt` |
+
+  - Links carry `createdAt`, `createdBy` and `origin`. AI links come later (S4) with `sourceDocId`, `chunkId`, `sentence`, `model` and `promptVersion`.
+- **Audit entries (D56, D69, D186):**
+  - Action names are `record.created`, `record.updated`, `record.retired`, `link.created` and `link.removed` (D201, S1-011).
+  - `targetType` is the record type (`asset` … `incident`) or `link`, and `targetId` is the record's `id`.
+  - `before` and `after` hold only the changed fields.
+  - `meta` holds `{ number, label }`. The label is kept so that S7's viewer can hide the contents of entries above the reader's clearance (D186).
+- **No record values in logs (D163, D164):** a log line or error output about a record or an audit entry names only the error type or code and the IDs. It never includes names, field values or before/after contents.
+- **API paths (D47):** the plural type names `/api/v1/assets`, `/api/v1/risks`, `/api/v1/controls`, `/api/v1/policies` and `/api/v1/incidents`. A record the caller can't see (another org, a type their role can't view, a label above their clearance, or a control they don't own) gets **404** `not_found`, the same as a record that doesn't exist, so nothing leaks. A type the role can never view gets 403 on its list route.
+- **Security matrix (D175, D59):** every new route gets its row in `packages/shared/src/access/security-matrix.ts` in the same task. The security reviewer checks the rows and their D59 tests.
+- **Tests (D96, D171, D173, D174, D176, D177):**
+  - Test files belong to the test writer.
+  - Name each file by what it needs: `*.unit.test.ts(x)`, `*.db.test.ts`, `*.stack.test.ts`, or `e2e/*.e2e.ts`. Prefer `unit`.
+  - API route tests run an in-process Nest app against the throwaway databases, which makes them `db`. The M0 examples are in `packages/api/tests/api-keys/`.
+  - Builders' tests run 3 times, all green. Skipped tests count as failures. New tests must agree with the older ones.
+  - Never weaken live privileges, accounts, settings or shared state to prove a test; prove red in the worktree's code only.
+- **Migrations (D183):** S1 is expected to need no Postgres migration. If one turns out to be needed, the brief's "a new migration" applies: never pick its number, because the integrator numbers it at merge.
+- **Hot files (D183):** each brief lists its hot files, and only one task at a time changes each one.
+- **Git (D112, D159):** branch `task/<ID>`, in its own worktree. Commit messages start with the task ID and never mention Claude, Anthropic or AI tooling.
+
+---
+
+Task: S1-001
+
+**Goal:** One shared definition of the five record types and their links, used by the API, the web app and (later) the generators, so every part of the product agrees on fields, allowed values, numbers and which links make sense.
+
+**Decisions:** D66–D69, D73 (fields), D68 (numbers like `RSK0001014`), D51 (default labels, `defaultLabel` already in `packages/shared/src/access/labels.ts`), the spec's ontology (`enterprise_integrated_risk_management_irm_architecture_specification.md` §2), D30 (Zod), D45.2, **D196** (record numbers), **D197** (field values and risk rating), D202 (no Evidence or AuditFinding here), D203 (no embeddings). Read the S1 shared notes.
+
+**The user's answers this task uses:**
+- **Numbers (D196):** `NUMBER_PREFIX` is `{ risk: 'RSK', asset: 'AST', control: 'CTL', policy: 'POL', incident: 'INC' }`, followed by 7 digits. Counting is per org and per type and starts at 1001 (`RSK0001001`); S1-003 owns the counter. `formatNumber` itself still accepts any n from 1 to 9,999,999.
+- **Values (D197).** Stored values are lowercase, with `_` between words; the web shows the plain words:
+  - `RISK_SCALE = [1, 2, 3, 4, 5]` for `impact` and `likelihood`. `riskRating` gives `score = impact × likelihood` and the band `low` for 1–4, `medium` for 5–9, `high` for 10–16 and `critical` for 17–25.
+  - `financialExposure`: a whole number of dollars (no cents), not negative.
+  - `ASSET_TYPES = ['server', 'application', 'database', 'network_device', 'cloud_service', 'endpoint']`.
+  - `CRITICALITIES = ['low', 'medium', 'high', 'critical']`.
+  - `CONTROL_STATUSES = ['not_implemented', 'planned', 'implemented']`.
+  - `INCIDENT_SEVERITIES = ['low', 'medium', 'high', 'critical']`.
+  - `INCIDENT_STATUSES = ['new', 'investigating', 'contained', 'resolved', 'closed']`.
+
+**Hot files:** `packages/shared/src/index.ts`.
+
+**Files:**
+- Create: `packages/shared/src/records/types.ts` (the five record types, `RecordKind = 'asset' | 'risk' | 'control' | 'policy' | 'incident'`, and the plural API names), `schemas.ts`, `values.ts`, `numbers.ts`, `rating.ts`, `links.ts` and `index.ts`.
+- Modify: `packages/shared/src/index.ts`, to export `./records/index.js`.
+
+**Interfaces (produces), exact names:**
+- `RECORD_KINDS`, `RecordKind`, `RECORD_PATHS: Record<RecordKind, 'assets'|'risks'|'controls'|'policies'|'incidents'>`, and `NODE_LABELS: Record<RecordKind, 'Asset'|'Risk'|'Control'|'Policy'|'Incident'>`.
+- Per kind, three schemas:
+  - `createSchemas[kind]`: the input to create a record. It has `name`, an optional `owner`, an optional `label` and the type's own fields. The server sets `id`, `number`, `status`, `version` and the timestamps, so they aren't in it.
+  - `updateSchemas[kind]`: every editable field optional, plus a required `version: number`.
+  - `recordSchemas[kind]`: the full record as the API returns it. It has the common fields from the shared notes, with `label` (the API's name for `sensitivity`), plus the type's own fields.
+- The D197 value lists above, as `as const` arrays with their types: `ASSET_TYPES`, `CRITICALITIES`, `CONTROL_STATUSES`, `INCIDENT_SEVERITIES`, `INCIDENT_STATUSES`, `RISK_SCALE` (the allowed impact and likelihood numbers). `dataClassification` uses `LABELS`.
+- `formatNumber(kind, n: number): string`, `parseNumber(text): { kind, n } | null`, `NUMBER_PREFIX: Record<RecordKind, string>` and `FIRST_NUMBER = 1001` (D196).
+- `riskRating(impact, likelihood): { score: number; band: 'low'|'medium'|'high'|'critical' }` (D197).
+- `LINK_TYPES`: the spec's six, as `{ type, from, to }`:
+  - `HOSTS` and `RUNS`: asset → asset.
+  - `EXPOSED_TO`: asset → risk.
+  - `MITIGATED_BY`: risk → control.
+  - `GOVERNED_BY`: control → policy.
+  - `IMPACTS`: incident → asset.
+  - `EXPOSES`: incident → risk.
+- `isAllowedLink(type, fromKind, toKind): boolean`, and `linkTypesBetween(fromKind, toKind)`.
+
+**Pass criteria:**
+1. Each create schema accepts a valid record and refuses, with a field-named message:
+   - a missing or empty `name`;
+   - an unknown value from a list;
+   - an impact or likelihood outside 1–5 or not a whole number (D197);
+   - a `financialExposure` that is negative or has cents (D197);
+   - an unknown field;
+   - a label that isn't one of `public`, `internal`, `confidential` or `restricted`.
+2. Each update schema needs `version` (a whole number of at least 1), and refuses `id`, `number`, `status` and `version`-less bodies.
+3. `formatNumber('risk', 1014)` is `RSK0001014`, and `formatNumber` gives `AST`, `CTL`, `POL` and `INC` for the other kinds (D196). It pads to 7 digits and refuses numbers below 1 or above 9,999,999. `parseNumber` round-trips every kind and returns `null` for anything else (a wrong prefix, lowercase, 6 or 8 digits). `FIRST_NUMBER` is 1001.
+4. `riskRating` gives the D197 score and band for every pair on the scale: a table-driven test of all 25 pairs, including the scores on each side of a band edge (4 and 5, 9 and 10, 16 and 20; no pair makes 17). It refuses numbers off the scale.
+5. `isAllowedLink` is true for exactly the six rows above in their stated direction. It's false for the reverse direction, for unknown types and for unknown kinds.
+6. Nothing in `packages/shared/src/records/` imports from `packages/api` or `packages/web`, or touches the network, the filesystem or the environment.
+
+**Tests to write (kind `unit`):** `packages/shared/tests/records/schemas.unit.test.ts`, `numbers.unit.test.ts`, `rating.unit.test.ts` and `links.unit.test.ts`. The existing `packages/shared/tests/access/*.unit.test.ts` must still pass. Security-matrix rows: none (no route; the five record types already have rows).
+
+**Test command:** `pnpm --filter shared test -- records`
+
+---
+
+Task: S1-002
+
+**Goal:** Every org's graph database carries the D73 constraints and indexes. Numbers and IDs are then unique, list filters are fast, and duplicate matching (S4) has its full-text and vector indexes ready.
+
+**Decisions:** D73 (the index list), D70 (full-text and vector indexes in Neo4j do the duplicate matching), D71 (1024 dimensions, cosine), D22 (one database per org), D45.5 (re-runs are safe), D133 (org provisioning), D170 (Mac scripts swap the database host themselves), D57, D176. Read the S1 shared notes.
+
+**Hot files:** `package.json` (root; adds the `graph:schema` script).
+
+**Files:**
+- Create: `packages/api/src/graph/org-schema.ts`, with two exports:
+  - `orgSchemaStatements(): string[]`: pure, and returns every statement in order.
+  - `ensureOrgSchema(graph, orgId): Promise<void>`: runs them as `grc_admin` or `grc_writer` in `org-<orgId>`, every statement `IF NOT EXISTS`.
+- Create: `packages/infra/scripts/graph-schema.ts` (root script `graph:schema`). It applies `ensureOrgSchema` to every existing org, finding the orgs the way the outbox relay does (`AuditService.orgIds()`), and uses the D170 host swap from `org-script-env.ts` or `host-address.ts`. It prints only org IDs and OK or failed per org, never values (D164).
+- Modify: `packages/api/src/identity/provision-org.ts`, to call `ensureOrgSchema` right after `createOrgDatabase`. A re-run is still safe.
+- Modify: `package.json` (root script only).
+
+**What the statements create.** This covers all nine record labels from `NODE_RECORD_TYPES` in `packages/api/src/graph/privileges.ts`, so S2 and S3 don't need to touch this file for their types:
+1. A uniqueness constraint on `id`, and one on `number`, for each of the nine labels.
+2. Range indexes on these fields:
+   - `status`, `sensitivity` and `owner` on each label;
+   - `assetType` on Asset;
+   - `framework` on Control and on Requirement.
+3. One full-text index, `record_names`, over `name` and `sourceIds` on all nine labels.
+4. Vector indexes on `nameEmbedding`, one per label, with 1024 dimensions and cosine similarity.
+5. A relationship property index on `sourceDocId` for each of the 10 link types: HOSTS, RUNS, EXPOSED_TO, MITIGATED_BY, GOVERNED_BY, IMPACTS, EXPOSES, SATISFIES, MAPS_TO, SUPPORTS and CONCERNS.
+6. Index and constraint names are fixed and readable, for example `asset_id_unique`, so re-runs match.
+
+**Pass criteria:**
+1. `orgSchemaStatements()` returns the statements above, each with `IF NOT EXISTS`, and none contains `USE` (D144).
+2. After `ensureOrgSchema` on a throwaway org database, `SHOW CONSTRAINTS` and `SHOW INDEXES` list every expected name, and each one is `ONLINE`.
+3. Running it twice changes nothing and throws nothing.
+4. Two nodes with the same label and the same `number` (or `id`) are refused by the database.
+5. `provisionOrg` gives a new org the schema, and a re-run of `provisionOrg` stays safe. The existing provision tests still pass.
+6. `pnpm graph:schema` applies the schema to every org and exits 0. With one org's database missing, it names that org as failed, carries on with the others, and exits non-zero.
+7. The query accounts' privileges don't change. The M0-005 `graph-accounts` tests and `pnpm test:env`'s DENY check still pass.
+
+**Tests to write:**
+- `packages/api/tests/org-schema/statements.unit.test.ts` (unit): criterion 1.
+- `packages/api/tests/org-schema/ensure.db.test.ts` (db, a throwaway Neo4j database): criteria 2–5.
+- `packages/infra/tests/graph-schema/graph-schema-script.db.test.ts` (db): criterion 6. Use a throwaway org only; never drop or break a real org's database.
+- Security-matrix rows: none (no route, no new record type).
+
+**Test command:** `pnpm --filter api test -- org-schema` (the builder also runs `pnpm --filter infra test -- graph-schema`)
+
+---
+
+Task: S1-003
+
+**Goal:** The records service. It creates, reads, lists, updates and retires the five record types with every rule the plan sets, and puts each change and its audit entry in one Neo4j transaction.
+
+**Decisions:** D26, D37 (outbox), D45.3, D45.4, D45.6 (our code decides), D50 (role table; "own" means assigned to that user), D51 (labels and clearance; defaults; editors may raise a label, only an Admin may lower one), D59, D68 (numbers), D69 (version check, retire not delete, history in the audit trail), D73. Also **D196** (numbers start at 1001 per org and type), **D197** (risk rating), **D198** and **D199**. Read the S1 shared notes.
+
+**The user's answers this task uses:**
+- **D198:** a create or update whose label is above the caller's own clearance is refused with 403 `forbidden`, and nothing is saved. This holds for every role, Admin included, and for API keys (their clearance is the key's).
+- **D199:** a Control Owner (`edit_own` on controls) may update and retire only the controls whose `owner` is their user ID. Creating a control needs the full `edit` cell (Admin, Compliance Manager); a Control Owner's create is 403.
+- **D196:** the first record of each type in each org gets 1001 (`RSK0001001`), then 1002, and so on.
+
+**Hot files:** `packages/api/src/records/records.module.ts`.
+
+**Files:**
+- Create: `packages/api/src/records/records.service.ts`, `packages/api/src/records/record-numbers.ts`, `packages/api/src/records/record-queries.ts` (the Cypher; the list and filter building), and `packages/api/src/records/owners.ts` (checks an owner is a member of the org).
+- Modify: `packages/api/src/records/records.module.ts`, to provide `RecordsService` and export it.
+
+**Interfaces:**
+- Consumes:
+  - `AuditOutbox.withAuditedWrite` and `GraphService.readAs` / `read`.
+  - `withOrgContext` and the `member` table (`packages/api/src/identity/schema.ts`).
+  - From `@grc/shared`: `can`, `isVisible`, `defaultLabel`, `canChangeLabel`, and S1-001's schemas, `formatNumber` and `riskRating`.
+- Produces:
+  - `RecordsService`, where `Caller = { orgId, userId, role, clearance, apiKeyId? }`:
+    - `create(caller, kind, input): Promise<RecordOut>`
+    - `get(caller, kind, id): Promise<RecordOut>`
+    - `list(caller, kind, query): Promise<Paged<RecordOut>>`
+    - `update(caller, kind, id, input): Promise<RecordOut>`
+    - `retire(caller, kind, id, version): Promise<RecordOut>`
+  - A risk's `RecordOut` includes `rating: { score, band }`.
+  - Errors: `ApiError(404,'not_found')`, `ApiError(403,'forbidden')`, `ApiError(409,'stale_version', 'This record changed since you opened it. Reload it and try again.')`, and `ApiError(400,'validation_failed')`.
+  - `RECORD_READ_TIMEOUT_MS = 5000`.
+
+**Pass criteria:**
+1. **Create:**
+   - Gives a new lowercase UUID, and the next number for that org and type, taken from a counter node (`:RecordCounter {kind}`) in the same write transaction. The first number is `FIRST_NUMBER` (1001, D196). 50 creates at once in one org give 50 different numbers with no gaps. Two orgs count separately, and so do two types.
+   - Sets `status` `active` and `version` 1.
+   - Sets the label from `defaultLabel` unless one is given. The label is saved as `sensitivity`.
+   - Sets `owner` to the caller unless one is given. The owner must be a member of the same org, or the call gets 400. An API-key caller must name an owner.
+2. **Permissions:**
+   - Create, update and retire need the D50 cell `edit` for that type.
+   - For `edit_own` (a Control Owner on controls), update and retire are allowed only on controls they own. Create is 403 (D199).   - Anything else gets 403. For a record the caller can't see, it's 404.
+3. **Reads:**
+   - `get` and `list` run through `readAs` with the caller's role and clearance, except the Control Owner's control reads (see the shared notes).
+   - A record hidden by type, label, org or ownership is 404 on `get`, and never appears in `list`. `list`'s `total` counts only visible records.
+4. **List:**
+   - It pages with `pageQuerySchema`.
+   - It filters by `status` (`active` by default, or `retired` or `all`), `owner` and `label`, by each type's list fields (`assetType`, `criticality`, `controlStatus`, `framework`, `severity`, `incidentStatus`, and the risk `band`), and by `q`, a case-insensitive "contains" on name or number.
+   - It sorts by `number` (the default), `name` or `updatedAt`, and by `score` for risks, ascending or descending.
+   - An unknown filter or sort field is 400.
+5. **Update:**
+   - A body whose `version` isn't the stored one gets 409 `stale_version`, and nothing changes.
+   - Otherwise only the given fields change, `version` goes up by 1, and `updatedAt` and `updatedBy` are set. Two updates at once with the same version: exactly one wins, and the other gets 409.
+6. **Labels:**
+   - A label change follows `canChangeLabel` (raise: editors; lower: Admin only).
+   - A label above the caller's own clearance is refused on create and on update, for every role (D198).
+   - A refused label is 403, and nothing changes.
+7. **Retire:**
+   - Sets `status` `retired`, with the same version check. Nothing is ever deleted (D69).
+   - A retired record still opens with `get`, and appears in `list` only with `status=retired` or `all`.
+8. **Audit:**
+   - Every create, update and retire writes its entry through `withAuditedWrite` in the same transaction, with the action names, targets, before/after (changed fields only) and `meta { number, label }` from the shared notes.
+   - If the transaction fails, neither the change nor its entry is kept.
+   - The entry reaches the Postgres audit trail through the existing relay, with `actorType` `user` or `api_key`.
+9. **Nothing leaks into logs:** a failing write logs only the error type or code and the IDs (D163, D164).
+
+**Tests to write (kind `db`: throwaway Postgres and Neo4j databases, schema from S1-002's `ensureOrgSchema`):** `packages/api/tests/records-service/*.db.test.ts`. They cover each criterion, including:
+- the 50-at-once numbering;
+- the two-writers version race;
+- every role × kind × action from `ROLE_TABLE` at the service level;
+- every clearance × label pair on `get` and `list`;
+- an org pair (a record of org B is 404 from org A);
+- Control Owner own and not-own, and a Control Owner's create refused (D199);
+- every clearance × label pair on create and on a label change: allowed at or below the caller's clearance, 403 above it (D198);
+- the first number of each type in a fresh org is `…0001001` (D196).
+
+A unit test for the query building (`record-queries.ts`) is welcome as `*.unit.test.ts`. Security-matrix rows: none (no route in this task).
+
+**Test command:** `pnpm --filter api test -- records-service`
+
+---
+
+Task: S1-004
+
+**Goal:** The record routes. People and machines can list, open, create, edit and retire the five record types through `/api/v1`, with every D59 proof in place. The owner picker also gets its people list.
+
+**Decisions:** D30, D47 (paging, filters, sorting, one error format), D50, D51, D54 (API keys: one org, one role), D55 (org wall), D59, D69, D163 and D164 (SF-006: the error handler must not log audit or record values once routes write them), D175, D176. Read the S1 shared notes.
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/records/records.module.ts`.
+
+**Files:**
+- Create: `packages/api/src/records/records.controller.ts`. It makes one controller per kind, from a small factory (for example `recordsController(kind)`), so each route has a fixed `@Requires(<kind>, 'view'|'edit')`. Also create `packages/api/src/identity/people.controller.ts`.
+- Modify:
+  - `packages/api/src/records/records.module.ts` (the controllers);
+  - `packages/api/src/identity/identity.module.ts` (the people controller);
+  - `packages/api/src/access/access.guard.ts` and `requires.decorator.ts` (the "own" pass-through below);
+  - `packages/api/src/common/errors.ts` (log only the type, code and reference ID for unexpected errors);
+  - `packages/shared/src/access/security-matrix.ts` (the new rows).
+
+**Routes.** For each kind, `P` is its plural path:
+
+| Route | Needs | Body or query | Answer |
+|---|---|---|---|
+| `GET /api/v1/P` | `view` | the S1-003 list query | `Paged<Record>` |
+| `GET /api/v1/P/:id` | `view` | | 404 when not visible |
+| `POST /api/v1/P` | `edit` | the create schema | 201 with the record |
+| `PATCH /api/v1/P/:id` | `edit` | the update schema, with `version` | the record, or 409 `stale_version` |
+| `POST /api/v1/P/:id/retire` | `edit` | `{ version }` | the record |
+
+`GET /api/v1/people` needs any signed-in user. It's paged and returns the caller's org members as `{ id, name, role }` only, with no email and no clearance, for the owner picker.
+
+**The "own" cells:** today `AccessGuard` calls `can(role, subject, action)` with no owner, so a Control Owner is refused on every control route. Extend the requirement with an opt-in flag, for example `Requires('control', 'edit', { own: true })`, set on the control routes only:
+- If the cell is `edit_own` and the flag is on, the guard lets the request through and sets `request.ownOnly = true`.
+- The service then applies the ownership rule, 404 on anything not owned.
+- Every other cell behaves exactly as before. The M0 `access-guard` tests must still pass unchanged.
+
+**Pass criteria:**
+1. The 25 record routes and `GET /api/v1/people` exist under `/api/v1`, are in the OpenAPI document with their Zod schemas, and each has its row in `SECURITY_MATRIX`:
+   - The record routes: access `{ subject: <kind>, action: 'view'|'edit' }`, `orgWalled: true`, `labels: true`.
+   - People: `'any signed-in'`, `orgWalled: true`, `labels: false`.
+   - The TEST-003 completeness test passes.
+2. **D59, every role cell:** for each of the 7 roles × 5 kinds × 5 routes, the answer matches `ROLE_TABLE`: allowed, 403, or for "own", allowed only on owned controls (update and retire), with `POST /api/v1/controls` 403 for a Control Owner (D199). A create or update with a label above the caller's clearance is 403 (D198).
+3. **D59, every org pair:** with 3 orgs, for each ordered pair (A, B), A's users get 404 on B's record IDs for every route, and B's records never appear in A's lists.
+4. **D59, every clearance × label pair:** for 4 × 4, `GET :id` is 200 or 404, and `GET` list includes or leaves out the record as `isVisible` says.
+5. API keys follow the same rules with their one role and one org (D54). A key of org A can't reach org B.
+6. Stale save gives 409 `stale_version` in the D47 format, and the record is unchanged. Retire keeps the record; it's never deleted.
+7. After a create, update and retire, the Postgres audit trail has the three entries with `meta { number, label }` within 5 s (relay).
+8. **SF-006:** an unexpected error on a record route logs only the error type or code, the reference ID, the method and the URL. A test forces a failure with a sentinel record name and checks that the sentinel isn't in the log (D163, D164).
+9. Lint and type checks are clean. Existing tests (`access-guard`, `api-keys`, `security-matrix`, `platform`) still pass.
+
+**Tests to write:**
+- `packages/api/tests/records-api/*.db.test.ts` (db, in-process Nest app like `packages/api/tests/api-keys/`): criteria 2–8. Generate the role, org-pair and clearance × label cases from `ROLE_TABLE`, `ROLES` and `LABELS` rather than writing them out, so the matrix can't drift.
+- `packages/api/tests/records-api/guard-own.unit.test.ts` (unit): the guard's `own` flag, with a fake execution context.
+- New security-matrix rows: the 25 record routes and `GET /api/v1/people` (list them in the hand-off).
+
+**Test command:** `pnpm --filter api test -- records-api`
+
+---
+
+Task: S1-005
+
+**Goal:** Links between records. A person can say "this risk is mitigated by that control", see a record's related records, and open the dependency map around an asset. The ontology and the visibility rules are enforced by our code and by Neo4j.
+
+**Decisions:** the spec's six links (S1-001's `LINK_TYPES`), D45.3, D45.4, D51 (a link is visible only if both ends are, `isLinkVisible`), D59, D69 (links record who and when; history in the audit trail), D73. Also **D200** (who may add a link) and **D204** (the asset map). Removing links isn't part of this task: it's S1-011 (D201), which builds on this task's rule function and service. Read the S1 shared notes.
+
+**The user's answers this task uses:**
+- **D200:** a person may add a link when they can **edit either** of the two records (the D50 `edit` cell for that record's type, or `edit_own` on a control they own) **and** can **see both** (type, org, clearance, and for a Control Owner, ownership of any control end). Export the rule as a pure function, `canLinkRecords(caller, from, to): boolean` in `packages/shared/src/records/link-rules.ts` (exported from `packages/shared/src/records/index.ts`), where `caller` is `{ userId, role, clearance }` and `from` and `to` are `{ kind, label, owner }`. It uses `can` and `isVisible`. The service, S1-011 and the web (S1-008, S1-012) all use this one function.
+- **D204:** the map is centred on one asset. `depth` is 1, 2 or 3 and defaults to 2. It follows HOSTS and RUNS in both directions. It stops at 200 assets (the centre included) and then returns `truncated: true`. `MAP_DEFAULT_DEPTH = 2`, `MAP_MAX_DEPTH = 3` and `MAP_MAX_NODES = 200` live in `@grc/shared` (`packages/shared/src/records/links.ts`, added by this task) so S1-009 uses the same numbers.
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/records/records.module.ts`.
+
+**Files:**
+- Create: `packages/api/src/records/links.service.ts`, `packages/api/src/records/links.controller.ts`, `packages/api/src/records/asset-map.ts` and `packages/shared/src/records/link-rules.ts`.
+- Modify: `records.module.ts`, `security-matrix.ts`, `packages/shared/src/records/links.ts` (the three map constants only) and `packages/shared/src/records/index.ts` (the new export).
+
+**Routes:**
+- `POST /api/v1/links`, with body `{ type, fromId, toId }`, answers 201 with the link. Access is `'any signed-in'`: the service does the checks, because the rule depends on both ends.
+- `GET /api/v1/P/:id/links` for each of the five kinds, with access `{ subject: kind, action: 'view' }`. It returns `{ items: [{ type, direction: 'out'|'in', other: { id, kind, number, name, label, status } , createdAt, createdBy }] }`.
+- `GET /api/v1/assets/:id/map?depth=<n>`, with access `{ subject: 'asset', action: 'view' }`. It returns `{ nodes: [{ id, number, name, assetType, criticality, label }], edges: [{ type: 'HOSTS'|'RUNS', fromId, toId }], truncated: boolean }`, with the D204 depth (1–3, default 2) and cap (200 assets).
+
+**Pass criteria:**
+1. **Creating a link:**
+   - Both ends must exist in the caller's org and be visible to the caller. Otherwise it's 404, the same answer whichever end is missing.
+   - `isAllowedLink(type, fromKind, toKind)` must hold, or it's 400 `link_not_allowed`. So must `canLinkRecords` (D200: can edit either end), or it's 403. For example, a Risk Manager may link their risk to a control they can only view; a Viewer may link nothing.
+   - A link to itself is 400. The same type, from and to twice is 409 `link_exists`.
+2. **What a link saves:** `createdAt`, `createdBy` and `origin: 'manual'`, plus one `link.created` audit entry in the same transaction. The entry has `meta { type, fromNumber, toNumber, label }`, where the label is the higher of the two ends' labels.
+3. **Listing links:**
+   - `GET …/:id/links` runs through `readAs`, so a link with a hidden end is never returned, not even as a count.
+   - The Control Owner path applies ownership and label to both ends.
+   - The record itself not visible is 404.
+4. **The map:**
+   - It follows only HOSTS and RUNS, both directions, from the given asset, to the chosen depth (1–3; 2 when none is given).
+   - It returns only visible assets and edges between them.
+   - It stops at 200 assets with `truncated: true`, and `truncated` is `false` whenever nothing was left out. The same data gives the same nodes every time (D45.8).
+   - A depth of 0, 4, a fraction or text is 400.
+5. **D59:** every role × link route (from `ROLE_TABLE`), an org pair (A can't link to, list or map B's records, even by guessing IDs), and every clearance × label pair on list and map. That includes a link between a visible and a hidden record, which is invisible to the lower-clearance user.
+6. The security-matrix rows for the 7 new routes are there, and the TEST-003 completeness test passes.
+
+**Tests to write:**
+- `packages/api/tests/links/*.db.test.ts` (db): criteria 1–5.
+- `packages/api/tests/links/rules.unit.test.ts` (unit): `canLinkRecords` for every role × pair of kinds from `ROLE_TABLE` (D200), including Control Owner own and not-own control ends, and the ontology check, with no databases.
+- `packages/api/tests/links/map-limits.db.test.ts` (db): the default depth, each depth 1–3, and a chain or star larger than 200 assets giving exactly 200 nodes and `truncated: true` (D204).
+- New security-matrix rows: `POST /api/v1/links`, the five `GET /api/v1/P/:id/links` routes, and `GET /api/v1/assets/:id/map`.
+
+**Test command:** `pnpm --filter api test -- links`
+
+---
+
+Task: S1-006
+
+**Goal:** The reusable web pieces for records, and the first real screen, the **Risk register**. It has to look finished (D1): a ServiceNow-style list with the rating, a record page, and create and edit forms.
+
+**Decisions:** D1, D2 (ServiceNow IRM look), D7, D27 (screen 2), D30 (typed client from OpenAPI), D33 (TanStack Router, Query, Table; React Hook Form; shadcn/ui), D47 (paging, filters, sorting), D50 and D51 (the web only hides buttons; the API decides, D7), D69 (stale-save message). Read the S1 shared notes.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated), `packages/web/src/router.tsx`, `packages/web/package.json` and `pnpm-lock.yaml` (adds `@tanstack/react-table`).
+
+**Files:**
+- Regenerate `packages/web/src/api/client.ts` with `pnpm gen:api-client`, after S1-004's routes are on `main`.
+- Create in `packages/web/src/features/records/`:
+  - `RecordTable.tsx`: server-side paging, sorting, filters and search, with the filters in the URL search params.
+  - `RecordPage.tsx`: the detail view.
+  - `RecordForm.tsx`: React Hook Form with the S1-001 Zod schemas.
+  - `LabelBadge.tsx`, `OwnerPicker.tsx` (from `GET /api/v1/people`) and `RetireDialog.tsx`.
+  - `useRecords.ts`: TanStack Query hooks around the client.
+  - `permissions.ts`: uses `can` from `@grc/shared` with the signed-in user's role and ownership.
+  - `risks/RiskRegister.tsx`, `risks/RiskPage.tsx` and `risks/RatingBadge.tsx`.
+- Modify: `packages/web/src/router.tsx`. `/risks` becomes the register, and it adds `/risks/new` and `/risks/$id`. The other screens stay on `ScreenPage` until S1-007.
+
+**Pass criteria:**
+1. The register shows these columns: number, name, owner name, impact, likelihood, rating (score and a coloured band from `riskRating`), label and updated. It pages, sorts and filters through the API: by band, owner, label, status, and a search on name or number. The filters survive a page reload (URL).
+2. The empty state keeps the M0 wording. The loading and error states show the API's message and reference ID.
+3. The record page shows every field, the number as its title, the label badge, and owner and dates. "Edit" and "Retire" show only when `can(role, 'risk', 'edit')`. The API's 403 or 404 still show a clear message if the buttons were wrong.
+4. **Create and edit forms:**
+   - They validate with the shared schemas, showing field errors before sending.
+   - The label chooser offers only the changes `canChangeLabel` allows, and never a label above the person's own clearance (D198).
+   - The owner picker lists org members.
+   - Save sends `version`.
+5. **A 409 `stale_version`** shows "This record changed since you opened it", with a Reload button that loads the latest version. The person's typed changes are not silently thrown away: the message says they need to re-apply them.
+6. Retire asks for confirmation, sends `version`, and the record drops out of the default list.
+7. A 404 on `/risks/$id` shows "This record doesn't exist or you can't see it", the same for every cause.
+8. All calls go through the generated client with relative `/api/v1` URLs (the M0-015 rule).
+
+**Tests to write (kind `unit`, Vitest + Testing Library, API mocked at the client boundary like `packages/web/tests/auth/helpers.tsx`):** `packages/web/tests/records/*.unit.test.tsx`, covering criteria 1–8, with at least one test per role class: an editor, a viewer, and a role with no risk access, which isn't in D50 since every role can view risks, so use a mocked 403. Security-matrix rows: none (web only).
+
+**Test command:** `pnpm --filter web test -- records`
+
+---
+
+Task: S1-007
+
+**Goal:** The Controls, Policies, Assets and Incidents screens, built on S1-006's kit, so all five record screens work and look alike.
+
+**Decisions:** D27 (screens 3–6), D50 (Incidents: no access for Control Owner and Viewer; Controls: Control Owner sees and edits only their own), D51, D69, D7. Read the S1 shared notes and S1-006's brief (the kit it builds).
+
+**Hot files:** `packages/web/src/router.tsx`.
+
+**Files:**
+- Create in `packages/web/src/features/records/`: `controls/`, `policies/`, `assets/` and `incidents/`. Each holds a list and a page component that configure the kit: columns, filters and form fields.
+- Modify: `packages/web/src/router.tsx` (`/controls`, `/policies`, `/assets` and `/incidents`, each with `/new` and `/$id`).
+- Modify the kit only where a type needs something the risk register didn't, and say what in the hand-off.
+
+**Pass criteria:**
+1. **Each list's columns and filters:**
+   - Controls: number, code, name, framework, `controlStatus`, owner, last tested. Filters: `controlStatus`, framework, owner.
+   - Policies: number, name, `policyVersion`, effective date, owner.
+   - Assets: number, name, `assetType`, criticality, data classification, owner. Filters: `assetType`, criticality.
+   - Incidents: number, name, severity, `incidentStatus`, occurred at. Filters: severity, `incidentStatus`.
+2. The forms carry each type's own fields with the S1-001 value lists.
+3. A Control Owner's Controls list shows only their controls, with a note saying so, and they can edit those. They see no "New control" button (D199: creating a control needs full Edit, Admin or Compliance Manager).
+4. A Control Owner or a Viewer who opens Incidents gets the "you don't have access" screen: the API answers 403, and the nav item stays visible but leads to that message. Other roles see the list.
+5. The stale-save, retire, 404 and label rules from S1-006 work on all four screens.
+
+**Tests to write (kind `unit`):** `packages/web/tests/record-screens/*.unit.test.tsx`, covering criteria 1–5 with the API mocked. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- record-screens`
+
+---
+
+Task: S1-008
+
+**Goal:** Related records on every record page, and a way to add a link, so the risk register shows "the controls that treat it" (the M0 screen summary) and each record shows its neighbours.
+
+**Decisions:** the spec's six links, D51 (a link is visible only if both ends are), D50, **D200** (who may add a link: anyone who can edit either record and can see both; use `canLinkRecords` from `@grc/shared`), D7. The "Remove" action on each row comes later, in S1-012 (D201); leave room for a per-row action but don't build it. Read the S1 shared notes and S1-005's brief (the routes).
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated with S1-005's routes).
+
+**Files:**
+- Regenerate `packages/web/src/api/client.ts` (`pnpm gen:api-client`).
+- Create: `packages/web/src/features/records/links/RelatedRecords.tsx` and `packages/web/src/features/records/links/AddLinkDialog.tsx`.
+- Modify: the five record page components, to show `RelatedRecords`.
+
+**Pass criteria:**
+1. Each record page shows its links grouped with plain titles:
+   - Risk: "Assets exposed to this risk" (EXPOSED_TO in), "Controls that treat this risk" (MITIGATED_BY out), "Incidents that exposed this risk" (EXPOSES in).
+   - Control: "Risks it treats", "Policies that govern it".
+   - Policy: "Controls it governs".
+   - Asset: "Hosts / Hosted by", "Runs / Runs on", "Risks it is exposed to", "Incidents that impacted it".
+   - Incident: "Assets impacted", "Risks exposed".
+   - Each row shows the number (a link to that record's page), name, label and status.
+2. Only what `GET …/:id/links` returns is shown. There's no count or placeholder for hidden links.
+3. "Add link" shows only to people who can edit this record, or who can edit some record type this one may link to (D200). Each other end offered must pass `canLinkRecords`. The dialog offers only the link types `linkTypesBetween` allows from this record, and searches the other end by name or number through that type's list route. Only records the person can see appear.
+4. The API's `link_not_allowed`, `link_exists`, 403 and 404 answers show clear messages. A successful add refreshes the group.
+
+**Tests to write (kind `unit`):** `packages/web/tests/record-links/*.unit.test.tsx`, covering criteria 1–4 with the API mocked. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- record-links`
+
+---
+
+Task: S1-009
+
+**Goal:** The asset dependency map (screen 5, "with a dependency map"): a picture of what hosts and runs what around one asset.
+
+**Decisions:** D27 (screen 5), D33 (React Flow), D51 (only visible assets and links), D45.8, and **D204** (the map's shape: centred on one asset, opened from its page, depth 1–3 with 2 by default, capped at 200 assets with a notice). Use `MAP_DEFAULT_DEPTH`, `MAP_MAX_DEPTH` and `MAP_MAX_NODES` from `@grc/shared` rather than writing the numbers. Read the S1 shared notes and S1-005's brief (`GET /api/v1/assets/:id/map`).
+
+**Hot files:** `packages/web/package.json` and `pnpm-lock.yaml` (adds `@xyflow/react`, exact version pinned).
+
+**Files:**
+- Create: `packages/web/src/features/records/assets/DependencyMap.tsx` and `packages/web/src/features/records/assets/map-layout.ts`. The layout is pure: nodes and edges in, positions out.
+- Modify: `packages/web/src/features/records/assets/AssetPage.tsx` (a "Dependency map" tab or section).
+
+**Pass criteria:**
+1. The map shows the asset in the centre and its HOSTS and RUNS neighbours to the chosen depth. The depth picker offers 1, 2 and 3, starts at 2, and asks the API again when changed.
+2. Nodes show number, name and type, with a mark for criticality. Edges are labelled HOSTS or RUNS with direction arrows.
+3. Clicking a node opens that asset's page.
+4. With `truncated: true`, a notice says the map was cut short at 200 assets. With `truncated: false` there's no notice.
+5. An asset with no links shows a friendly empty state. An API error shows the message and reference ID.
+6. The layout is the same for the same input (D45.8), and nodes don't overlap for up to 200 assets (`MAP_MAX_NODES`).
+
+**Tests to write (kind `unit`):**
+- `packages/web/tests/asset-map/*.unit.test.tsx`: criteria 1–5, with the API mocked. React Flow may need jsdom stubs (ResizeObserver); put them in the test setup.
+- `map-layout.unit.test.ts`: criterion 6.
+- Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- asset-map`
+
+---
+
+Task: S1-010
+
+**Goal:** The S1 checkpoint can be demonstrated. Each demo org has realistic records and links, the demo steps are written out, and browser tests walk the main journeys through the front door.
+
+**Decisions:** D114 (clickable demo with written steps), D115, D172 (browser tests before a push when the web, API or Caddy change; the full set at checkpoints), D45.5 (re-runs are safe), D45.8 (repeatable), D170 (Mac scripts swap the database host), D57 (passwords only from `.env`), D164, D176. Read the S1 shared notes.
+
+**Depends on:** S1-005, S1-009 and S1-012 (the journeys and demo steps use the finished screens, including link removal).
+
+**Hot files:** none.
+
+**Files:**
+- Modify: `packages/infra/scripts/seed-demo.ts`. After the orgs and users, it adds each org's records and links through `RecordsService` and `LinksService`, so they're audited like any change.
+- Create: `packages/infra/scripts/demo-records.ts`, holding the fixed demo data as plain objects. Each record has a fixed `sourceIds` entry, for example `demo:RSK-01`, so a re-run finds it and adds nothing.
+- Create: `docs/demo/s1.md`.
+
+**Pass criteria:**
+1. **What `pnpm seed:demo` adds:**
+   - About 12 assets, 8 risks, 10 controls, 4 policies and 5 incidents per demo org, with links of all six types.
+   - A spread of labels from `public` to `restricted`, so the demo users' mixed clearances see different lists.
+   - At least 3 controls owned by the org's demo Control Owner.
+   - The two orgs' data differ, so the org wall is visible.
+2. Running `pnpm seed:demo` twice adds nothing the second time: the same record count, numbers and links.
+3. Every demo record and link has its audit entry in Postgres.
+4. **`docs/demo/s1.md`** gives click-through steps:
+   - the Risk Manager's register, rating and filters;
+   - creating a risk and linking a control;
+   - removing a link added by mistake (D201);
+   - the stale-save message in two tabs;
+   - the Control Owner's own controls;
+   - the Viewer's read-only screens;
+   - a low-clearance user missing a restricted risk;
+   - the other org seeing none of it;
+   - an asset's dependency map.
+   It names `pnpm seed:demo` as the source of the logins, and prints no passwords.
+5. **Playwright** (`packages/web/e2e/records.e2e.ts`, through `https://grc.localhost` with the seeded users):
+   - the Risk Manager creates a risk, sees its rating, and links a control;
+   - the Risk Manager links a wrong control to that risk and removes it again, and the link is gone after a reload (D201);
+   - the Viewer sees the register with no Edit button;
+   - the Control Owner sees only their own controls and edits one;
+   - a stale save in two browser contexts shows the message;
+   - a Globex user opening an Acme risk URL gets the "doesn't exist or you can't see it" page;
+   - an internal-clearance user doesn't see a restricted risk.
+
+**Tests to write:**
+- `packages/api/tests/provision/seed-records.db.test.ts` (db): criteria 1–3, on throwaway databases.
+- `packages/infra/tests/demo/s1-demo-doc.unit.test.ts` (unit): criterion 4's steps and that no password appears.
+- `packages/web/e2e/records.e2e.ts` (e2e): criterion 5.
+- Security-matrix rows: none.
+
+**Who runs the browser tests:** they need the new API and web code running behind Caddy. The builder doesn't rebuild the shared stack from its worktree (the stack is started or recreated from the main checkout only). The builder runs the db and unit tests. The **integrator**, after merging, rebuilds and recreates `grc-api`, `grc-worker` and `grc-caddy` with `--no-deps` from the main checkout, runs `pnpm seed:demo`, then `pnpm test:e2e` (D172). A red browser test goes back through the normal chain.
+
+**Test command:** `pnpm --filter api test -- seed-records` (the builder also runs `pnpm --filter infra test -- demo-doc`; the integrator runs `pnpm test:e2e`)
+
+---
+
+Task: S1-011
+
+**Goal:** A person who added a link by mistake can take it away again. The link leaves the graph, and the audit trail keeps a copy of it and says who removed it and when.
+
+**Decisions:** **D201** (removal allowed; the same people who may add; the removal and a copy in the audit trail; action `link.removed`; separate from false-positive handling), **D200** (who may add, so who may remove), D51 (a link is visible only if both ends are), D45.4 and D37 (the change and its audit entry in one step), D56 and D186 (audit `meta` carries the label), D59, D69, D163 and D164 (no values in logs), D175, D176. Read the S1 shared notes and S1-005's brief (the links routes, `canLinkRecords`, the `link.created` entry).
+
+**Depends on:** S1-005 (the links service, controller and `canLinkRecords`).
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`.
+
+**Not in this task:** false-positive handling of AI links (D24, D38, S5), which hides a finding but keeps it in Postgres. S1 makes only manual links, so the tests use manual links. Don't add any rule about a link's `origin`.
+
+**Files:**
+- Create: `packages/api/src/records/link-audit.ts`, with a pure `linkRemovedAudit(link, from, to)`. It returns the audit entry: `action: 'link.removed'`, `targetType: 'link'`, the same `targetId` rule S1-005 uses for `link.created` (so the two entries pair up in the history), `before` holding the copy of the link `{ type, fromId, toId, fromNumber, toNumber, createdAt, createdBy, origin }`, `after: null`, and `meta { type, fromNumber, toNumber, label }` where `label` is the higher of the two ends' labels, as for `link.created`.
+- Modify: `packages/api/src/records/links.service.ts` (add `remove(caller, { type, fromId, toId })`), `packages/api/src/records/links.controller.ts` (the route) and `packages/shared/src/access/security-matrix.ts` (its row).
+
+**Route:** `POST /api/v1/links/remove`, body `{ type, fromId, toId }` (a strict Zod schema; `type` is one of the six link types, the IDs are lowercase UUIDs). Access `'any signed-in'`, like `POST /api/v1/links`: the service does the checks, because the rule depends on both ends. It answers 200 with the removed link `{ type, fromId, toId }`. Documented with `documentRoute`.
+
+**Pass criteria:**
+1. **Who may remove (D200, D201):** both ends must exist in the caller's org and be visible to the caller, and the link must exist. Otherwise it's 404 `not_found`, the same answer whether an end is missing, an end is hidden, or there's no such link. Then `canLinkRecords(caller, from, to)` must hold, or it's 403 `forbidden`. A Viewer can remove nothing; a Risk Manager can remove a MITIGATED_BY link from their risk to a control they can only view; a Control Owner can remove a link only through a control they own.
+2. A body with an unknown link type, a bad ID, a missing field or an extra field is 400 `validation_failed`.
+3. **What removal does:** that one relationship is deleted from Neo4j. Other links between the same two records (another type, or the reverse direction) stay. The two records themselves are unchanged: same fields, same `version`.
+4. **Audit (D201, D45.4):** the removal and its `link.removed` entry (from `linkRemovedAudit`) are written through `AuditOutbox.withAuditedWrite` in the same Neo4j transaction. If the transaction fails, the link stays and no entry is kept. The entry reaches the Postgres audit trail through the relay within 5 s, with `actorType` `user` or `api_key`, and its `before` holds the full copy of the link.
+5. **Two removals at once** of the same link: exactly one gets 200 and the other 404, and there's exactly one `link.removed` entry.
+6. **After removal:** the link no longer appears in `GET /api/v1/P/:id/links` for either end, nor in `GET /api/v1/assets/:id/map`. Adding the same link again with `POST /api/v1/links` works (201, not `link_exists`) and writes a new `link.created` entry.
+7. **D59:** every role × pair of record kinds allowed by the ontology (generated from `ROLE_TABLE` and `LINK_TYPES`); an org pair with 3 orgs (org A can't remove org B's link even with the right IDs: 404, and B's link and B's audit trail are untouched); every clearance × label pair (a link with an end above the caller's clearance is 404 and stays). API keys follow their one role and one org.
+8. **No values in logs (D163, D164):** a failing removal logs only the error type or code, the reference ID and IDs, never record names or the link copy.
+9. **Security matrix (D175):** `POST /api/v1/links/remove` has its row, with the same access, `orgWalled` and `labels` values as the `POST /api/v1/links` row. The TEST-003 completeness test passes. The S1-005 `links` tests still pass.
+
+**Tests to write:**
+- `packages/api/tests/link-removal/audit-entry.unit.test.ts` (unit): `linkRemovedAudit` gives the action, target, full `before` copy, `after: null` and `meta` with the higher label, for each label pair (4 × 4).
+- `packages/api/tests/link-removal/*.db.test.ts` (db, in-process Nest app against throwaway Postgres and Neo4j databases, like `packages/api/tests/links/`): criteria 1–8. Generate the role, org-pair and clearance × label cases from `ROLE_TABLE`, `ROLES`, `LABELS` and `LINK_TYPES`.
+- New security-matrix row: `POST /api/v1/links/remove`.
+- Never weaken live privileges or shared state to prove a test (D176).
+
+**Migrations:** none expected. If one turns out to be needed, it's "a new migration", numbered by the integrator at merge (D183).
+
+**Test command:** `pnpm --filter api test -- link-removal`
+
+---
+
+Task: S1-012
+
+**Goal:** The "Remove" action on related records, so a person who linked the wrong record can fix it from the record page.
+
+**Decisions:** **D201** (who may remove, recorded in the audit trail), **D200** (`canLinkRecords` from `@grc/shared`), D51, D7 (the web only hides buttons; the API decides), D30 (typed client). Read the S1 shared notes, S1-008's brief (`RelatedRecords`) and S1-011's brief (the route).
+
+**Depends on:** S1-008 (the related-records groups) and S1-011 (the route).
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated with S1-011's route).
+
+**Files:**
+- Regenerate `packages/web/src/api/client.ts` (`pnpm gen:api-client`) after S1-011 is on `main`.
+- Create: `packages/web/src/features/records/links/RemoveLinkDialog.tsx`.
+- Modify: `packages/web/src/features/records/links/RelatedRecords.tsx` (the per-row action) and the links query hooks S1-008 made (a remove mutation that refreshes the group).
+
+**Pass criteria:**
+1. Each related-record row shows "Remove" only when `canLinkRecords(user, thisRecord, otherRecord)` holds. A Viewer never sees it.
+2. "Remove" opens a confirmation that names the link in plain words (the group title and the other record's number and name) and says the removal is recorded in the audit trail. Cancel changes nothing.
+3. Confirm sends `POST /api/v1/links/remove` with the link's real direction: for an "in" row, the other record is `fromId`.
+4. On success, the row disappears, the group refreshes, and a short message confirms it.
+5. A 404 shows "This link no longer exists or you can't see it" and refreshes the group. A 403 shows "You can't remove this link". Other errors show the API's message and reference ID.
+6. All calls go through the generated client with relative `/api/v1` URLs (the M0-015 rule).
+7. The S1-008 `record-links` tests still pass.
+
+**Tests to write (kind `unit`, Vitest + Testing Library, API mocked at the client boundary):** `packages/web/tests/link-removal/*.unit.test.tsx`, covering criteria 1–6, with at least an editor of this record, an editor of only the other end (a Risk Manager on a control page), a Viewer, and a Control Owner on an owned and a not-owned control. Security-matrix rows: none (web only).
+
+**Test command:** `pnpm --filter web test -- link-removal`
