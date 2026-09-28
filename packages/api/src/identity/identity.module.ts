@@ -7,6 +7,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { Db } from '../db/client.js';
 import { DB } from '../db/db.module.js';
 import { AuthService } from './auth.js';
+import './auth-docs.js';
 import { MeController } from './me.controller.js';
 import { SessionGuard } from './session.guard.js';
 

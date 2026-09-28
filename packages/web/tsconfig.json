@@ -1,4 +1,21 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"],
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "scripts/**/*.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }
