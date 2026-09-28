@@ -719,7 +719,7 @@ export function resetApp(): void {
   window.history.replaceState(null, '', '/');
 }
 
-const NUMBER = /\b[A-Z]{3}\d{7}\b/;
+const NUMBER = /(CTL|POL|AST|INC|RSK)\d{7}(?!\d)/;
 
 /** The list's table, once it shows at least one data row. */
 export async function findList(): Promise<HTMLElement> {
