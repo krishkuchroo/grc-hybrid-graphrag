@@ -555,7 +555,9 @@ const probe = (script: string, ...rest: string[]): string[] => ['--filter', '@gr
 const tests = (run: Run): string[] => run.ran.filter((l) => l !== 'doctor').sort();
 const show = (run: Run): string => `exit ${run.status}; ran [${run.ran.join(', ')}]\n${run.output}`;
 
-describe('criteria 3-6 in a throwaway workspace with a stand-in doctor', () => {
+// Each check runs a pnpm chain (several seconds under load), so the tests get the same 90 s the
+// spawn allows instead of Vitest's 5 s default (D171: no flaky timeouts).
+describe('criteria 3-6 in a throwaway workspace with a stand-in doctor', { timeout: 90_000 }, () => {
   beforeAll(() => {
     buildSandbox();
   });
