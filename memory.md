@@ -676,6 +676,16 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - `SECURITY-FINDINGS.md` (repo root, committed) has a summary table and one entry per issue with a review status (Open, Fixed, Accepted, Won't fix). Entries are never deleted. It starts with the 12 M0 items (SF-001 to SF-012).
   - The `record-security-findings` hook (PostToolUse on the report tool, plus SubagentStop as a backup) appends an entry once per hand-off when a security reviewer sends work back, is blocked on a question, or approves with a non-blocking point; and for any agent's `Security notes:`. It never blocks; its errors go to guardrails.jsonl.
   - The security reviewer now puts non-blocking points after `Security notes:`. The main session adds each checkpoint's insecure-defaults audit results by hand and commits the file at checkpoints.
+- **D181 Slices run in parallel groups** (2026-09-28, parallelism round Q-A: the recommendation): S1 alone → S2, S3 and S7 together → S4 alone → S5 and S6 together → S8. It replaces the strict one-after-another order in CLAUDE.md's roadmap.
+  - Why: S2, S3 and S7 each need only M0 and S1; S5 and S6 each need only S4; everything builds on S1, S4 and S8 need the rest.
+- **D182 One combined checkpoint per parallel group** (2026-09-28, Q-B): S2+S3+S7 and S5+S6 each end in one checkpoint, with a section per slice in the report, one insecure-defaults audit and one approval; each slice still gets its own tag (`s2`, `s3`, `s7`…).
+- **D183 The workflow is adjusted for parallel slices with the fewest conflicts** (2026-09-28, Q-C: "readjust for the approach"). Made after the testing session's changes are merged, so the two don't edit the same files:
+  - One milestone-workflow run can build several slices; the agent cap (8) is shared across them, not per slice (16 GB).
+  - Merges go through a queue: one integrator at a time, in order.
+  - Each slice owns its own folders (for example S2 `frameworks/`, S3 `intake/`, S7 `admin/`); anything another slice needs goes through a small shared interface or waits for it.
+  - The planner marks **hot files** that many tasks touch (the app module list, the generated API client, the web router and menu, the role table, the security matrix); only one task at a time may change each.
+  - Database migrations get their numbers at merge time from the integrator, never fixed in the plan.
+- **D184 The open M0 security items are left for the user** (2026-09-28, Q-D: "i will do it later when i get the time"): SF-001 (MFA guessing speed), SF-002 (shared rate-limit counter behind Caddy) and SF-003 (API key change and audit entry in separate transactions) stay Open in `SECURITY-FINDINGS.md` and are not scheduled into S1. The checkpoint reports keep listing them.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
