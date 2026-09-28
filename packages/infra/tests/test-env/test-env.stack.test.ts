@@ -170,7 +170,7 @@ beforeAll(async () => {
   after = await snapshot();
 }, LONG);
 
-const LINE = /^(OK|missing)\s+([a-z-]+)\b/;
+const LINE = /^(OK|missing)\s+([a-z0-9-]+)\b/;
 
 describe('pnpm test:env on the healthy stack (criterion 1)', () => {
   it('exits 0', () => {

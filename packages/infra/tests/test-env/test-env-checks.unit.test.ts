@@ -149,7 +149,7 @@ async function run(overrides: Partial<DoctorProbes> = {}): Promise<Result> {
   return mod.runChecks(fake(overrides, mod.REQUIRED_ENV_KEYS).probes);
 }
 
-const LINE = /^(OK|missing)\s+([a-z-]+)\b/;
+const LINE = /^(OK|missing)\s+([a-z0-9-]+)\b/;
 
 function lineFor(result: Result, id: ItemId): string {
   const found = result.lines.filter((l) => LINE.exec(l)?.[2] === id);
