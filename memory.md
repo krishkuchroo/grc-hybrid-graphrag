@@ -740,6 +740,8 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The planner's readings 1–7: S1 covers screens 2–6; S1 needs no Postgres migration ("a new migration" if one turns up); the renamed fields `controlStatus`, `incidentStatus`, `policyVersion`, `occurredAt` and `assetType`; the opt-in "own" flag on the access guard; 404 for any record the caller can't see and 403 on the list of a type the role can never view; S1-004 closes SF-006.
   - The new names: `pnpm graph:schema`, `ensureOrgSchema`, the error codes `stale_version`, `link_exists` and `link_not_allowed`, the route `GET /api/v1/people`, and the audit actions `record.created`, `record.updated`, `record.retired` and `link.created`.
   - The skills for S1: the same set as M0 (D136).
+- **D206 A Control Owner may hand their control to someone else** (2026-09-28, the user: "1 yes"): D199's "edit own" covers every field of a control assigned to them, including its owner. After the hand-over it's no longer theirs to edit.
+- **D207 AI-made links are removed only through the Analyst** (2026-09-28, the user: "2 only analyst"): `POST /api/v1/links/remove` (D201) removes only links people added by hand (origin `manual`, or `import`). A link with origin `ai` is refused there and is handled only through the Analyst's false-positive review (S4/S5), which keeps its hidden copy.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
