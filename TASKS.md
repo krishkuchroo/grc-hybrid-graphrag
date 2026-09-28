@@ -23,9 +23,11 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | TEST-001 | TEST | builder-platform | done | Every test file in packages/* renamed by what it needs (`.unit` / `.db` / `.stack` `.test.ts`, `e2e/*.e2e.ts`) with `git mv`; `test:unit` / `test:db` / `test:stack` per package and at the root, `test:e2e` at the root, `test` = unit + db + stack; db and stack runs call `pnpm test:env` first and stop if it fails; a check fails on any test file with no type; `retries: 0` in Vitest and Playwright (D177, D171). Merges last. Tests: `pnpm --filter infra test -- test-names` | | `logs/tasks/TEST-001.md` |
 | TEST-002 | TEST | builder-platform | done | `pnpm test:env` doctor: one OK/missing line per item (stack and dev relay, migrations, 28 grc_ro_* DENYs, `.env` key names, Caddy root trusted, hosts line), non-zero exit if anything's missing, changes nothing (D180); `seed:demo`, `org:create` and their env loader swap the container host for 127.0.0.1:5433 themselves (D170). Tests: `pnpm --filter infra test -- test-env` and `pnpm --filter infra test -- org-script-env` | | `logs/tasks/TEST-002.md` |
 | TEST-003 | TEST | builder-platform | done | `packages/shared/src/access/security-matrix.ts` lists every record type and every `/api/v1` route with its role rule, org wall and label rule; a unit test fails if the code has a record type or route not in the matrix, or the matrix lists one the code doesn't have (D175, D59, D50, D51). Tests: `pnpm --filter api test -- security-matrix` | open: user decides on the flaky body-size test (keep push + fix task?) | `logs/tasks/TEST-003.md` |
-| TEST-004 | TEST | builder-platform | in review | The front-door test "an upload of exactly 25 MB passes the door and reaches the API" gives the same result every time and in any order: the test writer finds the cause from the code (not by changing shared state), fixes the existing test only, with no retries and no sleeps as waits, and hands in with `fixReason` (D185, D171, D176). A cause in the app or Caddy code, not the test, is a question for the user (blocked). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack` | merged locally as d56f2f9, not pushed; waits for TEST-006 (D187) | |
+| TEST-004 | TEST | builder-platform | done | The front-door test "an upload of exactly 25 MB passes the door and reaches the API" gives the same result every time and in any order: the test writer finds the cause from the code (not by changing shared state), fixes the existing test only, with no retries and no sleeps as waits, and hands in with `fixReason` (D185, D171, D176). A cause in the app or Caddy code, not the test, is a question for the user (blocked). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack` | merged as d56f2f9; pushed with TEST-006 (origin/main 21ad9c5..257da61, D187) | `logs/tasks/TEST-004.md` |
 | TEST-005 | TEST | builder-platform | to do | In `packages/shared/src/access/security-matrix.ts` the `audit_trail` record type has `labels: true` (D186); a new unit test pins the label value of every non-record row: uploads, review_queue, chat and audit_trail true, admin false (D175, D51). Red until the builder flips audit_trail. Tests: `pnpm --filter api test -- security-matrix` | | |
-| TEST-006 | TEST | builder-platform | to do | The three size-cap tests in `front-door/body-size.stack.test.ts` (25 MB + 1 byte → 413 at the door, 40 MB → 413 at the door, JSON just over 1 MB → the API's 413 in the D47 format) give the same answer every time (D187, D171). The test writer finds each cause from the code, never by changing shared state (D176), and says whether a real person could get 502 instead of 413. Test-only cause: fix the existing tests with `fixReason`, same checks, no retries, sleeps, longer timeouts or `cutShortOk` on status checks (D185). Real cause: a reliably red test, then the smallest Caddy or API change so the answer is always 413 in the D47 format; limits stay 25 MB at the door and 1 MB at the API (D188, D53, D64). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack`, none skipped; integrator pushes main (with TEST-004's d56f2f9 and 7c8199b) only after one clean full `pnpm test` | | |
+| TEST-006 | TEST | builder-platform | done | The three size-cap tests in `front-door/body-size.stack.test.ts` (25 MB + 1 byte → 413 at the door, 40 MB → 413 at the door, JSON just over 1 MB → the API's 413 in the D47 format) give the same answer every time (D187, D171). The test writer finds each cause from the code, never by changing shared state (D176), and says whether a real person could get 502 instead of 413. Test-only cause: fix the existing tests with `fixReason`, same checks, no retries, sleeps, longer timeouts or `cutShortOk` on status checks (D185). Real cause: a reliably red test, then the smallest Caddy or API change so the answer is always 413 in the D47 format; limits stay 25 MB at the door and 1 MB at the API (D188, D53, D64). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack`, none skipped; integrator pushes main (with TEST-004's d56f2f9 and 7c8199b) only after one clean full `pnpm test` | Tests 7470dcc (`expectContinue` in the door helpers, new `body-size-502.stack.test.ts`); API fix cf5cca1 by builder-backend (onError hook in `packages/api/src/common/errors.ts` drops `Connection: close` for FST_ERR_CTP_BODY_TOO_LARGE, so over-limit JSON always gets the API's 413, not Caddy's 502). Code and security reviewers approved. Merged 257da61, pushed (origin/main 21ad9c5..257da61); integrator: lint and typecheck clean, `pnpm test` 2,456/2,456, e2e 4/4. The finish check's rerun of `pnpm test` then failed one unrelated test, now TEST-007. Reviewer notes, none blocking: grc-worker was recreated with grc-api (shared image); the cast at errors.ts:67 may not be needed; security, phase 7: the API has no requestTimeout (Fastify default 0), so the 25 MB drain bound holds only behind Caddy. | `logs/tasks/TEST-006.md` |
+| TEST-007 | TEST | test-writer | to do | Flaky (D171): `packages/api/tests/graph-accounts/accounts.db.test.ts`, "grc_ro_auditor_restricted holds read-only privileges (criterion 1) > logs in through GraphService.readAs" failed once with `Neo4jError: Connection was closed by server` during Bolt login. The test writer finds the cause from the code, never by changing live Neo4j privileges, passwords or settings (D176). Test-only cause: fix the existing test with `fixReason`, same checks (D167, D185). Real cause: a reliably red test, then the smallest builder fix. No retries or longer timeouts to hide it. Tests: `pnpm --filter api test -- graph-accounts` (3 runs green), none skipped | | |
+| TEST-008 | TEST | test-writer | to do | `packages/infra/tests/front-door/headers.stack.test.ts:96` ("the door's own 413 for an upload over 25 MB") uses the `expectContinue` option, so the client's EPIPE can't race the door's 413 (same race TEST-006 fixed in `body-size.stack.test.ts`). Test-only fix with `fixReason`; still checks status 413 and the D64 headers, nothing loosened (D171, D185). Tests: `pnpm --filter infra test -- headers` (3 runs green) and `pnpm --filter infra test:stack`, none skipped | | |
 
 **Moved out of M0 (planned with slice 7, no task yet):**
 - SSO (OIDC/SAML) is planned for S7, with the Admin screens. Its tests will use a small stand-in sign-in provider that runs locally (D134).
@@ -724,3 +726,76 @@ Task: TEST-006
 **Test command:** `pnpm --filter infra test -- body-size`
 
 **Integrator:** merge `task/TEST-006` into `main` locally. Then run one full `pnpm test` (unit, db, stack) with the stack up. Push `main` only if it's clean. That push also carries TEST-004's `d56f2f9` and `7c8199b` (D187). If the full run fails, don't push; hand in `blocked` with the failing test.
+
+---
+
+Task: TEST-007
+
+**Goal:** Make the Neo4j login test "grc_ro_auditor_restricted holds read-only privileges (criterion 1) > logs in through GraphService.readAs" give the same result every time, alone or in the full suite. If the cause is in the code rather than the test, fix it there.
+
+**Decisions:** D171 (no retries; a test that fails then passes is a bug; builders' tests run 3 times), D176 (never weaken live privileges or shared state to prove a test), D167 and D185 (a fix to existing tests is handed in with `fixReason`), D173 (none skipped), D174 (new tests agree with older ones), D177 (test kinds), D57 and D73 (the 28 read-only Neo4j accounts, passwords only in `.env`), D131 (the query accounts). Read the TEST shared notes above.
+
+**Background:**
+- The test is in `packages/api/tests/graph-accounts/accounts.db.test.ts` (the `describe.each(ACCOUNTS)` block at line 166, the test at line 193). It calls `requireReadAs(graph).readAs(org.orgId, 'auditor', 'restricted', …)` and runs `RETURN 1`.
+- It passed in TEST-006's integrator full run, then failed on the next full `pnpm test` on the same code (the finish check's rerun) with `Neo4jError: Connection was closed by server`, thrown during Bolt login (`BoltProtocol._onLoginError`). So the DBMS refused or dropped the connection at login, before the query ran.
+- The file was last changed in `06e45da` (TEST-001, the rename to `.db.test.ts`).
+- Candidates to check against the code and the DBMS's own logs and settings (read them, never change them). They're candidates, not findings:
+  - **Auth throttling or failed-login lockout.** Neo4j limits failed logins per account (`dbms.security.auth_max_failed_attempts`, `auth_lock_time`). Does any test in the full run log in as a `grc_ro_*` account with a wrong password on purpose, or before `pnpm setup:neo4j` has set the password?
+  - **Several test files running `pnpm setup:neo4j` at once.** `beforeAll` in this file calls `runSetupNeo4j()` (line 86), and so do `query-guard-live`, `writes`, `timeout`, `outside-access` and `visibility` in the same folder, plus `packages/api/tests/graph/setup-neo4j.db.test.ts`, `graph/org-database.db.test.ts` and `outbox/helpers.ts`. If Vitest runs these files in parallel, can one run's setup briefly change or recreate the account, its password or its roles while another file logs in? Check `packages/infra/scripts/setup-neo4j.ts` for what a re-run actually does to an existing user.
+  - **Too many connections.** Does each `readAs` open a new driver or a new session per account, and are they all closed? Compare the total against the DBMS's connection limits during a full run.
+  - **Another process using the DBMS at the same time** (another agent's run, the running grc-api or grc-worker).
+  - **A driver or session not closed** in this file's helpers (`packages/api/tests/graph-accounts/helpers.ts`, `newGraph`) or in `GraphService.readAs` itself.
+
+**Who does what:**
+1. **Test writer** finds the cause from the code and from read-only looks at the DBMS (its logs, `SHOW USERS`, settings), and says in its hand-off, with file and line, whether a real user of the app could hit the same failed login.
+2. **If the cause is only in the test** (for example test files racing each other's setup, or a test helper that leaks connections): fix the existing test files and hand in with `fixReason`, green. No builder.
+3. **If the cause is real** (for example `GraphService.readAs` leaks connections, or the app logs in in a way the DBMS can throttle): write a test that reproduces it **every time** and hand in red. Then **builder-platform** (M0-005 owner) makes the smallest change in the app code that removes the cause. Both reviewers check it.
+
+**Files:**
+- Modify (test writer, test-only route): `packages/api/tests/graph-accounts/accounts.db.test.ts`, and `packages/api/tests/graph-accounts/helpers.ts` or other existing test files if the fix belongs there. A `fixReason` hand-in can't add new files or touch non-test files (D185).
+- Real-cause route: the test writer may add one new `*.db.test.ts` file under `packages/api/tests/graph-accounts/` for the reproducing test (a normal red hand-in, not a fix). The builder modifies only the app code that holds the cause (for example `packages/api/src/graph/`).
+- Don't touch `.env`, `packages/infra/scripts/setup-neo4j.ts` (unless it's the real cause and the builder's smallest fix), `compose.yaml` or Neo4j's settings.
+
+**Pass criteria:**
+1. The hand-off names the cause, with the file and line (or the DBMS log line) that explains it, and how the fix removes it.
+2. The fixed test still checks what it checked before: each of the 28 accounts logs in through `GraphService.readAs` with the password in `.env` and gets `[1]` back from `RETURN 1`. Nothing is loosened: no skipping accounts, no catching the login error.
+3. No retries, and no longer timeouts or sleeps to hide the cause (D171). A bounded wait for a condition is fine only if the hand-off explains why its limit covers the worst case.
+4. Never change live Neo4j privileges, passwords, lockout or connection settings, and never restart the DBMS, to prove the cause or the fix (D176). Experiments happen only in the worktree's test code.
+5. Real-cause route only: the reproducing test is red on every run before the builder's change and green on every run after it. The 28 accounts keep exactly their read-only privileges (M0-005, D73).
+6. `pnpm --filter api test -- graph-accounts` passes 3 times in a row, with nothing skipped (D171, D173), then the whole `pnpm --filter api test:db` passes once. The hand-off records the counts, and names the earlier tests it agrees with (D174), including M0-005's graph-accounts tests and `graph/setup-neo4j.db.test.ts`.
+7. Security-matrix rows: no new record type or route, so no new rows (D175).
+
+**Tests to write:** kind `db` (they need the running Neo4j DBMS). Test-only cause: fix the existing test; no new file. Real cause: one reproducing test that is red every time until the builder's change.
+
+**Test command:** `pnpm --filter api test -- graph-accounts`
+
+---
+
+Task: TEST-008
+
+**Goal:** Make the front-door test "the door's own 413 for an upload over 25 MB" in `packages/infra/tests/front-door/headers.stack.test.ts` read the door's answer every time, the way TEST-006 fixed the same race in `body-size.stack.test.ts`.
+
+**Decisions:** D171 (no retries; a test that fails then passes is a bug), D185 and D167 (a fix to an existing test, handed in with `fixReason`), D176 (never weaken shared state to prove a test), D53 and D64 (25 MB door cap, security headers on every response, including the door's own 413), D173 (none skipped), D174 (new tests agree with older ones), D177 (test kinds). Read the TEST shared notes above.
+
+**Background:**
+- The test is at `packages/infra/tests/front-door/headers.stack.test.ts:96`. It streams `UPLOAD_CAP_BYTES + 1` bytes to `/api/v1/intake/uploads` and checks status 413 and the D64 headers (`expectD64Headers`).
+- Caddy refuses the declared size and closes while the client is still writing the body. Whether the client sees the 413 or its own write error (EPIPE or ECONNRESET) first varies from run to run. TEST-006 found this race in `body-size.stack.test.ts` (commit 7470dcc).
+- TEST-006's fix is the `expectContinue` option in `packages/infra/tests/front-door/helpers.ts` (`SendOptions.expectContinue`, about lines 87-95; used in `collect()` and `headersFor()`). The client sends `Expect: 100-continue` and holds the body back, so a door that refuses the size answers before any body byte is sent. If the door asks for the body instead, the whole body is sent, so a door that lets the request through is still caught. `body-size.stack.test.ts` uses it as `REFUSED_BY_SIZE` (line 33).
+
+**Who does what:** The test writer only. No builder.
+
+**Files:**
+- Modify (test writer): `packages/infra/tests/front-door/headers.stack.test.ts` only. Add `expectContinue: true` to that one request. `helpers.ts` needs no change. If it does, say why.
+- Don't touch the Caddyfile, app code, `compose.yaml`, `.env` or any other test.
+
+**Pass criteria:**
+1. The test sends its 25 MB + 1 byte request with `expectContinue: true`, and still checks status 413 and every D64 header on the answer. Nothing is loosened: no accepting 0 or 502, no `cutShortOk`, no dropped header check, and the size stays `UPLOAD_CAP_BYTES + 1`.
+2. No retries, and no sleeps or longer timeouts (D171).
+3. Nothing shared is changed (D176): no container restarts, and no Caddy or rate-limit changes.
+4. `pnpm --filter infra test -- headers` passes 3 times in a row, then `pnpm --filter infra test:stack` passes once, with nothing skipped (D173). The hand-off records the counts and names the earlier tests it agrees with (D174): TEST-006's size-cap tests in `body-size.stack.test.ts` and M0-016's header tests.
+5. Hand in with `fixReason` (for example "the door's 413 raced the client's EPIPE on the 25 MB + 1 body; fixed by sending Expect: 100-continue so no body is written before the answer"). The finish check then expects green.
+6. Security-matrix rows: no new record type or route, so no new rows (D175).
+
+**Tests to write:** No new test file. Fix the existing test (kind: `stack`; it needs the running stack and Caddy).
+
+**Test command:** `pnpm --filter infra test -- headers`
