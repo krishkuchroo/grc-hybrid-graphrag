@@ -41,6 +41,10 @@ const HANDOFF = {
   filesChanged: { type: 'array', items: { type: 'string' } },
   tests: { type: 'object', properties: { run: { type: 'string' }, passed: { type: 'number' }, failed: { type: 'number' } } },
   findings: { type: 'string' },
+  // A test writer's fix to tests the code already meets (D167).
+  fixReason: { type: 'string' },
+  // Skipped tests, each with a reason for the reviewers to approve (D173).
+  skips: { type: 'array', items: { type: 'object', properties: { test: { type: 'string' }, reason: { type: 'string' } }, required: ['test', 'reason'] } },
 }
 const handoffSchema = (extra = {}, required = []) => ({
   type: 'object',
@@ -230,6 +234,7 @@ async function runTask(t) {
             `You work in a fresh worktree. Start with \`git switch ${branch}\` if the branch exists, otherwise \`git switch -c ${branch} main\` (D112, D118).`,
             rounds === 1 && resumeNotes[id],
             testNote && `The builder says a test is wrong. Fix it if they're right, and say why in your findings either way:\n${testNote}`,
+            testNote && "If the builder's code is already on the branch, your corrected tests may pass at once: then hand in with `fixReason` saying why (D167). Never fake a red.",
             `Commit your tests with a message starting "${id}:". Then run \`git switch --detach\`, so the builder can take the branch.`,
             'Put the output of `pwd` in `worktree`.',
           ],
@@ -359,5 +364,5 @@ return {
   blocked: pick('blocked'),
   waiting: pick('waiting'),
   realGemma: gemma,
-  next: 'Bring every blocked task to the user (D117). Then the checkpoint: the report, the demo steps, and the user records the walkthrough (D114, D115).',
+  next: 'Bring every blocked task to the user (D117). Then the checkpoint: run the full suite 3 times and every browser test (D171, D172), then the report, the demo steps, and the user records the walkthrough (D114, D115).',
 }

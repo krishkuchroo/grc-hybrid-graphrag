@@ -1,13 +1,16 @@
 // Guard rail 4 (D84, D86, D97): an agent can't finish until its checks pass.
-// - Test writer: lint passes and its new tests fail.
-// - Builders: lint, type checks and the task's tests pass.
+// - Test writer: lint passes and its new tests fail; a fix to tests the
+//   builder's code already meets passes instead (D167).
+// - Builders: lint, type checks and the task's tests pass, 3 times (D171).
 // - Integrator: lint, type checks and the full suite pass.
+// - Test writers and builders are checked in their task's own copy (D168).
+// - A skipped test fails unless the hand-off lists it with a reason (D173).
 // - Planner and reviewers: no checks, but they still end with a hand-off.
 // It runs when the agent hands in its report (the SubagentHandback or
 // StructuredOutput tool) and again, as a backup, when the agent stops.
 // A hand-off with status "blocked" and findings can always finish; after 3
 // failed checks it's the only way to finish (D86).
-import { evaluate, tail } from './lib/checks.mjs';
+import { evaluate, fixProblems, placeProblem, tail } from './lib/checks.mjs';
 import { isHandInEvent, parseHandoff } from './lib/handoff.mjs';
 import { appendTaskLog, now, safeTaskId } from './lib/logging.mjs';
 import { gitTopLevel } from './lib/paths.mjs';
@@ -22,8 +25,17 @@ function logEntry(kind, input, lines) {
   return [`## ${kind} · ${input.agentType} · ${now()}`, `- agent: ${input.agentId}`, ...lines].join('\n');
 }
 
+// Where a test writer or builder is, and whether its fix is allowed
+// (D167, D168): a list of problems, empty when the checks can run.
+export function placeChecks(input, handoff, repo, role) {
+  if (role.finishCheck !== 'test-writer' && role.finishCheck !== 'builder') return [];
+  const where = placeProblem(handoff, repo);
+  if (where) return [where];
+  return role.finishCheck === 'test-writer' && handoff.fixReason ? fixProblems(input, handoff, repo) : [];
+}
+
 // null to let the agent finish, or { reason, subject } to send it back.
-export function decideFinish(input, evaluateChecks = evaluate) {
+export function decideFinish(input, evaluateChecks = evaluate, checkPlace = placeChecks) {
   if (!input.agentId) return null;
   const role = roleOf(input.agentType);
   if (!role) return null;
@@ -63,7 +75,11 @@ export function decideFinish(input, evaluateChecks = evaluate) {
   }
 
   const repo = gitTopLevel(input.cwd) ?? input.cwd;
-  const result = evaluateChecks(role.finishCheck, handoff, repo);
+  const misplaced = checkPlace(input, handoff, repo, role);
+  if (handoff.fixReason) common.push(`- fix (D167): ${handoff.fixReason}`);
+  const result = misplaced.length
+    ? { ok: false, lines: ['checks not run: see below'], failures: misplaced.map((message) => ({ label: 'place', message })) }
+    : evaluateChecks(role.finishCheck, handoff, repo);
   const checkLines = result.lines.map((l) => `- ${l}`);
   if (result.ok) {
     appendTaskLog(taskId, logEntry(`Hand-in ${state.handIns}`, input, [...common, ...checkLines, '- result: checks passed']));

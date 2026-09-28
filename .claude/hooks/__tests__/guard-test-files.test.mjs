@@ -11,7 +11,7 @@ const call = (agentType, tool, toolInput, id = 't1') =>
   input({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: toolInput, agent_id: id, agent_type: agentType, cwd: repo });
 
 test("builders can't edit test files (D89, D96)", () => {
-  for (const rel of ['src/a.test.ts', 'src/b.spec.tsx', 'tests/fixtures/gemma/answer.json', 'e2e/login.spec.ts', 'packages/api/tests/helpers.ts']) {
+  for (const rel of ['src/a.test.ts', 'src/b.spec.tsx', 'tests/fixtures/gemma/answer.json', 'e2e/login.spec.ts', 'packages/api/tests/helpers.ts', 'src/records.db.test.ts', 'src/sign-in.e2e.ts']) {
     assert.ok(decideTestFiles(call('builder-backend', 'Write', { file_path: join(repo, rel) })), rel);
   }
   assert.ok(decideTestFiles(call('builder-frontend', 'Bash', { command: 'echo x >> src/a.test.ts' })));
