@@ -8,6 +8,7 @@ export function words(value: string): string {
 }
 
 const DAY = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
+const DATE_UTC = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' });
 const MOMENT = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 const DOLLARS = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -19,6 +20,18 @@ function parse(value: string): Date | null {
 export function formatDay(value: string): string {
   const date = parse(value);
   return date ? DAY.format(date) : value;
+}
+
+/** A stored day (`2026-06-30`), shown as that day wherever the browser is: never shifted by the time zone. */
+export function formatDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDay(value);
+  const date = parse(`${value}T00:00:00.000Z`);
+  return date ? DATE_UTC.format(date) : value;
+}
+
+/** A value list as choices: the stored value and its words. */
+export function choices(values: readonly string[]): Array<{ value: string; label: string }> {
+  return values.map((value) => ({ value, label: words(value) }));
 }
 
 export function formatMoment(value: string): string {
