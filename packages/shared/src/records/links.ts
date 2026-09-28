@@ -21,3 +21,9 @@ export function isAllowedLink(type: string, fromKind: string, toKind: string): b
 export function linkTypesBetween(fromKind: string, toKind: string): LinkType[] {
   return LINK_TYPES.filter((row) => row.from === fromKind && row.to === toKind).map((row) => row.type);
 }
+
+/** The asset map (D204): centred on one asset, 1 to 3 steps out along HOSTS and RUNS (2 when none
+ * is given), and at most this many assets, the centre included. */
+export const MAP_DEFAULT_DEPTH = 2;
+export const MAP_MAX_DEPTH = 3;
+export const MAP_MAX_NODES = 200;

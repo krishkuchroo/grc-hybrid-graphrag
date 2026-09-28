@@ -4,4 +4,5 @@ export * from './values.js';
 export * from './numbers.js';
 export * from './rating.js';
 export * from './links.js';
+export * from './link-rules.js';
 export * from './schemas.js';
