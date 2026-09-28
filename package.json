@@ -13,7 +13,8 @@
     "setup:secrets": "node packages/infra/scripts/setup-secrets.ts",
     "setup:neo4j": "node packages/infra/scripts/setup-neo4j.ts",
     "org:create": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/create-org.ts",
-    "seed:demo": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/seed-demo.ts"
+    "seed:demo": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/seed-demo.ts",
+    "gen:api-client": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/web/scripts/gen-api-client.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

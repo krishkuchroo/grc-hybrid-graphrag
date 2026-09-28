@@ -11,6 +11,7 @@ import { ApiKeyGuard } from './api-key.guard.js';
 import { ApiKeysController } from './api-keys.controller.js';
 import { ApiKeysService } from './api-keys.service.js';
 import { AuthService } from './auth.js';
+import './auth-docs.js';
 import { MeController } from './me.controller.js';
 import { SessionGuard } from './session.guard.js';
 
