@@ -14,7 +14,7 @@
 //   chain, so it goes to the API's pino log instead. Passwords and codes are never recorded.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
-import { sendError } from '../common/errors.js';
+import { CODES, sendError } from '../common/errors.js';
 import { AUTH_BASE_PATH, type AuthService, type ResolvedSession } from './auth.js';
 import { lockKey, SignInLockout } from './lockout.js';
 import type { AuthedRequest } from './session.guard.js';
@@ -95,13 +95,22 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
     return { status: res.status, headers: res.headers, text, json };
   }
 
-  function send(reply: FastifyReply, res: Forwarded): FastifyReply {
+  // Better Auth's answer goes back as it is, except errors: those leave in our one format with a
+  // reference ID and a log line (D47). Its cookies are kept either way.
+  function send(request: FastifyRequest, reply: FastifyReply, res: Forwarded): FastifyReply {
+    const cookies = res.headers.getSetCookie();
+    if (res.status >= 400) {
+      if (cookies.length) void reply.header('set-cookie', cookies);
+      const code = typeof res.json.code === 'string' && res.json.code ? res.json.code.toLowerCase() : undefined;
+      const message = typeof res.json.message === 'string' && res.json.message ? res.json.message : undefined;
+      sendError(request, reply, res.status, code ?? CODES[res.status] ?? 'error', message ?? 'The request was refused.');
+      return reply;
+    }
     reply.code(res.status);
     res.headers.forEach((value, name) => {
       if (name === 'set-cookie' || name === 'content-length') return;
       void reply.header(name, value);
     });
-    const cookies = res.headers.getSetCookie();
     if (cookies.length) void reply.header('set-cookie', cookies);
     return reply.send(res.text);
   }
@@ -121,7 +130,8 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
   async function signIn(request: Req, reply: FastifyReply): Promise<FastifyReply> {
     const body = bodyOf(request);
     const key = lockKey(body.email);
-    const lock = key ? lockout.state(key) : ({ locked: false } as const);
+    // The slot is taken before the password is checked, so guesses sent at once can't pass the lock.
+    const lock = key ? lockout.begin(key) : ({ locked: false } as const);
     if (lock.locked) {
       await failed(request, await auth.userIdByEmail(key), { method: 'password', reason: 'locked' });
       const minutes = Math.ceil(lock.retryAfterSeconds / 60);
@@ -130,7 +140,13 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
       });
       return reply;
     }
-    const res = await forward(request, body);
+    let res: Forwarded;
+    try {
+      res = await forward(request, body);
+    } catch (err) {
+      if (key) lockout.fail(key); // fail safe: an attempt that couldn't be checked still counts
+      throw err;
+    }
     if (res.status === 200) {
       if (key) lockout.succeed(key);
       // With MFA on, the attempt finishes at the second factor.
@@ -138,7 +154,7 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
         const user = res.json.user as { id?: unknown } | undefined;
         await auth.auditUser(typeof user?.id === 'string' ? user.id : null, 'auth.sign_in', { method: 'password' });
       }
-      return send(reply, res);
+      return send(request, reply, res);
     }
     const userId = key ? await auth.userIdByEmail(key) : null;
     const lockedNow = key ? lockout.fail(key) : false;
@@ -148,7 +164,7 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
         request.log.warn({ event: 'auth.locked' }, 'sign-in locked');
       }
     }
-    return send(reply, res);
+    return send(request, reply, res);
   }
 
   async function verify(request: Req, reply: FastifyReply, path: string): Promise<FastifyReply> {
@@ -162,7 +178,7 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
       if (res.status === 200 && !session.user.twoFactorEnabled) {
         await auth.auditUser(session.userId, 'auth.mfa_enrolled', { method });
       }
-      return send(reply, res);
+      return send(request, reply, res);
     }
     // The second step of a sign-in.
     const pending = await auth.userIdFromTwoFactorCookie(request.headers.cookie);
@@ -173,14 +189,14 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
     } else {
       await failed(request, pending, { method, reason: 'wrong_code' });
     }
-    return send(reply, res);
+    return send(request, reply, res);
   }
 
   async function signOut(request: Req, reply: FastifyReply): Promise<FastifyReply> {
     const session = request.authSession;
     const res = await forward(request);
     if (res.status === 200 && session) await auth.auditUser(session.userId, 'auth.sign_out');
-    return send(reply, res);
+    return send(request, reply, res);
   }
 
   fastify.route({
@@ -205,7 +221,7 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
       if (path === SIGN_IN) return signIn(req, reply);
       if (path === VERIFY_TOTP || path === VERIFY_BACKUP) return verify(req, reply, path);
       if (path === SIGN_OUT) return signOut(req, reply);
-      return send(reply, await forward(request));
+      return send(request, reply, await forward(request));
     },
   });
 }

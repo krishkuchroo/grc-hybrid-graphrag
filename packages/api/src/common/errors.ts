@@ -12,7 +12,7 @@ export interface ErrorBody {
   error: { code: string; message: string; referenceId: string };
 }
 
-const CODES: Record<number, string> = {
+export const CODES: Record<number, string> = {
   400: 'bad_request',
   401: 'unauthorized',
   403: 'forbidden',
