@@ -63,6 +63,173 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** A paged list's query parameters (D47): page, pageSize, sort and the list's filters. */
+export type ListQuery = Record<string, string | number | undefined>;
+
+/** `?a=1&b=x`, leaving out empty values; an empty string when nothing is left. */
+function queryString(query?: ListQuery): string {
+  if (!query) return '';
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === '') continue;
+    params.set(key, String(value));
+  }
+  const text = params.toString();
+  return text ? `?${text}` : '';
+}
+
+/** POST /api/v1/api-keys response. */
+export type PostApiKeysResponse = {
+  id: string;
+  key: string;
+};
+
+/** GET /api/v1/api-keys response. */
+export type GetApiKeysResponse = {
+  items: Array<{
+    id: string;
+    name: string;
+    role: string;
+    expiresAt: string;
+    revokedAt: unknown;
+    createdAt: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** GET /api/v1/assets response. */
+export type GetAssetsResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    assetType: 'server' | 'application' | 'database' | 'network_device' | 'cloud_service' | 'endpoint';
+    criticality: 'low' | 'medium' | 'high' | 'critical';
+    dataClassification: 'public' | 'internal' | 'confidential' | 'restricted';
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/assets response. */
+export type PostAssetsResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  assetType: 'server' | 'application' | 'database' | 'network_device' | 'cloud_service' | 'endpoint';
+  criticality: 'low' | 'medium' | 'high' | 'critical';
+  dataClassification: 'public' | 'internal' | 'confidential' | 'restricted';
+};
+
+/** POST /api/v1/assets request body. */
+export type PostAssetsBody = {
+  name: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  assetType: 'server' | 'application' | 'database' | 'network_device' | 'cloud_service' | 'endpoint';
+  criticality: 'low' | 'medium' | 'high' | 'critical';
+  dataClassification: 'public' | 'internal' | 'confidential' | 'restricted';
+};
+
+/** GET /api/v1/assets/{id} response. */
+export type GetAssetsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  assetType: 'server' | 'application' | 'database' | 'network_device' | 'cloud_service' | 'endpoint';
+  criticality: 'low' | 'medium' | 'high' | 'critical';
+  dataClassification: 'public' | 'internal' | 'confidential' | 'restricted';
+};
+
+/** PATCH /api/v1/assets/{id} response. */
+export type PatchAssetsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  assetType: 'server' | 'application' | 'database' | 'network_device' | 'cloud_service' | 'endpoint';
+  criticality: 'low' | 'medium' | 'high' | 'critical';
+  dataClassification: 'public' | 'internal' | 'confidential' | 'restricted';
+};
+
+/** PATCH /api/v1/assets/{id} request body. */
+export type PatchAssetsIdBody = {
+  name?: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  assetType?: 'server' | 'application' | 'database' | 'network_device' | 'cloud_service' | 'endpoint';
+  criticality?: 'low' | 'medium' | 'high' | 'critical';
+  dataClassification?: 'public' | 'internal' | 'confidential' | 'restricted';
+  version: number;
+};
+
+/** POST /api/v1/assets/{id}/retire response. */
+export type PostAssetsIdRetireResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  assetType: 'server' | 'application' | 'database' | 'network_device' | 'cloud_service' | 'endpoint';
+  criticality: 'low' | 'medium' | 'high' | 'critical';
+  dataClassification: 'public' | 'internal' | 'confidential' | 'restricted';
+};
+
+/** POST /api/v1/assets/{id}/retire request body. */
+export type PostAssetsIdRetireBody = {
+  version: number;
+};
+
 /** POST /api/v1/auth/sign-in/email response. */
 export type PostAuthSignInEmailResponse =
   | {
@@ -135,11 +302,280 @@ export type PostAuthTwoFactorVerifyTotpBody = {
   code: string;
 };
 
+/** GET /api/v1/controls response. */
+export type GetControlsResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    code: string;
+    framework: string;
+    controlStatus: 'not_implemented' | 'planned' | 'implemented';
+    lastTestedDate: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/controls response. */
+export type PostControlsResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  code: string;
+  framework: string;
+  controlStatus: 'not_implemented' | 'planned' | 'implemented';
+  lastTestedDate: string;
+};
+
+/** POST /api/v1/controls request body. */
+export type PostControlsBody = {
+  name: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  code: string;
+  framework: string;
+  controlStatus: 'not_implemented' | 'planned' | 'implemented';
+  lastTestedDate: string;
+};
+
+/** GET /api/v1/controls/{id} response. */
+export type GetControlsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  code: string;
+  framework: string;
+  controlStatus: 'not_implemented' | 'planned' | 'implemented';
+  lastTestedDate: string;
+};
+
+/** PATCH /api/v1/controls/{id} response. */
+export type PatchControlsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  code: string;
+  framework: string;
+  controlStatus: 'not_implemented' | 'planned' | 'implemented';
+  lastTestedDate: string;
+};
+
+/** PATCH /api/v1/controls/{id} request body. */
+export type PatchControlsIdBody = {
+  name?: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  code?: string;
+  framework?: string;
+  controlStatus?: 'not_implemented' | 'planned' | 'implemented';
+  lastTestedDate?: string;
+  version: number;
+};
+
+/** POST /api/v1/controls/{id}/retire response. */
+export type PostControlsIdRetireResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  code: string;
+  framework: string;
+  controlStatus: 'not_implemented' | 'planned' | 'implemented';
+  lastTestedDate: string;
+};
+
+/** POST /api/v1/controls/{id}/retire request body. */
+export type PostControlsIdRetireBody = {
+  version: number;
+};
+
 /** GET /api/v1/health response. */
 export type GetHealthResponse = {
   status: 'ok' | 'degraded';
   postgres: 'up' | 'down';
   neo4j: 'up' | 'down';
+};
+
+/** GET /api/v1/incidents response. */
+export type GetIncidentsResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    incidentStatus: 'new' | 'investigating' | 'contained' | 'resolved' | 'closed';
+    occurredAt: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/incidents response. */
+export type PostIncidentsResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  incidentStatus: 'new' | 'investigating' | 'contained' | 'resolved' | 'closed';
+  occurredAt: string;
+};
+
+/** POST /api/v1/incidents request body. */
+export type PostIncidentsBody = {
+  name: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  incidentStatus: 'new' | 'investigating' | 'contained' | 'resolved' | 'closed';
+  occurredAt: string;
+};
+
+/** GET /api/v1/incidents/{id} response. */
+export type GetIncidentsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  incidentStatus: 'new' | 'investigating' | 'contained' | 'resolved' | 'closed';
+  occurredAt: string;
+};
+
+/** PATCH /api/v1/incidents/{id} response. */
+export type PatchIncidentsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  incidentStatus: 'new' | 'investigating' | 'contained' | 'resolved' | 'closed';
+  occurredAt: string;
+};
+
+/** PATCH /api/v1/incidents/{id} request body. */
+export type PatchIncidentsIdBody = {
+  name?: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  incidentStatus?: 'new' | 'investigating' | 'contained' | 'resolved' | 'closed';
+  occurredAt?: string;
+  version: number;
+};
+
+/** POST /api/v1/incidents/{id}/retire response. */
+export type PostIncidentsIdRetireResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  incidentStatus: 'new' | 'investigating' | 'contained' | 'resolved' | 'closed';
+  occurredAt: string;
+};
+
+/** POST /api/v1/incidents/{id}/retire request body. */
+export type PostIncidentsIdRetireBody = {
+  version: number;
 };
 
 /** GET /api/v1/me response. */
@@ -158,7 +594,314 @@ export type GetMeResponse = {
   mfaEnrolled: boolean;
 };
 
+/** GET /api/v1/people response. */
+export type GetPeopleResponse = {
+  items: Array<{
+    id: string;
+    name: string;
+    role: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** GET /api/v1/policies response. */
+export type GetPoliciesResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    policyVersion: string;
+    effectiveDate: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/policies response. */
+export type PostPoliciesResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  policyVersion: string;
+  effectiveDate: string;
+};
+
+/** POST /api/v1/policies request body. */
+export type PostPoliciesBody = {
+  name: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  policyVersion: string;
+  effectiveDate: string;
+};
+
+/** GET /api/v1/policies/{id} response. */
+export type GetPoliciesIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  policyVersion: string;
+  effectiveDate: string;
+};
+
+/** PATCH /api/v1/policies/{id} response. */
+export type PatchPoliciesIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  policyVersion: string;
+  effectiveDate: string;
+};
+
+/** PATCH /api/v1/policies/{id} request body. */
+export type PatchPoliciesIdBody = {
+  name?: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  policyVersion?: string;
+  effectiveDate?: string;
+  version: number;
+};
+
+/** POST /api/v1/policies/{id}/retire response. */
+export type PostPoliciesIdRetireResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  policyVersion: string;
+  effectiveDate: string;
+};
+
+/** POST /api/v1/policies/{id}/retire request body. */
+export type PostPoliciesIdRetireBody = {
+  version: number;
+};
+
+/** GET /api/v1/risks response. */
+export type GetRisksResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    impact: number;
+    likelihood: number;
+    financialExposure: number;
+    rating: {
+      score: number;
+      band: string;
+    };
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/risks response. */
+export type PostRisksResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  impact: number;
+  likelihood: number;
+  financialExposure: number;
+  rating: {
+    score: number;
+    band: string;
+  };
+};
+
+/** POST /api/v1/risks request body. */
+export type PostRisksBody = {
+  name: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  impact: number;
+  likelihood: number;
+  financialExposure: number;
+};
+
+/** GET /api/v1/risks/{id} response. */
+export type GetRisksIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  impact: number;
+  likelihood: number;
+  financialExposure: number;
+  rating: {
+    score: number;
+    band: string;
+  };
+};
+
+/** PATCH /api/v1/risks/{id} response. */
+export type PatchRisksIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  impact: number;
+  likelihood: number;
+  financialExposure: number;
+  rating: {
+    score: number;
+    band: string;
+  };
+};
+
+/** PATCH /api/v1/risks/{id} request body. */
+export type PatchRisksIdBody = {
+  name?: string;
+  owner?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  impact?: number;
+  likelihood?: number;
+  financialExposure?: number;
+  version: number;
+};
+
+/** POST /api/v1/risks/{id}/retire response. */
+export type PostRisksIdRetireResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  impact: number;
+  likelihood: number;
+  financialExposure: number;
+  rating: {
+    score: number;
+    band: string;
+  };
+};
+
+/** POST /api/v1/risks/{id}/retire request body. */
+export type PostRisksIdRetireBody = {
+  version: number;
+};
+
 export const api = {
+  /** Create a machine API key (Admin only); the key is shown only in this response */
+  postApiKeys: (): Promise<PostApiKeysResponse> => request<PostApiKeysResponse>('POST', '/api/v1/api-keys'),
+  /** The org's machine API keys, paged (Admin only); never the keys themselves */
+  getApiKeys: (query?: ListQuery): Promise<GetApiKeysResponse> =>
+    request<GetApiKeysResponse>('GET', `/api/v1/api-keys${queryString(query)}`),
+  /** List assets, paged */
+  getAssets: (query?: ListQuery): Promise<GetAssetsResponse> =>
+    request<GetAssetsResponse>('GET', `/api/v1/assets${queryString(query)}`),
+  /** Create a asset */
+  postAssets: (body: PostAssetsBody): Promise<PostAssetsResponse> =>
+    request<PostAssetsResponse>('POST', '/api/v1/assets', body),
+  /** Open one asset */
+  getAssetsId: (path: { id: string }): Promise<GetAssetsIdResponse> =>
+    request<GetAssetsIdResponse>('GET', `/api/v1/assets/${encodeURIComponent(path.id)}`),
+  /** Edit a asset; a stale version is refused (409 stale_version) */
+  patchAssetsId: (path: { id: string }, body: PatchAssetsIdBody): Promise<PatchAssetsIdResponse> =>
+    request<PatchAssetsIdResponse>('PATCH', `/api/v1/assets/${encodeURIComponent(path.id)}`, body),
+  /** Retire a asset; it is kept, never deleted */
+  postAssetsIdRetire: (path: { id: string }, body: PostAssetsIdRetireBody): Promise<PostAssetsIdRetireResponse> =>
+    request<PostAssetsIdRetireResponse>('POST', `/api/v1/assets/${encodeURIComponent(path.id)}/retire`, body),
   /** Sign in with email and password; with MFA set up, the second factor comes next */
   postAuthSignInEmail: (body: PostAuthSignInEmailBody): Promise<PostAuthSignInEmailResponse> =>
     request<PostAuthSignInEmailResponse>('POST', '/api/v1/auth/sign-in/email', body),
@@ -176,8 +919,74 @@ export const api = {
   /** Check a 6-digit authenticator code (finishes sign-in or MFA set-up) */
   postAuthTwoFactorVerifyTotp: (body: PostAuthTwoFactorVerifyTotpBody): Promise<PostAuthTwoFactorVerifyTotpResponse> =>
     request<PostAuthTwoFactorVerifyTotpResponse>('POST', '/api/v1/auth/two-factor/verify-totp', body),
+  /** List controls, paged */
+  getControls: (query?: ListQuery): Promise<GetControlsResponse> =>
+    request<GetControlsResponse>('GET', `/api/v1/controls${queryString(query)}`),
+  /** Create a control */
+  postControls: (body: PostControlsBody): Promise<PostControlsResponse> =>
+    request<PostControlsResponse>('POST', '/api/v1/controls', body),
+  /** Open one control */
+  getControlsId: (path: { id: string }): Promise<GetControlsIdResponse> =>
+    request<GetControlsIdResponse>('GET', `/api/v1/controls/${encodeURIComponent(path.id)}`),
+  /** Edit a control; a stale version is refused (409 stale_version) */
+  patchControlsId: (path: { id: string }, body: PatchControlsIdBody): Promise<PatchControlsIdResponse> =>
+    request<PatchControlsIdResponse>('PATCH', `/api/v1/controls/${encodeURIComponent(path.id)}`, body),
+  /** Retire a control; it is kept, never deleted */
+  postControlsIdRetire: (path: { id: string }, body: PostControlsIdRetireBody): Promise<PostControlsIdRetireResponse> =>
+    request<PostControlsIdRetireResponse>('POST', `/api/v1/controls/${encodeURIComponent(path.id)}/retire`, body),
   /** Whether the API can reach Postgres and Neo4j */
   getHealth: (): Promise<GetHealthResponse> => request<GetHealthResponse>('GET', '/api/v1/health'),
+  /** List incidents, paged */
+  getIncidents: (query?: ListQuery): Promise<GetIncidentsResponse> =>
+    request<GetIncidentsResponse>('GET', `/api/v1/incidents${queryString(query)}`),
+  /** Create a incident */
+  postIncidents: (body: PostIncidentsBody): Promise<PostIncidentsResponse> =>
+    request<PostIncidentsResponse>('POST', '/api/v1/incidents', body),
+  /** Open one incident */
+  getIncidentsId: (path: { id: string }): Promise<GetIncidentsIdResponse> =>
+    request<GetIncidentsIdResponse>('GET', `/api/v1/incidents/${encodeURIComponent(path.id)}`),
+  /** Edit a incident; a stale version is refused (409 stale_version) */
+  patchIncidentsId: (path: { id: string }, body: PatchIncidentsIdBody): Promise<PatchIncidentsIdResponse> =>
+    request<PatchIncidentsIdResponse>('PATCH', `/api/v1/incidents/${encodeURIComponent(path.id)}`, body),
+  /** Retire a incident; it is kept, never deleted */
+  postIncidentsIdRetire: (
+    path: { id: string },
+    body: PostIncidentsIdRetireBody,
+  ): Promise<PostIncidentsIdRetireResponse> =>
+    request<PostIncidentsIdRetireResponse>('POST', `/api/v1/incidents/${encodeURIComponent(path.id)}/retire`, body),
   /** The signed-in user, their org, role and clearance, and whether MFA is set up */
   getMe: (): Promise<GetMeResponse> => request<GetMeResponse>('GET', '/api/v1/me'),
+  /** The caller's org members for the owner picker, paged: id, name and role only */
+  getPeople: (query?: ListQuery): Promise<GetPeopleResponse> =>
+    request<GetPeopleResponse>('GET', `/api/v1/people${queryString(query)}`),
+  /** List policies, paged */
+  getPolicies: (query?: ListQuery): Promise<GetPoliciesResponse> =>
+    request<GetPoliciesResponse>('GET', `/api/v1/policies${queryString(query)}`),
+  /** Create a policy */
+  postPolicies: (body: PostPoliciesBody): Promise<PostPoliciesResponse> =>
+    request<PostPoliciesResponse>('POST', '/api/v1/policies', body),
+  /** Open one policy */
+  getPoliciesId: (path: { id: string }): Promise<GetPoliciesIdResponse> =>
+    request<GetPoliciesIdResponse>('GET', `/api/v1/policies/${encodeURIComponent(path.id)}`),
+  /** Edit a policy; a stale version is refused (409 stale_version) */
+  patchPoliciesId: (path: { id: string }, body: PatchPoliciesIdBody): Promise<PatchPoliciesIdResponse> =>
+    request<PatchPoliciesIdResponse>('PATCH', `/api/v1/policies/${encodeURIComponent(path.id)}`, body),
+  /** Retire a policy; it is kept, never deleted */
+  postPoliciesIdRetire: (path: { id: string }, body: PostPoliciesIdRetireBody): Promise<PostPoliciesIdRetireResponse> =>
+    request<PostPoliciesIdRetireResponse>('POST', `/api/v1/policies/${encodeURIComponent(path.id)}/retire`, body),
+  /** List risks, paged */
+  getRisks: (query?: ListQuery): Promise<GetRisksResponse> =>
+    request<GetRisksResponse>('GET', `/api/v1/risks${queryString(query)}`),
+  /** Create a risk */
+  postRisks: (body: PostRisksBody): Promise<PostRisksResponse> =>
+    request<PostRisksResponse>('POST', '/api/v1/risks', body),
+  /** Open one risk */
+  getRisksId: (path: { id: string }): Promise<GetRisksIdResponse> =>
+    request<GetRisksIdResponse>('GET', `/api/v1/risks/${encodeURIComponent(path.id)}`),
+  /** Edit a risk; a stale version is refused (409 stale_version) */
+  patchRisksId: (path: { id: string }, body: PatchRisksIdBody): Promise<PatchRisksIdResponse> =>
+    request<PatchRisksIdResponse>('PATCH', `/api/v1/risks/${encodeURIComponent(path.id)}`, body),
+  /** Retire a risk; it is kept, never deleted */
+  postRisksIdRetire: (path: { id: string }, body: PostRisksIdRetireBody): Promise<PostRisksIdRetireResponse> =>
+    request<PostRisksIdRetireResponse>('POST', `/api/v1/risks/${encodeURIComponent(path.id)}/retire`, body),
 };
