@@ -38,3 +38,14 @@ export function canLinkRecords(caller: LinkCaller, from: LinkRecordEnd, to: Link
   if (!sees(caller, from) || !sees(caller, to)) return false;
   return edits(caller, from) || edits(caller, to);
 }
+
+/** The link origins `POST /api/v1/links/remove` may remove (D207). An `ai` link is removed only
+ * through the Analyst's review. */
+export const REMOVABLE_LINK_ORIGINS = ['manual', 'import'] as const;
+
+export type RemovableLinkOrigin = (typeof REMOVABLE_LINK_ORIGINS)[number];
+
+/** True for exactly `manual` and `import` (D207); anything else, `ai` included, is refused. */
+export function isRemovableLinkOrigin(origin: unknown): origin is RemovableLinkOrigin {
+  return typeof origin === 'string' && (REMOVABLE_LINK_ORIGINS as readonly string[]).includes(origin);
+}

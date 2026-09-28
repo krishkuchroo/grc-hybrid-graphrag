@@ -105,6 +105,8 @@ export const SECURITY_MATRIX: {
     // Links (S1-005). Adding one is open to any signed-in user because the D200 rule depends on
     // both ends; the service checks it.
     { method: 'POST', path: '/api/v1/links', access: 'any signed-in', orgWalled: true, labels: true },
+    // Removing one (S1-011, D201, D207): the same rule as adding, checked by the service.
+    { method: 'POST', path: '/api/v1/links/remove', access: 'any signed-in', orgWalled: true, labels: true },
     {
       method: 'GET',
       path: '/api/v1/assets/:id/links',
