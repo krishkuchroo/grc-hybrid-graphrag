@@ -86,10 +86,10 @@ export async function buildAssetMap(
   depth: number,
   scope: MapScope,
 ): Promise<AssetMap | null> {
-  const centre = await tx.run(
-    `MATCH (c:Asset {id: $centreId}) WHERE ${scope.where('c')} RETURN ${NODE_FIELDS('c')}`,
-    { ...scope.params, centreId },
-  );
+  const centre = await tx.run(`MATCH (c:Asset {id: $centreId}) WHERE ${scope.where('c')} RETURN ${NODE_FIELDS('c')}`, {
+    ...scope.params,
+    centreId,
+  });
   const first = centre.records[0];
   if (!first) return null;
 

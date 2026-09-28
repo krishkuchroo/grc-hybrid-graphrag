@@ -342,4 +342,3 @@ function actorOf(caller: Caller): AuditActor {
     ? { actorType: 'api_key', actorId: caller.apiKeyId }
     : { actorType: 'user', actorId: caller.userId };
 }
-

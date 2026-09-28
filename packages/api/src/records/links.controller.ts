@@ -12,7 +12,14 @@ import { ApiError } from '../common/errors.js';
 import { documentRoute } from '../common/openapi.js';
 import type { AuthedRequest } from '../identity/session.guard.js';
 import { assetMapSchema, type AssetMap } from './asset-map.js';
-import { LinksService, createLinkSchema, linkListSchema, linkSchema, type LinkItem, type LinkOut } from './links.service.js';
+import {
+  LinksService,
+  createLinkSchema,
+  linkListSchema,
+  linkSchema,
+  type LinkItem,
+  type LinkOut,
+} from './links.service.js';
 import type { Caller } from './records.service.js';
 
 function callerOf(request: AuthedRequest): Caller {
