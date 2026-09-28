@@ -23,8 +23,9 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | TEST-001 | TEST | builder-platform | done | Every test file in packages/* renamed by what it needs (`.unit` / `.db` / `.stack` `.test.ts`, `e2e/*.e2e.ts`) with `git mv`; `test:unit` / `test:db` / `test:stack` per package and at the root, `test:e2e` at the root, `test` = unit + db + stack; db and stack runs call `pnpm test:env` first and stop if it fails; a check fails on any test file with no type; `retries: 0` in Vitest and Playwright (D177, D171). Merges last. Tests: `pnpm --filter infra test -- test-names` | | `logs/tasks/TEST-001.md` |
 | TEST-002 | TEST | builder-platform | done | `pnpm test:env` doctor: one OK/missing line per item (stack and dev relay, migrations, 28 grc_ro_* DENYs, `.env` key names, Caddy root trusted, hosts line), non-zero exit if anything's missing, changes nothing (D180); `seed:demo`, `org:create` and their env loader swap the container host for 127.0.0.1:5433 themselves (D170). Tests: `pnpm --filter infra test -- test-env` and `pnpm --filter infra test -- org-script-env` | | `logs/tasks/TEST-002.md` |
 | TEST-003 | TEST | builder-platform | done | `packages/shared/src/access/security-matrix.ts` lists every record type and every `/api/v1` route with its role rule, org wall and label rule; a unit test fails if the code has a record type or route not in the matrix, or the matrix lists one the code doesn't have (D175, D59, D50, D51). Tests: `pnpm --filter api test -- security-matrix` | open: user decides on the flaky body-size test (keep push + fix task?) | `logs/tasks/TEST-003.md` |
-| TEST-004 | TEST | builder-platform | to do | The front-door test "an upload of exactly 25 MB passes the door and reaches the API" gives the same result every time and in any order: the test writer finds the cause from the code (not by changing shared state), fixes the existing test only, with no retries and no sleeps as waits, and hands in with `fixReason` (D185, D171, D176). A cause in the app or Caddy code, not the test, is a question for the user (blocked). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack` | | |
+| TEST-004 | TEST | builder-platform | in review | The front-door test "an upload of exactly 25 MB passes the door and reaches the API" gives the same result every time and in any order: the test writer finds the cause from the code (not by changing shared state), fixes the existing test only, with no retries and no sleeps as waits, and hands in with `fixReason` (D185, D171, D176). A cause in the app or Caddy code, not the test, is a question for the user (blocked). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack` | merged locally as d56f2f9, not pushed; waits for TEST-006 (D187) | |
 | TEST-005 | TEST | builder-platform | to do | In `packages/shared/src/access/security-matrix.ts` the `audit_trail` record type has `labels: true` (D186); a new unit test pins the label value of every non-record row: uploads, review_queue, chat and audit_trail true, admin false (D175, D51). Red until the builder flips audit_trail. Tests: `pnpm --filter api test -- security-matrix` | | |
+| TEST-006 | TEST | builder-platform | to do | The three size-cap tests in `front-door/body-size.stack.test.ts` (25 MB + 1 byte → 413 at the door, 40 MB → 413 at the door, JSON just over 1 MB → the API's 413 in the D47 format) give the same answer every time (D187, D171). The test writer finds each cause from the code, never by changing shared state (D176), and says whether a real person could get 502 instead of 413. Test-only cause: fix the existing tests with `fixReason`, same checks, no retries, sleeps, longer timeouts or `cutShortOk` on status checks (D185). Real cause: a reliably red test, then the smallest Caddy or API change so the answer is always 413 in the D47 format; limits stay 25 MB at the door and 1 MB at the API (D188, D53, D64). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack`, none skipped; integrator pushes main (with TEST-004's d56f2f9 and 7c8199b) only after one clean full `pnpm test` | | |
 
 **Moved out of M0 (planned with slice 7, no task yet):**
 - SSO (OIDC/SAML) is planned for S7, with the Admin screens. Its tests will use a small stand-in sign-in provider that runs locally (D134).
@@ -676,3 +677,50 @@ Task: TEST-005
 **Tests to write:** `packages/api/tests/security/security-matrix-labels.unit.test.ts` (kind: `unit`; it imports the matrix only, with no database, server or `.env`). It covers criterion 2. Security-matrix rows: no new record type or route, so no new rows; the row that changes is `audit_trail` (labels false → true).
 
 **Test command:** `pnpm --filter api test -- security-matrix`
+
+---
+
+Task: TEST-006
+
+**Goal:** The three size-cap tests in `packages/infra/tests/front-door/body-size.stack.test.ts` give the same answer every time. If a real person sending a slightly-too-big request can get 502 instead of 413, that's fixed too, so the answer is always the clear 413.
+
+**Decisions:** D187 (fix the size-cap race before anything more is pushed; push TEST-004 and TEST-006 together after one clean full run), D188 (if the 502 is real, the smallest change in Caddy or the API, no need to ask the user again), D185 (fix to existing tests on main, handed in with `fixReason`), D171 (no retries; a test that fails then passes is a bug), D176 (never weaken live or shared state to prove a test), D53 and D64 (25 MB upload cap at the door, 1 MB API cap), D47 (one error format with a reference ID), D173 (none skipped), D174 (new tests agree with older ones), D177 (test kinds). Read the TEST shared notes above.
+
+**Background:**
+- TEST-004's integrator saw one full run fail: `body-size.stack.test.ts:76`, "a JSON request just over 1 MB passes the door and is refused by the API with 413 in its error format", got **502** instead of 413.
+- TEST-004's reviewers found the same race in two more tests: "an upload of 25 MB + 1 byte gets 413 from the door" (line 45, status check at :50) and "a 40 MB upload gets 413 from the door" (line 57, status check at :62).
+- The race: the server (Caddy for the uploads, the API for the JSON request) answers and closes while the client is still sending the body. The order in which the client sees the answer, its own write error (EPIPE or ECONNRESET), or Caddy's upstream error varies from run to run.
+- TEST-004 (merged locally as `d56f2f9`, not pushed) handled this for the exactly-25-MB test only, with `cutShortOk` in `packages/infra/tests/front-door/helpers.ts` (`SendOptions.cutShortOk`, `collect()` at about lines 91-170). That option lets a write error end the exchange with no answer, so it must not be used where the test checks the status.
+- Where the caps live: Caddy's door cap in `packages/infra/caddy/Caddyfile`; the API's 1 MB cap (`BODY_LIMIT_BYTES`) in `packages/api/src/main.api.ts`, and its 413 `payload_too_large` answer in `packages/api/src/common/errors.ts`.
+
+**Who does what:**
+1. **Test writer** finds the cause of each of the three failures from the code (the test helper, the Caddyfile, the API's body-limit handling), never by changing shared state (D176). It decides, and says in its hand-off with file and line, whether a real person (a normal HTTP client that sends a body over the cap) could get 502 instead of 413.
+   - A 502 on the JSON request most likely comes from Caddy, when the API closes the connection before Caddy has finished forwarding the body. Check that against the Caddyfile and how the API answers an over-limit body. It's a candidate, not a finding.
+2. **If the cause is only in the test** (the client's own read or write ordering): the test writer fixes the existing tests and hands in with `fixReason`, green. No builder.
+3. **If the cause is real** (Caddy or the API can answer 502 to a slightly-too-big request): the test writer writes a test that reproduces it **every time** (red on every run, for example by controlling how the client sends the body or when it reads the answer), and hands in red. Then **builder-platform** makes the smallest change in the Caddyfile or the API so the answer is always 413 in the D47 error format (D188). No need to ask the user. Both reviewers check the change.
+
+**Files:**
+- Modify (test writer): `packages/infra/tests/front-door/body-size.stack.test.ts` and `packages/infra/tests/front-door/helpers.ts`. For the real-cause route only, the test writer may add one new `*.stack.test.ts` file under `packages/infra/tests/front-door/` for the reproducing test, or put it in `body-size.stack.test.ts`. Note that a `fixReason` hand-in can't add new files or touch non-test files (D185), so the real-cause route is handed in as a normal red hand-in, not a fix.
+- Modify (builder, real-cause route only): `packages/infra/caddy/Caddyfile`, or the API's body-limit handling (`packages/api/src/main.api.ts`, `packages/api/src/common/errors.ts`). Only the smallest change that fixes the cause.
+- Don't touch `compose.yaml`, `.env`, the rate limits or any other test file.
+
+**Pass criteria:**
+1. The test writer's hand-off names the cause of each of the three failures, with the file and line that explains it, and says whether a real person could get 502 (yes or no, and why).
+2. The three tests still check what they checked before:
+   - 25 MB + 1 byte and 40 MB: status 413 from the door, and the API log never shows the marker (with the control request proving the log is read).
+   - JSON just over 1 MB: status 413, body in the D47 format with `code` `payload_too_large`, and the marker in the API log.
+   - Nothing is loosened: no accepting 502 or status 0, no dropped log check, and no `cutShortOk` on a test that checks the status.
+3. No retries, no sleeps used as waits, and no longer timeouts to hide the cause (D171). A bounded wait for a condition is fine only if the hand-off explains why its limit covers the worst case.
+4. Nothing shared is changed to prove the cause or the fix (D176): no container restarts to test a theory, no rate-limit or privilege changes. Experiments happen only in the worktree's test code. If the builder changes the Caddyfile or the API, rebuilding and recreating only `grc-caddy` or `grc-api` with `--no-deps` from the main checkout's compose project is the deploy step, not an experiment. The builder says in its hand-off exactly what it recreated.
+5. Real-cause route only:
+   - The reproducing test is red on every run before the builder's change and green on every run after it.
+   - The limits don't move: 25 MB (`UPLOAD_CAP_BYTES`) at the door and 1 MB (`BODY_LIMIT_BYTES`) at the API (D53, D64).
+   - The 413 keeps the D47 format (`code`, `referenceId`) and the D64 security headers.
+6. `pnpm --filter infra test -- body-size` passes 3 times in a row, then `pnpm --filter infra test:stack` passes once, with nothing skipped (D173). The hand-off records the counts, and names the earlier tests it agrees with (D174), including TEST-004's exactly-25-MB test.
+7. Security-matrix rows: no new record type or route, so no new rows (D175).
+
+**Tests to write:** kind `stack` (they need the running stack and Caddy). Test-only cause: fix the three existing tests; no new file. Real cause: one reproducing test (new or in `body-size.stack.test.ts`) that is red every time until the builder's change.
+
+**Test command:** `pnpm --filter infra test -- body-size`
+
+**Integrator:** merge `task/TEST-006` into `main` locally. Then run one full `pnpm test` (unit, db, stack) with the stack up. Push `main` only if it's clean. That push also carries TEST-004's `d56f2f9` and `7c8199b` (D187). If the full run fails, don't push; hand in `blocked` with the failing test.
