@@ -60,8 +60,12 @@ services:
         limits:
           memory: 512M
 
+  # The front door (D60): the built web app and the Caddyfile are baked into the image.
   grc-caddy:
-    image: caddy:2.11.4-alpine
+    build:
+      context: ../..
+      dockerfile: packages/web/Dockerfile
+    image: grc-caddy:local
     container_name: grc-caddy
     restart: unless-stopped
     ports:
