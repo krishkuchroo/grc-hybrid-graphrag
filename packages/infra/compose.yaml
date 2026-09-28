@@ -60,8 +60,12 @@ services:
         limits:
           memory: 512M
 
+  # The front door (D60): the built web app and the Caddyfile are baked into the image.
   grc-caddy:
-    image: caddy:2.11.4-alpine
+    build:
+      context: ../..
+      dockerfile: packages/web/Dockerfile
+    image: grc-caddy:local
     container_name: grc-caddy
     restart: unless-stopped
     ports:
@@ -88,6 +92,11 @@ services:
     command: ['pnpm', '--filter', '@grc/api', 'start:api']
     environment: &app-env
       NODE_ENV: production
+      # Listen on every interface inside the container, so Caddy reaches the API over grc-edge.
+      # No ports are published (D61, D63, D165).
+      HOST: 0.0.0.0
+      # Better Auth's signing secret (D49, D165), from .env only.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       # The restricted app account only (D57, D73); the migration URL never reaches the runtime.
       DATABASE_URL_APP: ${DATABASE_URL_APP}
       NEO4J_URI: bolt://host.docker.internal:7687

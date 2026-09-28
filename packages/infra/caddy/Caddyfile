@@ -1,0 +1,57 @@
+# The one front door (D60, D61, D64, D65): https://grc.localhost, with a certificate from Caddy's
+# own local CA. Plain HTTP on :80 only redirects to HTTPS (Caddy's automatic HTTPS).
+# Serves the built web app (/srv) and forwards /api/v1 to grc-api over the grc-edge network.
+{
+	admin off
+	# The container can't reach the Mac's keychain; the user trusts the root once by hand (D65).
+	skip_install_trust
+}
+
+# D64 security headers for what the door answers itself: no framing, HTTPS only, strict content
+# rules. The API sets the same headers on its own answers (M0-007), so they are not added twice.
+(d64_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options DENY
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
+}
+
+grc.localhost {
+	tls internal
+
+	@api path /api/v1 /api/v1/*
+
+	handle @api {
+		# 25 MB cap at the door (D53, D64), in binary megabytes like the API's own 1 MB cap. A body
+		# declared bigger is refused before anything reaches the API; a chunked body is cut at the cap.
+		@too_big expression `{http.request.header.Content-Length} != "" && int({http.request.header.Content-Length}) > 26214400`
+		error @too_big 413
+		request_body {
+			max_size 26214400
+		}
+		reverse_proxy grc-api:3000
+	}
+
+	# The built web app; unknown paths fall back to index.html for the app's own router.
+	handle {
+		import d64_headers
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	# The door's own refusals, in the API's one error format (D47).
+	handle_errors 413 {
+		import d64_headers
+		header Content-Type application/json
+		respond `{"error":{"code":"payload_too_large","message":"Uploads are limited to 25 MB.","referenceId":"{http.request.uuid}"}}` 413
+	}
+	handle_errors {
+		import d64_headers
+		header Content-Type application/json
+		respond `{"error":{"code":"front_door_error","message":"{err.status_text}","referenceId":"{http.request.uuid}"}}` {err.status_code}
+	}
+}

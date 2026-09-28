@@ -8,7 +8,8 @@
     "build": "vite build",
     "test": "sh -c '[ \"$1\" = -- ] && shift; exec vitest run \"$@\"' vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "playwright": "playwright"
   },
   "dependencies": {
     "@grc/shared": "workspace:*",
@@ -27,6 +28,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "~1.61.1",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
