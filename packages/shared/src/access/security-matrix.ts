@@ -9,7 +9,9 @@
 // - recordTypes: one entry per ROLE_TABLE row (D50), listed by hand so a new row must be added
 //   here. `cells` is the role table row itself, not a copy. Every row is behind the org wall (D55).
 //   Labels (D51, D66) apply to the record types, to uploads and the review queue (documents are
-//   labelled and their findings inherit it) and to chat (it sees only what the user may see).
+//   labelled and their findings inherit it), to chat (it sees only what the user may see) and to the
+//   audit trail (D186: an entry about a record above the reader's clearance still shows that it
+//   exists, but its before/after contents are hidden; the audit viewer itself is built in S7).
 // - routes: one entry per API route, with its full path under /api/v1 (D30), Nest params as `:id`
 //   and Fastify wildcards as `*`. `access` is 'public', 'any signed-in' or the D50 cell the route's
 //   `@Requires(subject, action)` names.
@@ -47,7 +49,7 @@ export const SECURITY_MATRIX: {
     { subject: 'audit_finding', cells: ROLE_TABLE.audit_finding, orgWalled: true, labels: true },
     { subject: 'uploads', cells: ROLE_TABLE.uploads, orgWalled: true, labels: true },
     { subject: 'review_queue', cells: ROLE_TABLE.review_queue, orgWalled: true, labels: true },
-    { subject: 'audit_trail', cells: ROLE_TABLE.audit_trail, orgWalled: true, labels: false },
+    { subject: 'audit_trail', cells: ROLE_TABLE.audit_trail, orgWalled: true, labels: true },
     { subject: 'admin', cells: ROLE_TABLE.admin, orgWalled: true, labels: false },
     { subject: 'chat', cells: ROLE_TABLE.chat, orgWalled: true, labels: true },
   ],
