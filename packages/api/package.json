@@ -6,7 +6,9 @@
   "scripts": {
     "test": "sh -c '[ \"$1\" = -- ] && shift; exec vitest run \"$@\"' vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "start:api": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./src/ts-resolve.ts src/main.api.ts",
+    "start:worker": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./src/ts-resolve.ts src/main.worker.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",
