@@ -4,7 +4,7 @@
 // also goes into the pino log line, and only the log holds the detail of an unexpected error.
 import { randomUUID } from 'node:crypto';
 import { HttpException, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 import { ZodError } from 'zod';
 
@@ -55,6 +55,17 @@ export function sendError(
     .header('content-type', 'application/json; charset=utf-8')
     .send(JSON.stringify(body));
   return body;
+}
+
+/** Keeps the connection open after the 413 for a body over the 1 MB cap (TEST-006, D188).
+ * Fastify marks that answer `Connection: close` and doesn't read the body, so Node would close the
+ * socket with the body still arriving and reset it; Caddy then sees the write error before the 413
+ * and answers 502. Without the header, Node reads the rest of the body and throws it away. The door
+ * caps it at 25 MB (D53), so that read is bounded. Other body errors still close the connection. */
+export function registerBodyTooLargeKeepAlive(fastify: FastifyInstance): void {
+  fastify.addHook('onError', async (_request, reply, error) => {
+    if ((error as { code?: unknown }).code === 'FST_ERR_CTP_BODY_TOO_LARGE') reply.removeHeader('connection');
+  });
 }
 
 /** An HTTP error with its own code in the one format, for example 403 `mfa_required`. */

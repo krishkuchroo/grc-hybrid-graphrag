@@ -14,15 +14,23 @@ import { API_CAP_BYTES, MB, UPLOAD_CAP_BYTES, apiLogged, apiLogsSince, errorBody
 
 const UPLOAD = '/api/v1/intake/uploads';
 
-function upload(marker: string, bytes: number, cutShortOk = false) {
+function upload(marker: string, bytes: number, opts: { cutShortOk?: boolean; expectContinue?: boolean } = {}) {
   return https(`${UPLOAD}?probe=${marker}`, {
     method: 'POST',
     headers: { 'content-type': 'application/octet-stream' },
     bodyBytes: bytes,
     timeoutMs: 90_000,
-    cutShortOk,
+    ...opts,
   });
 }
+
+// The door refuses an upload by its declared size and closes the connection. When the body was
+// already streaming, our write error (EPIPE) came ~1 ms after the 413 and, about 1 run in 5, before
+// this process had read it, so the answer was lost (TEST-006, D171). These tests check the answer,
+// so they declare the size and wait to be asked for the body (Expect: 100-continue): the door
+// answers 413 before any of the body is sent. A door that let the upload through would ask for the
+// body, get all of it, and the marker would show in the API log.
+const REFUSED_BY_SIZE = { expectContinue: true };
 
 describe('criterion 5: 25 MB at the door, 1 MB at the API', () => {
   it('control: a 2 MB upload passes the door and reaches the API (its marker is in the API log)', async () => {
@@ -38,7 +46,7 @@ describe('criterion 5: 25 MB at the door, 1 MB at the API', () => {
     // The API answers without reading the 25 MB (no upload route yet, then its own 1 MB cap) and the
     // connection is closed mid-body, so our write error can beat its answer by ~1 ms (TEST-004,
     // D171). What this test checks is the API log, so that race must not fail it (cutShortOk).
-    await upload(marker, UPLOAD_CAP_BYTES, true);
+    await upload(marker, UPLOAD_CAP_BYTES, { cutShortOk: true });
     expect(await apiLogged(marker, since)).toBe(true);
   });
 
@@ -46,7 +54,7 @@ describe('criterion 5: 25 MB at the door, 1 MB at the API', () => {
     const control = randomUUID();
     const marker = randomUUID();
     const since = new Date(Date.now() - 1_000);
-    const res = await upload(marker, UPLOAD_CAP_BYTES + 1);
+    const res = await upload(marker, UPLOAD_CAP_BYTES + 1, REFUSED_BY_SIZE);
     expect(res.status).toBe(413);
     // A later request that does reach the API proves the log is being read up to now.
     await upload(control, 2 * MB);
@@ -58,7 +66,7 @@ describe('criterion 5: 25 MB at the door, 1 MB at the API', () => {
     const control = randomUUID();
     const marker = randomUUID();
     const since = new Date(Date.now() - 1_000);
-    const res = await upload(marker, 40 * MB);
+    const res = await upload(marker, 40 * MB, REFUSED_BY_SIZE);
     expect(res.status).toBe(413);
     await upload(control, 2 * MB);
     expect(await apiLogged(control, since)).toBe(true);

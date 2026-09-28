@@ -8,7 +8,7 @@ import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
-import { ErrorFilter } from './common/errors.js';
+import { ErrorFilter, registerBodyTooLargeKeepAlive } from './common/errors.js';
 import { createLogger, PinoNestLogger, type LogStream } from './common/logger.js';
 import { API_PREFIX } from './common/openapi.js';
 import { RateLimiter, REQUESTS_PER_MINUTE, registerRateLimit } from './common/rate-limit.js';
@@ -31,6 +31,7 @@ export async function createApiApp(opts: ApiAppOptions = {}): Promise<NestFastif
   const adapter = new FastifyAdapter({ loggerInstance: log, bodyLimit: BODY_LIMIT_BYTES });
   const fastify = adapter.getInstance();
   registerSecurityHeaders(fastify);
+  registerBodyTooLargeKeepAlive(fastify);
 
   class ApiRootModule {}
   Module({ imports: [AppModule, ...((opts.imports ?? []) as never[])] })(ApiRootModule);
