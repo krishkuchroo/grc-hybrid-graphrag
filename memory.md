@@ -742,6 +742,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The skills for S1: the same set as M0 (D136).
 - **D206 A Control Owner may hand their control to someone else** (2026-09-28, the user: "1 yes"): D199's "edit own" covers every field of a control assigned to them, including its owner. After the hand-over it's no longer theirs to edit.
 - **D207 AI-made links are removed only through the Analyst** (2026-09-28, the user: "2 only analyst"): `POST /api/v1/links/remove` (D201) removes only links people added by hand (origin `manual`, or `import`). A link with origin `ai` is refused there and is handled only through the Analyst's false-positive review (S4/S5), which keeps its hidden copy.
+- **D208 The writer account builds each org database's schema** (2026-09-28, Q-S1-002, the user: "continue" after the recommendation (a)): `setup:neo4j` grants `INDEX MANAGEMENT` and `CONSTRAINT MANAGEMENT` on `DATABASE *` to `grc_writer`, and `ensureOrgSchema` runs as the writer. It widens D144 for the writer only; the writer still can't touch `system` or write to `neo4j`, and the 28 query accounts are unchanged. Why not the admin or a new account: the running API already holds both the writer's and the admin's passwords, so neither would make the running app safer.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
