@@ -6,6 +6,9 @@
 // pass appends it again, and the append is a no-op because the sourceId is already on the chain
 // (M0-012). In order: if an append fails, that org's later entries wait for a later pass.
 // An entry is always appended to the org whose database holds it, whatever its `orgId` says.
+//
+// Failure logs (D163): only the error's type and code, the org ID and the outbox entry's ID.
+// Never the raw error: its message, stack, properties or cause can hold the entry's contents.
 import type { Logger } from 'pino';
 import { createLogger } from '../common/logger.js';
 import type { GraphService } from '../graph/graph.service.js';
@@ -51,8 +54,7 @@ export class OutboxRelay {
       try {
         await this.relayOrg(orgId);
       } catch (err) {
-        failed.push(err);
-        this.log.error({ err, orgId }, 'audit outbox relay failed for org');
+        failed.push(err); // already logged, without the entry's contents
       }
     }
     if (failed.length > 0) throw new AggregateError(failed, `audit outbox relay failed for ${failed.length} org(s)`);
@@ -87,14 +89,27 @@ export class OutboxRelay {
   }
 
   private async relayOrg(orgId: string): Promise<void> {
-    const entries = await this.deps.graph.read(orgId, async (tx) => {
-      const res = await tx.run(
-        `MATCH (o:${AUDIT_OUTBOX_LABEL}) RETURN o.id AS id, o.payload AS payload ORDER BY o.seq, o.createdAt LIMIT ${BATCH}`,
-      );
-      return res.records.map((r) => ({ id: String(r.get('id')), payload: String(r.get('payload')) }));
-    });
+    let entries: OutboxEntry[];
+    try {
+      entries = await this.deps.graph.read(orgId, async (tx) => {
+        const res = await tx.run(
+          `MATCH (o:${AUDIT_OUTBOX_LABEL}) RETURN o.id AS id, o.payload AS payload ORDER BY o.seq, o.createdAt LIMIT ${BATCH}`,
+        );
+        return res.records.map((r) => ({ id: String(r.get('id')), payload: String(r.get('payload')) }));
+      });
+    } catch (err) {
+      this.log.error({ orgId, ...errorFields(err) }, 'audit outbox relay could not read the org outbox');
+      throw err;
+    }
     // In order; the first failure stops this org's pass, so nothing overtakes it.
-    for (const entry of entries) await this.relayEntry(orgId, entry);
+    for (const entry of entries) {
+      try {
+        await this.relayEntry(orgId, entry);
+      } catch (err) {
+        this.log.error({ orgId, entryId: entry.id, ...errorFields(err) }, 'audit outbox relay failed for entry');
+        throw err;
+      }
+    }
   }
 
   private async relayEntry(orgId: string, entry: OutboxEntry): Promise<void> {
@@ -115,4 +130,20 @@ export class OutboxRelay {
       tx.run(`MATCH (o:${AUDIT_OUTBOX_LABEL} {id: $id}) DELETE o`, { id: entry.id }),
     );
   }
+}
+
+/** The only parts of an error a relay log may hold (D163): its type and code, never its text. */
+function errorFields(err: unknown): { errorType?: string; errorCode?: string } {
+  const fields: { errorType?: string; errorCode?: string } = {};
+  if (typeof err !== 'object' || err === null) return fields;
+  const e = err as { name?: unknown; code?: unknown; cause?: unknown };
+  // The class name: `name`, or the constructor's when `name` is left as 'Error' (DrizzleQueryError).
+  const ctorName = (err as { constructor?: { name?: unknown } }).constructor?.name;
+  if (typeof e.name === 'string' && e.name !== 'Error') fields.errorType = e.name;
+  else if (typeof ctorName === 'string' && ctorName !== '') fields.errorType = ctorName;
+  else if (typeof e.name === 'string') fields.errorType = e.name;
+  const causeCode = typeof e.cause === 'object' && e.cause !== null ? (e.cause as { code?: unknown }).code : undefined;
+  if (typeof e.code === 'string') fields.errorCode = e.code;
+  else if (typeof causeCode === 'string') fields.errorCode = causeCode;
+  return fields;
 }
