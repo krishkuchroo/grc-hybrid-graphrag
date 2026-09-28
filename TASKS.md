@@ -23,6 +23,8 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | TEST-001 | TEST | builder-platform | done | Every test file in packages/* renamed by what it needs (`.unit` / `.db` / `.stack` `.test.ts`, `e2e/*.e2e.ts`) with `git mv`; `test:unit` / `test:db` / `test:stack` per package and at the root, `test:e2e` at the root, `test` = unit + db + stack; db and stack runs call `pnpm test:env` first and stop if it fails; a check fails on any test file with no type; `retries: 0` in Vitest and Playwright (D177, D171). Merges last. Tests: `pnpm --filter infra test -- test-names` | | `logs/tasks/TEST-001.md` |
 | TEST-002 | TEST | builder-platform | done | `pnpm test:env` doctor: one OK/missing line per item (stack and dev relay, migrations, 28 grc_ro_* DENYs, `.env` key names, Caddy root trusted, hosts line), non-zero exit if anything's missing, changes nothing (D180); `seed:demo`, `org:create` and their env loader swap the container host for 127.0.0.1:5433 themselves (D170). Tests: `pnpm --filter infra test -- test-env` and `pnpm --filter infra test -- org-script-env` | | `logs/tasks/TEST-002.md` |
 | TEST-003 | TEST | builder-platform | done | `packages/shared/src/access/security-matrix.ts` lists every record type and every `/api/v1` route with its role rule, org wall and label rule; a unit test fails if the code has a record type or route not in the matrix, or the matrix lists one the code doesn't have (D175, D59, D50, D51). Tests: `pnpm --filter api test -- security-matrix` | open: user decides on the flaky body-size test (keep push + fix task?) | `logs/tasks/TEST-003.md` |
+| TEST-004 | TEST | builder-platform | to do | The front-door test "an upload of exactly 25 MB passes the door and reaches the API" gives the same result every time and in any order: the test writer finds the cause from the code (not by changing shared state), fixes the existing test only, with no retries and no sleeps as waits, and hands in with `fixReason` (D185, D171, D176). A cause in the app or Caddy code, not the test, is a question for the user (blocked). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack` | | |
+| TEST-005 | TEST | builder-platform | to do | In `packages/shared/src/access/security-matrix.ts` the `audit_trail` record type has `labels: true` (D186); a new unit test pins the label value of every non-record row: uploads, review_queue, chat and audit_trail true, admin false (D175, D51). Red until the builder flips audit_trail. Tests: `pnpm --filter api test -- security-matrix` | | |
 
 **Moved out of M0 (planned with slice 7, no task yet):**
 - SSO (OIDC/SAML) is planned for S7, with the Admin screens. Its tests will use a small stand-in sign-in provider that runs locally (D134).
@@ -614,5 +616,63 @@ Task: TEST-003
 5. The security reviewer checks this table on every task from now on (D175). The file's header comment says so and points to D59.
 
 **Tests to write:** `packages/api/tests/security/security-matrix.unit.test.ts`, covering criteria 2–4.
+
+**Test command:** `pnpm --filter api test -- security-matrix`
+
+---
+
+Task: TEST-004
+
+**Goal:** Make the front-door test "an upload of exactly 25 MB passes the door and reaches the API" give the same result every time, in any order, alone or in the full suite.
+
+**Decisions:** D185 (this fix task; a fix to an existing test whose code is on main), D171 (no retries; a test that fails then passes is a bug), D176 (never weaken live or shared state to prove a test), D167 (fix hand-ins with `fixReason`), D174 (new tests agree with older ones), D53 and D64 (25 MB upload cap at the door, 1 MB API cap, 20 uploads/min), D177 (test kinds).
+
+**Background:** The test is in `packages/infra/tests/front-door/body-size.stack.test.ts` (line 34). It failed once in a full-suite rerun after TEST-003, and passed alone and in every other run. TEST-001 is merged, so the D177 names and `test:stack` scripts are in place. The likely cause is another agent's run using the shared stack at the same moment. Candidates to check against the code (not guesses to act on):
+- The API's rate limits (D64: 300 requests/min per person, 20 uploads/min) and how the API keys them for an unsigned-in caller behind Caddy (per IP? the same bucket for every test run?).
+- `apiLogged` in `packages/infra/tests/front-door/helpers.ts`: it polls `docker logs --since` for 5 s (`waitMs = 5_000`), with `since` set 1 s before the send. Consider whether a 25 MB body under load, the container clock versus the Mac clock, or `docker logs` taking up to 30 s can make the marker land outside the window.
+- The request's 90 s client timeout versus Vitest's test timeout for stack tests.
+- Caddy buffering or timing for a body of exactly `UPLOAD_CAP_BYTES`.
+
+**Who does what:** The test writer does this task. A builder is needed only if the cause is in the app or Caddy code **and** the user agrees to fix it there.
+
+**Files:**
+- Modify (test writer): `packages/infra/tests/front-door/body-size.stack.test.ts`, and `packages/infra/tests/front-door/helpers.ts` if the fix belongs in a shared helper. Change only test files that already exist on `main`. The `fixReason` finish check refuses a fix hand-in that adds new files or touches non-test files (D185).
+- Don't touch app code, `compose.yaml`, the Caddyfile, `.env` or any other test file.
+
+**Pass criteria:**
+1. The test writer's hand-off names the cause it found, with the file and line in the code that explains it, and how the fix removes it.
+2. The fixed test still checks what it checked before: an upload of exactly 25 MB passes the door and its marker reaches the API log. It doesn't loosen the check (for example, it doesn't accept a 413 or drop the log check).
+3. No retries, no sleeps used as waits, and no longer timeouts used to paper over the cause (D171). A bounded wait for a condition is fine only if the hand-off explains why its limit covers the worst case.
+4. It gives the same result alone, in the full infra stack run, and in any order within `body-size.stack.test.ts`.
+5. Nothing shared is changed to prove the cause or the fix (D176): no rate-limit settings, no container restarts, no privilege changes. Any experiment happens in the worktree's test code only.
+6. If the cause is in the app or Caddy code, not the test: don't change that code. Hand in `blocked`, with the cause and a plain question for the user (fix it in the code, or accept and adjust the test?).
+7. Every other test in `packages/infra/tests/front-door/` still passes, with none skipped (D173). The hand-off says which earlier tests it agrees with (D174).
+
+**Tests to write:** No new test file. Fix the existing test (kind: `stack`, it needs the running stack and Caddy). Run `pnpm --filter infra test -- body-size` 3 times in a row (all green), then `pnpm --filter infra test:stack` once, and record the counts in the hand-off. Hand in with `fixReason` (for example "the 25 MB marker check raced the shared stack's …; fixed by …"). The finish check then expects green.
+
+**Test command:** `pnpm --filter infra test -- body-size`
+
+---
+
+Task: TEST-005
+
+**Goal:** The audit trail is marked as label-checked in the security matrix, and a test pins the label rule for every row that isn't a record type, so a later change can't flip one unnoticed.
+
+**Decisions:** D186 (the audit viewer hides the contents of entries above the reader's clearance: who, when, record number and action stay visible, before/after contents don't), D175 (the security matrix and its tests), D51 (labels and clearance), D56 (audit trail), D59 (proof).
+
+**Background:** TEST-003's security review found that the matrix's label values for the non-record rows (uploads, review_queue, audit_trail, admin, chat) aren't pinned by any test. Today `audit_trail` has `labels: false` (`packages/shared/src/access/security-matrix.ts:50`), which D186 changes.
+
+**Files:**
+- Create (test writer): `packages/api/tests/security/security-matrix-labels.unit.test.ts`. Don't edit TEST-003's `security-matrix.unit.test.ts` unless it's needed, and say why if so.
+- Modify (builder): `packages/shared/src/access/security-matrix.ts`. Set the `audit_trail` entry to `labels: true`, and update the file's header comment (lines 11-12, which list where labels apply) to include the audit trail, citing D186. Nothing else changes.
+
+**Pass criteria:**
+1. The `audit_trail` record type in `SECURITY_MATRIX` has `labels: true`.
+2. A unit test pins the label value of each non-record row by name: `uploads`, `review_queue`, `chat` and `audit_trail` are `true`, and `admin` is `false`. The test fails and names the row if any value differs, or if one of these rows is missing from the matrix.
+3. The test is red before the builder's change (only `audit_trail` fails) and green after.
+4. TEST-003's `security-matrix.unit.test.ts` still passes, with none skipped (D173).
+5. This task only changes the matrix. It doesn't build the audit viewer's hiding of contents (that comes with the audit viewer in S7). The security reviewer checks the matrix row against D186.
+
+**Tests to write:** `packages/api/tests/security/security-matrix-labels.unit.test.ts` (kind: `unit`; it imports the matrix only, with no database, server or `.env`). It covers criterion 2. Security-matrix rows: no new record type or route, so no new rows; the row that changes is `audit_trail` (labels false → true).
 
 **Test command:** `pnpm --filter api test -- security-matrix`
