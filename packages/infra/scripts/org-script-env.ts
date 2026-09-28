@@ -21,6 +21,11 @@ registerHooks({
   },
 });
 
+// Loaded by URL: plain `node` needs the `.ts` file name, which tsc refuses in an import path.
+const { toHostAddress } = (await import(
+  new URL('./host-address.ts', import.meta.url).href
+)) as typeof import('./host-address.js');
+
 const LINE = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/;
 
 function findDotEnv(): string | undefined {
@@ -75,7 +80,12 @@ export function missingSettings(): string[] {
   return NEEDED.filter((n) => !(setting(n) || DEFAULTS[n]));
 }
 
-const get = (name: (typeof NEEDED)[number]): string => setting(name) || DEFAULTS[name] || '';
+// D170: `.env` holds the container addresses; from the Mac every DATABASE_URL_* goes through the
+// dev relay on 127.0.0.1:5433.
+const get = (name: (typeof NEEDED)[number]): string => {
+  const value = setting(name) || DEFAULTS[name] || '';
+  return name.startsWith('DATABASE_URL_') && value !== '' ? toHostAddress(value) : value;
+};
 
 export interface ProvisionInput {
   name: string;
