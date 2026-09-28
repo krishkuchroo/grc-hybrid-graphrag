@@ -161,8 +161,7 @@ function accessFromMetadata(controller: Ctor, handler: Handler): Access {
   const isPublic = Reflect.getMetadata(PUBLIC_ROUTE, handler) ?? Reflect.getMetadata(PUBLIC_ROUTE, controller);
   if (isPublic === true) return 'public';
   const req = (Reflect.getMetadata(REQUIRES_KEY, handler) ?? Reflect.getMetadata(REQUIRES_KEY, controller)) as
-    | CellRef
-    | undefined;
+    CellRef | undefined;
   if (req) return { subject: req.subject, action: req.action };
   return 'any signed-in';
 }
@@ -385,7 +384,12 @@ describe('criterion 1: the matrix lists every record type and every route, with 
 
   it('marks /me and the API-key routes as org-walled (D55)', () => {
     const byKey = new Map(matrix().routes.map((r) => [key(r), r]));
-    for (const k of ['GET /api/v1/me', 'POST /api/v1/api-keys', 'GET /api/v1/api-keys', 'DELETE /api/v1/api-keys/:id']) {
+    for (const k of [
+      'GET /api/v1/me',
+      'POST /api/v1/api-keys',
+      'GET /api/v1/api-keys',
+      'DELETE /api/v1/api-keys/:id',
+    ]) {
       expect(byKey.get(k)?.orgWalled, k).toBe(true);
     }
   });
