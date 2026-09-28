@@ -1,7 +1,8 @@
 // M0-007 criteria 1 and 2, plus the error format for validation errors (D47, brief "Interfaces").
 // 1. Every route is under /api/v1. Anything else returns 404 in the error format.
 // 2. Unexpected errors return 500 in the error format, with no stack trace in the body.
-// The referenceId of an error also appears in the pino log line.
+// The referenceId of an error also appears in the pino log line, with the error type but never
+// the error's message (S1-004, D164, SF-006).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   LogCapture,
@@ -92,8 +93,11 @@ describe('criterion 2: unexpected errors', () => {
     expect(matching.length, 'log lines carrying the reference ID').toBeGreaterThan(0);
     // pino writes JSON lines.
     for (const line of matching) expect(() => JSON.parse(line)).not.toThrow();
-    // The log (not the response) is where the detail goes.
-    expect(matching.some((line) => line.includes(SECRET_DETAIL))).toBe(true);
+    // S1-004 / D164 / SF-006: the log names the error type (and code) with the reference ID,
+    // never the error's message, which can quote record or audit values.
+    expect(matching.some((line) => (JSON.parse(line) as { errorType?: unknown }).errorType === 'Error')).toBe(true);
+    for (const line of matching) expect(line).not.toContain(SECRET_DETAIL);
+    expect(logs.lines.some((line) => line.includes(SECRET_DETAIL))).toBe(false);
   });
 });
 
