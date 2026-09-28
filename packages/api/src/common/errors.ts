@@ -12,7 +12,7 @@ export interface ErrorBody {
   error: { code: string; message: string; referenceId: string };
 }
 
-const CODES: Record<number, string> = {
+export const CODES: Record<number, string> = {
   400: 'bad_request',
   401: 'unauthorized',
   403: 'forbidden',
@@ -57,6 +57,17 @@ export function sendError(
   return body;
 }
 
+/** An HTTP error with its own code in the one format, for example 403 `mfa_required`. */
+export class ApiError extends HttpException {
+  constructor(
+    status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message, status);
+  }
+}
+
 interface Described {
   status: number;
   code: string;
@@ -78,6 +89,9 @@ function describe(exception: unknown): Described {
       .map((issue) => (issue.path.length ? `${issue.path.join('.')}: ${issue.message}` : issue.message))
       .join('; ');
     return { status: 400, code: 'validation_failed', message: message || 'The input is not valid.' };
+  }
+  if (exception instanceof ApiError && exception.getStatus() < 500) {
+    return { status: exception.getStatus(), code: exception.code, message: exception.message };
   }
   if (exception instanceof HttpException) {
     const status = exception.getStatus();

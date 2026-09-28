@@ -9,9 +9,17 @@
   "scripts": {
     "lint": "eslint . && prettier --check .",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "test": "pnpm test:unit && pnpm test:db && pnpm test:stack",
+    "test:unit": "pnpm -r --workspace-concurrency=1 test:unit",
+    "test:db": "pnpm test:env && pnpm -r --workspace-concurrency=1 test:db",
+    "test:stack": "pnpm test:env && pnpm -r --workspace-concurrency=1 test:stack",
+    "test:e2e": "pnpm --filter @grc/web playwright test",
     "setup:secrets": "node packages/infra/scripts/setup-secrets.ts",
-    "setup:neo4j": "node packages/infra/scripts/setup-neo4j.ts"
+    "setup:neo4j": "node packages/infra/scripts/setup-neo4j.ts",
+    "test:env": "node packages/infra/scripts/test-env.ts",
+    "org:create": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/create-org.ts",
+    "seed:demo": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/seed-demo.ts",
+    "gen:api-client": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/web/scripts/gen-api-client.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

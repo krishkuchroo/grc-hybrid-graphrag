@@ -2,3 +2,4 @@
 export * from './roles.js';
 export * from './labels.js';
 export * from './role-table.js';
+export * from './security-matrix.js';

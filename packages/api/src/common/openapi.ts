@@ -13,6 +13,8 @@ export interface RouteDoc {
   /** The path under the /api/v1 prefix, for example `/health`. */
   path: string;
   summary: string;
+  /** The schema of the JSON request body, if the route takes one. */
+  body?: z.ZodType;
   /** The schema of the 200 JSON response. */
   response: z.ZodType;
 }
@@ -36,6 +38,14 @@ export function openApiDocument(): Record<string, unknown> {
     paths[path] ??= {};
     paths[path][route.method] = {
       summary: route.summary,
+      ...(route.body
+        ? {
+            requestBody: {
+              required: true,
+              content: { 'application/json': { schema: jsonSchema(route.body) } },
+            },
+          }
+        : {}),
       responses: {
         '200': {
           description: 'OK',

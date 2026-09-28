@@ -28,31 +28,23 @@ It's a portfolio project and research prototype. It **must look like a finished 
 8. **Orchestration layer.** A multi-agent setup that is configured from the finished plan. ✅ Decisions locked 2026-09-26 (D74–D107). ✅ Done 2026-09-27: 9 agents, the hooks, the monitor and the board, verified by smoke tests, with the review's findings fixed (D119).
 9. **Workflow generation.** Build workflows that support the orchestration layer and build out the solid project layer. Decided 2026-09-27 (D109–D121). The milestone workflow is written, and gets a real test after setup. ← *current phase*
 
-## Current state (saved end of day 2026-09-27; resume from here)
-- **The M0 build is paused and nothing is running.**
-  - Workflow run: `wf_c4ecda66-beb`.
-  - To resume: `Workflow({scriptPath: ".claude/workflows/milestone.js", resumeFromRunId: "wf_c4ecda66-beb", args: {milestone: "m0", step: "build", notes: {...}}})`. Give each blocked task a note for its first test writer. Finished agents replay from cache.
-  - If resume isn't possible in a new session, start the build step again. Done tasks are already merged on `main`, and blocked tasks keep their branches.
-- **Done, merged and pushed:**
-  - M0-001: the monorepo (`da6e6f0`).
-  - M0-002: Compose and setup:secrets (`696c5f0`).
-- **Blocked, with code or tests on their `task/<ID>` branches:**
-  - **M0-003 (Postgres):** code at 800f2cb. Waits on Q33 and Q34.
-  - **M0-004 (Neo4j):** tests at 8a9d7a8. Waits on a working `neo4j` password; then its test writer runs the live tests red.
-  - **M0-006 (storage):** code at 0687acd. Works with a dev network, 79/79. Waits on Q33.
-- **Waiting on those:** M0-005 and M0-007 to M0-016.
-- **Open questions for the user:**
-  - **Q33:** the dev switch can't publish 5433 or 8333, because Docker doesn't publish ports for containers only on an internal network (D61/D132 vs D63). Recommended: (a) with the switch on, Postgres and SeaweedFS also join a dev-only network with outgoing traffic off (no masquerade). The M0-002 compose test is updated to allow it. Check first that the ports open.
-  - **Q34:** pgvector needs a superuser to install. Recommended: (c) mount a `vector--0.8.6.control` with `trusted = true`.
-  - **D140 password reset:** the user runs `scratchpad/reset-neo4j-password.sh`. The auto-mode check blocked the main session from turning Neo4j login off; the script is in this session's scratchpad. If it's gone, rewrite it: stop the DBMS, set `dbms.security.auth_enabled=false`, start, `ALTER USER neo4j SET PASSWORD <random> CHANGE NOT REQUIRED` into `.env`, set it back to `true`, restart. Then check the login without printing the password.
-  - **Before resuming:** accept or refuse the M0-006 builder's own choices (the S3 and NestJS packages, SeaweedFS volume settings) and add test-bucket cleanup.
-- **Environment as left:**
-  - Neo4j DBMS: running (127.0.0.1 only), started with `bin/neo4j start` and Desktop's bundled JRE. No licence was accepted.
-  - Docker: `grc-postgres` is running, and Docker's limit is about 4 GB.
-  - Monitor: running at http://127.0.0.1:4800.
-  - `.env`: has the generated secrets plus the wrong `NEO4J_DESKTOP_PASSWORD`.
-- **Hook fixes during the build:** guard rails 5/7 now judge files by content (`checkout.mjs`), and the skills.md row is fixed. `milestone.js` takes `notes`. Hook tests: 123/123.
-- **Security note:** the old password was typed into the chat, and workflow agents saw it. It'll be replaced by D140.
+## Current state (saved 2026-09-27 19:45 EDT, usage limit hit; resume from here)
+- **M0: 10 of 16 done, merged and pushed.** M0-001 to M0-009 and M0-012. `origin/main` = `91e2f5d` (audit trail). The full suite was green at `c877243`: 1696/1696.
+- **In flight when the limit hit** (workflow run `wf_3790a341-632`; agents may have died mid-work):
+  - **M0-014:** built, 44/44 tests pass. The code and security reviewers were running.
+  - **M0-013:** 28 red tests at `0a1c81e` on `task/M0-013`. The builder was running.
+  - **M0-010 (login):** 110 tests at `9024a1d` on `task/M0-010` (11 skipped by a nested `beforeAll`; reviewers must confirm none stay skipped). The builder was running. Its note: trustProxy and per-user rate limits.
+  - Waiting: M0-011 and M0-015. M0-016 (Caddy) is last.
+- **To resume:** check `/workflows`. If the run is dead, start a **fresh** run (resume caching breaks): `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: "m0", step: "build", from: {"M0-014": "review", "M0-013": "build", "M0-010": "build"}}})`. Before that, check each `task/<ID>` tip (`git log task/<ID>`): commit any partial builder work, and use `from: "review"` if a builder finished. Done tasks are skipped by the board.
+- **Before M0-016:** the user trusts Caddy's cert, adds `127.0.0.1 grc.localhost` to hosts, and stops other projects' containers.
+- **At the M0 checkpoint (D147):** if it's clean, write the report, run `/insecure-defaults:audit`, tag `m0`, then plan and build S1. **Then D160:** rewrite history to strip old Claude lines, force-push once (no agents running; confirm with the user first).
+- **Open:** Q39's context hand-off part. Its "run the suite 3×" part is closed by D171 (see "Testing").
+- **Test approach (2026-09-28, D167, D168, D170–D180):** decided and committed (c893c30). Rules, hooks and agent instructions are updated; TEST-001…003 built the project side and are **merged and pushed** (`b115b47`; full suite 2,450/2,450, e2e 4/4). Open for the user: the flaky 25 MB upload test (keep TEST-003's push + a TEST-004 fix?) and whether the audit viewer hides entries above the reader's clearance.
+- **Environment:**
+  - Neo4j DBMS running (127.0.0.1), all 28 query roles have their DENYs.
+  - The Docker stack is up (`grc-postgres`, `grc-seaweedfs`, `grc-dev-relay`); start it from the main checkout only.
+  - Monitor at http://127.0.0.1:4800.
+  - Errors log: `logs/build-errors.md`.
 
 ## Non-functional requirements
 Consistent · Concurrent · Scalable · Durable · Follows good design principles.
@@ -260,7 +252,8 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
     6. Search and chat.
     7. Admin, grants, break-glass and the audit viewer.
     8. The dashboard and the benchmark.
-  - The user approves at the end of each milestone (9 checkpoints, each with a demo and test results).
+  - **Run in parallel groups (D181):** S1 alone → S2, S3 and S7 together → S4 alone → S5 and S6 together → S8. Conflict rules for parallel slices: D183 (shared agent cap of 8, a merge queue, folders owned per slice, hot files one task at a time, migration numbers given at merge).
+  - The user approves at the end of each milestone, with one combined checkpoint per parallel group (D182). Each checkpoint has a demo and test results.
 - **Done means:**
   - The test writer's tests pass.
   - The code and security reviewers approve. After 3 send-backs, it goes to the user.
@@ -318,4 +311,27 @@ Every agent ends its report with one hand-off block (D91). The hooks read it at 
   - The reviewers use `approved` or `sent-back`.
 - **Blocked:** a `blocked` hand-off needs findings that say what was tried and what's blocking. It can always finish (D86).
 - **Test command:** the test writer and builders put the task's test command in `tests.run`, as a pnpm test run. The finish check runs it (D97).
+- **Optional fields:**
+  - `fixReason`: a test writer's reason for a fix to tests the code already meets (D167).
+  - `skips`: `[{"test": "…", "reason": "…"}]`, each skipped test for the reviewers to approve (D173).
 - **Workflows:** a workflow that runs our agents gives them this object as their output schema.
+
+## Testing (locked 2026-09-28; details in memory.md D167, D168, D170–D180)
+- **Test kinds, named by what they need (D177):**
+  - `*.unit.test.ts`: nothing. The default kind.
+  - `*.db.test.ts`: Postgres, Neo4j or SeaweedFS, through throwaway databases.
+  - `*.stack.test.ts`: the running stack (containers, Caddy, the API).
+  - `e2e/*.e2e.ts`: Playwright through `https://grc.localhost`.
+  - Commands: `pnpm test:unit`, `test:db`, `test:stack`, `test:e2e`. `pnpm test` runs unit + db + stack.
+- **Environment check (D180):** `pnpm test:env` checks the stack, migrations, Neo4j DENYs, `.env` keys (names only), Caddy's cert and the hosts line. It changes nothing, and db/stack runs call it first. Missing items go to the main session or the user.
+- **Mac scripts (D170):** host-side scripts swap the container host for 127.0.0.1:5433 themselves. `.env` keeps one set of addresses.
+- **Guard rail 4:**
+  - New tests must be red. A **fix** (`fixReason`) may be green, but only when the builder's code is already on the branch and the test writer changed test files only (D167).
+  - The check runs only in the task's own worktree, at the tip of `task/<ID>` (D168).
+  - Builders' tests run 3 times (D171).
+  - A skipped test fails unless it's listed in `skips` (D173).
+- **Flaky tests (D171):** no retries anywhere. A test that fails and then passes is a bug for the test writer. The integrator runs the full suite once before each push. The checkpoint runs it 3 times, plus every browser test.
+- **Browser tests (D172):** the integrator runs `pnpm test:e2e` when a task touched the web app, the API or Caddy.
+- **Agreement (D174):** a test writer names the earlier tests and decisions its tests agree with, and the code reviewer checks.
+- **Security matrix (D175):** `packages/shared/src/access/security-matrix.ts` lists every record type and route. A test fails when the code has one the matrix lacks. The security reviewer checks it on every task.
+- **Never** weaken live privileges, secrets, the certificate or the running stack to prove a test (D176).
