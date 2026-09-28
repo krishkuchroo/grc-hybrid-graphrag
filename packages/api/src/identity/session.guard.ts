@@ -9,10 +9,14 @@
 // marked `AllowWithoutMfa` (/api/v1/me).
 // With MFA checked, `request.principal = { orgId, userId, role, clearance }`: what later code
 // passes to `withOrgContext` (M0-008 contract).
+// A request with `Authorization: Bearer …` is a machine: the ApiKeyGuard (M0-011) sets the
+// principal from the key instead, and a bad key gets 401 whatever session comes with it.
 import { SetMetadata, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { FastifyRequest } from 'fastify';
 import { ApiError } from '../common/errors.js';
 import type { Label, Role } from '../db/org-context.js';
+import { bearerOf, type ApiKeyGuard } from './api-key.guard.js';
 import type { AuthService, ResolvedSession } from './auth.js';
 
 export const PUBLIC_ROUTE = 'grc:public-route';
@@ -35,13 +39,16 @@ export interface Identity {
 export interface AuthedRequest {
   authSession?: ResolvedSession | null;
   identity?: Identity;
-  principal?: { orgId: string; userId: string; role: Role; clearance: Label };
+  principal?: { orgId: string; userId: string; role: Role; clearance: Label; apiKeyId?: string };
 }
 
 export class SessionGuard implements CanActivate {
   private readonly reflector = new Reflector();
 
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly apiKeys: ApiKeyGuard,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const targets = [context.getHandler(), context.getClass()];
@@ -51,6 +58,12 @@ export class SessionGuard implements CanActivate {
     // Whatever arrived with the request is never trusted.
     delete request.principal;
     delete request.identity;
+
+    const credential = bearerOf(context.switchToHttp().getRequest<FastifyRequest>());
+    if (credential !== null) {
+      await this.apiKeys.authenticate(request as FastifyRequest & AuthedRequest, credential);
+      return true;
+    }
 
     const session = request.authSession;
     if (!session) throw new ApiError(401, 'unauthorized', 'Sign in first.');
