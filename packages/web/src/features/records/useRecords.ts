@@ -129,12 +129,18 @@ export function usePeople() {
   });
 }
 
-/** After any change, every list and page of the kind asks the API again. */
-function useSettle(kind: RecordKind) {
+/**
+ * After any change, every list and page of the kind asks the API again. When the saved record is
+ * one the person can no longer see (a Control Owner handing their control to someone else, D206),
+ * nothing is asked again now: the page would only get the not-found answer. The lists are marked
+ * out of date and ask again when they next show.
+ */
+function useSettle(kind: RecordKind, keepsAccess?: (record: AnyRecord) => boolean) {
   const queryClient = useQueryClient();
   return async (record: AnyRecord) => {
     queryClient.setQueryData(recordKeys.one(kind, record.id), record);
-    await queryClient.invalidateQueries({ queryKey: recordKeys.all(kind) });
+    const refetchType = keepsAccess && !keepsAccess(record) ? 'none' : 'active';
+    await queryClient.invalidateQueries({ queryKey: recordKeys.all(kind), refetchType });
   };
 }
 
@@ -146,8 +152,12 @@ export function useCreateRecord(kind: RecordKind) {
   });
 }
 
-export function useUpdateRecord(kind: RecordKind, id: string) {
-  const settle = useSettle(kind);
+export function useUpdateRecord(
+  kind: RecordKind,
+  id: string,
+  opts: { keepsAccess?: (record: AnyRecord) => boolean } = {},
+) {
+  const settle = useSettle(kind, opts.keepsAccess);
   return useMutation({
     mutationFn: (body: Record<string, unknown> & { version: number }) => CLIENT[kind].update({ id }, body as never),
     onSuccess: settle,

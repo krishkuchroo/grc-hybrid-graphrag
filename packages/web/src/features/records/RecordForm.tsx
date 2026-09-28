@@ -17,7 +17,8 @@ export interface FormFieldDef {
   /** The API's field name. */
   name: string;
   label: string;
-  control: 'text' | 'integer' | 'select';
+  /** `date` is a day (`2026-06-30`); `datetime` a moment in the person's own time, sent as ISO 8601. */
+  control: 'text' | 'integer' | 'select' | 'date' | 'datetime';
   /** For a select: the stored values and what they read as. */
   options?: ReadonlyArray<{ value: string; label: string }>;
   /** A select whose values are whole numbers (for example impact 1–5). */
@@ -44,6 +45,21 @@ const COMMON_MESSAGES: Record<string, string> = {
   label: 'Choose a label.',
 };
 
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** A stored moment as a date-and-time input holds it: the person's own time, to the minute. */
+export function toLocalDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** A date-and-time input's value as the API takes it (ISO 8601 in UTC); left as typed if it isn't one. */
+function fromLocalDateTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
 function convert(fields: readonly FormFieldDef[], values: FormValues): Record<string, unknown> {
   const out: Record<string, unknown> = { name: values.name ?? '' };
   if (values.owner) out.owner = values.owner;
@@ -51,6 +67,7 @@ function convert(fields: readonly FormFieldDef[], values: FormValues): Record<st
   for (const field of fields) {
     const raw = (values[field.name] ?? '').trim();
     if (field.control === 'integer' || field.integer) out[field.name] = raw === '' ? undefined : Number(raw);
+    else if (field.control === 'datetime') out[field.name] = raw === '' ? undefined : fromLocalDateTime(raw);
     else out[field.name] = raw === '' ? undefined : raw;
   }
   return out;
@@ -155,6 +172,8 @@ export function RecordForm({
                           </option>
                         ))}
                       </NativeSelect>
+                    ) : def.control === 'date' || def.control === 'datetime' ? (
+                      <Input type={def.control === 'date' ? 'date' : 'datetime-local'} className="w-auto" {...field} />
                     ) : (
                       <Input
                         autoComplete="off"

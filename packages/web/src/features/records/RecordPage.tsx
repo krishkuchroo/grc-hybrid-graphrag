@@ -2,7 +2,7 @@
 // label and status beside, every field in a two-column sheet, and the owner and dates at the side.
 // Edit and Retire show only when the role table allows (D50); the API decides anyway (D7), so a
 // refusal still shows its message. A stale save (409, D69) keeps what was typed and offers Reload.
-import type { RecordKind } from '@grc/shared';
+import { can, type RecordKind } from '@grc/shared';
 import { CircleCheck, Pencil, RefreshCw, SearchX, TriangleAlert } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { ApiError } from '@/api/client';
@@ -48,6 +48,12 @@ interface Props<R extends AnyRecord> {
   formFields: readonly FormFieldDef[];
   /** The record's own fields as the form holds them (text). */
   formValues: (record: R) => FormValues;
+  /**
+   * Called after a save that leaves the person unable to see the record any more (a Control Owner
+   * handing their control to someone else, D206), with the new owner's name. The page doesn't ask
+   * the API for it again, so the not-found page never shows for it.
+   */
+  onHandedOver?: (record: R, ownerName: string) => void;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -179,11 +185,16 @@ export function RecordPage<R extends AnyRecord>({
   summary,
   formFields,
   formValues,
+  onHandedOver,
 }: Props<R>) {
   const me = useMe();
   const people = usePeople();
   const query = useRecord(kind, id);
-  const update = useUpdateRecord(kind, id);
+  const viewer = me.data ? { userId: me.data.user.id, role: me.data.role, clearance: me.data.clearance } : null;
+  /** Whether the person can still see a record after saving it: the D50 cell, with ownership. */
+  const keepsAccess = (saved: AnyRecord) =>
+    viewer === null || can(viewer.role, kind, 'view', { isOwner: saved.owner === viewer.userId });
+  const update = useUpdateRecord(kind, id, { keepsAccess });
   const retire = useRetireRecord(kind, id);
   /** The record as it was when the form opened: its version goes with the save (D69). */
   const [opened, setOpened] = useState<AnyRecord | null>(null);
@@ -209,7 +220,6 @@ export function RecordPage<R extends AnyRecord>({
 
   const record = query.data as R;
   const nameOf = (userId: string) => (people.data ?? []).find((p) => p.id === userId)?.name ?? '—';
-  const viewer = me.data ? { userId: me.data.user.id, role: me.data.role, clearance: me.data.clearance } : null;
   const mayEdit = viewer !== null && canEditRecord(viewer, kind, record);
   const editing = opened !== null;
 
@@ -348,7 +358,11 @@ export function RecordPage<R extends AnyRecord>({
                     update.mutate(
                       { ...changed, version: opened.version },
                       {
-                        onSuccess: () => {
+                        onSuccess: (saved) => {
+                          if (onHandedOver && !keepsAccess(saved)) {
+                            onHandedOver(saved as R, nameOf(saved.owner));
+                            return;
+                          }
                           setOpened(null);
                           setDone('Changes saved.');
                         },

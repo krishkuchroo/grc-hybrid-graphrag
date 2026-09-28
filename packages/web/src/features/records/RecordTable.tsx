@@ -29,7 +29,8 @@ export interface FilterDef {
   label: string;
   /** The empty choice's text, for example "Any band". */
   anyText: string;
-  options: ReadonlyArray<{ value: string; label: string }>;
+  /** The choices; without them the filter is a text box (a control's framework, plain text until S2). */
+  options?: ReadonlyArray<{ value: string; label: string }>;
 }
 
 export interface CellContext<R> {
@@ -85,7 +86,7 @@ export function validateListSearch(
   if (status === 'retired' || status === 'all') out.status = status;
   for (const filter of opts.filters) {
     const value = text(raw[filter.key]);
-    if (value && filter.options.some((o) => o.value === value)) out[filter.key] = value;
+    if (value && (!filter.options || filter.options.some((o) => o.value === value))) out[filter.key] = value;
   }
   return out;
 }
@@ -144,6 +145,48 @@ interface Props<R extends AnyRecord> {
   onSearchChange: (next: ListSearch) => void;
   /** What the list says when the kind has no records at all. */
   emptyText: string;
+}
+
+/** A text filter: what is typed reaches the URL (and the API) after a short pause, like the search box. */
+function TextFilter({
+  label,
+  placeholder,
+  value,
+  onCommit,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onCommit: (value: string) => void;
+}) {
+  const [typed, setTyped] = useState(value);
+  const pushed = useRef(value);
+  useEffect(() => {
+    if (value !== pushed.current) {
+      pushed.current = value;
+      setTyped(value);
+    }
+  }, [value]);
+  const latestCommit = useRef(onCommit);
+  latestCommit.current = onCommit;
+  useEffect(() => {
+    const wanted = typed.trim();
+    if (wanted === pushed.current) return;
+    const timer = setTimeout(() => {
+      pushed.current = wanted;
+      latestCommit.current(wanted);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [typed]);
+  return (
+    <Input
+      aria-label={label}
+      placeholder={placeholder}
+      className="w-40"
+      value={typed}
+      onChange={(e) => setTyped(e.target.value)}
+    />
+  );
 }
 
 function SortIcon({ state }: { state: 'ascending' | 'descending' | 'none' }) {
@@ -255,7 +298,7 @@ export function RecordTable<R extends AnyRecord>({
           error={list.error}
           title={
             list.error instanceof ApiError && list.error.status === 403
-              ? 'No access to this list'
+              ? 'You don’t have access to this list'
               : `The ${noun} couldn't be shown`
           }
         />
@@ -347,22 +390,32 @@ export function RecordTable<R extends AnyRecord>({
             onChange={(e) => setTyped(e.target.value)}
           />
         </div>
-        {filters.map((filter) => (
-          <NativeSelect
-            key={filter.key}
-            aria-label={filter.label}
-            className="w-36"
-            value={typeof search[filter.key] === 'string' ? (search[filter.key] as string) : ''}
-            onChange={(e) => setFilter(filter.key, e.target.value)}
-          >
-            <option value="">{filter.anyText}</option>
-            {filter.options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </NativeSelect>
-        ))}
+        {filters.map((filter) =>
+          filter.options ? (
+            <NativeSelect
+              key={filter.key}
+              aria-label={filter.label}
+              className="w-36"
+              value={typeof search[filter.key] === 'string' ? (search[filter.key] as string) : ''}
+              onChange={(e) => setFilter(filter.key, e.target.value)}
+            >
+              <option value="">{filter.anyText}</option>
+              {filter.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </NativeSelect>
+          ) : (
+            <TextFilter
+              key={filter.key}
+              label={filter.label}
+              placeholder={filter.anyText}
+              value={typeof search[filter.key] === 'string' ? (search[filter.key] as string) : ''}
+              onCommit={(value) => setFilter(filter.key, value)}
+            />
+          ),
+        )}
         <OwnerPicker
           aria-label="Owner"
           className="w-44"
