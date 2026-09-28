@@ -3,7 +3,7 @@
 // transaction after `SET LOCAL app.org_id`, `app.user_id`, `app.role` and `app.clearance`.
 // 4. Inside, the settings hold the given values. After the transaction they are gone, and
 //    don't leak into the next pooled use (checked on a one-connection pool).
-// Criterion 5 (invalid input) is in org-context-input.test.ts.
+// Criterion 5 (invalid input) is in org-context-input.unit.test.ts.
 // Everything here runs as grc_app through DATABASE_URL_APP (see helpers.ts).
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

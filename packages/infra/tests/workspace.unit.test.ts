@@ -136,8 +136,12 @@ describe('root scripts (D97)', () => {
     expect(scriptsOf(rootPackageJson()).typecheck).toMatch(/^pnpm (-r|--recursive) (run )?typecheck$/);
   });
 
-  it('test runs every package (pnpm -r test), not a root Vitest run', () => {
-    expect(scriptsOf(rootPackageJson()).test).toMatch(/^pnpm (-r|--recursive) (run )?test$/);
+  // TEST-001 (D177): the root `test` now runs unit, then db, then stack across the packages;
+  // test-names.unit.test.ts checks that. Here it only has to stay a pnpm run, not a root Vitest run.
+  it('test is not a root Vitest run', () => {
+    const test = scriptsOf(rootPackageJson()).test ?? '';
+    expect(test).toMatch(/\bpnpm\b/);
+    expect(test).not.toMatch(/\bvitest\b/);
   });
 
   it('lint runs both ESLint and a Prettier check (D130)', () => {
@@ -222,9 +226,11 @@ describe.each(PACKAGES)('packages/%s', (name) => {
     expect(Object.keys(scripts)).toEqual(expect.arrayContaining(['test', 'typecheck', 'lint']));
   });
 
-  it('uses the same Vitest test script as packages/infra, so `test -- <name>` filters the same way', () => {
+  // TEST-001 (D177): `test` may now run the three kinds through pnpm instead of calling Vitest
+  // itself; it still has to be the same script in every package.
+  it('uses the same test script as packages/infra, so `test -- <name>` filters the same way', () => {
     const test = scriptsOf(readJson(join(pkgDir(name), 'package.json'))).test;
-    expect(test).toMatch(/\bvitest\b/);
+    expect(test).toMatch(/\b(vitest|pnpm|node)\b/);
     expect(test).toBe(scriptsOf(readJson(join(pkgDir('infra'), 'package.json'))).test);
   });
 
@@ -279,7 +285,7 @@ describe('Vitest stays inside each package (D82, hook tests use node:test)', () 
 // this file runs again, it doesn't start another probe (no recursion).
 describe('`pnpm --filter infra test -- <name>` runs only matching files', () => {
   it.skipIf(process.env.GRC_FILTER_PROBE === '1')(
-    'runs tests/filter-probe.test.ts alone when filtered by "filter-probe"',
+    'runs tests/filter-probe.unit.test.ts alone when filtered by "filter-probe"',
     () => {
       // A clean environment: with the parent run's pnpm variables, pnpm skips a
       // nested run of the same script; the parent Vitest's variables change the child's output.
@@ -296,8 +302,8 @@ describe('`pnpm --filter infra test -- <name>` runs only matching files', () => 
       });
       const output = `${r.stdout ?? ''}${r.stderr ?? ''}`;
       expect(r.status, output).toBe(0);
-      // Only filter-probe.test.ts (one test) may run; workspace.test.ts must not.
-      expect(output, 'only filter-probe.test.ts should run').toMatch(/Test Files\s+1 passed \(1\)/);
+      // Only filter-probe.unit.test.ts (one test) may run; workspace.unit.test.ts must not.
+      expect(output, 'only filter-probe.unit.test.ts should run').toMatch(/Test Files\s+1 passed \(1\)/);
       expect(output, 'only the one probe test should run').toMatch(/Tests\s+1 passed \(1\)/);
     },
   );

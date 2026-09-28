@@ -18,7 +18,7 @@
 // grc-internal plus exactly one normal dev-only network. The relay publishes only
 // 127.0.0.1:5433 (forwarding to grc-postgres:5432) and 127.0.0.1:8333 (forwarding to
 // grc-seaweedfs:8333), and does nothing else. Nothing else in the stack changes. The live
-// check that Postgres and SeaweedFS can't reach the internet is in dev-relay.live.test.ts.
+// check that Postgres and SeaweedFS can't reach the internet is in dev-relay.stack.test.ts.
 // The dev-only network is named grc-dev.
 //
 // D142: grc-postgres mounts a secondary `vector--0.8.6.control` with `trusted = true`,
