@@ -36,6 +36,13 @@ const OPEN_ROUTES = new Set([
   '/organization/set-active',
 ]);
 
+/** The routes registered straight on Fastify (not through Nest), with full paths. The D175
+ * security matrix test compares them with packages/shared/src/access/security-matrix.ts. */
+export const DIRECT_ROUTES: readonly { method: 'GET' | 'POST'; path: string }[] = [
+  { method: 'GET', path: `${AUTH_BASE_PATH}/*` },
+  { method: 'POST', path: `${AUTH_BASE_PATH}/*` },
+];
+
 type Req = FastifyRequest & AuthedRequest & { user?: { id: string } };
 
 function webHeaders(request: FastifyRequest): Headers {
