@@ -697,6 +697,10 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **D188 If the 502 is real, fix it the smallest way** (2026-09-28, the user: "Fix it, smallest way"). If TEST-006 finds that a person sending a slightly-too-big request can really get 502 instead of 413, a builder makes the smallest change in Caddy or the API so the answer is always the clear 413 in the D47 error format. The limits stay as they are (25 MB at the door, 1 MB at the API; D53, D64), and both reviewers check it. No need to ask the user again.
 - **D189 The Caddyfile's 25 MB limit test waits** (2026-09-28, the user: "Later"). It's not pinned by a unit test (TEST-004's security note). It joins the M0 security items the user will handle later (D184).
 - **D190 Remove merged worktrees** (2026-09-28, the user: "Remove merged ones"; applies D118). The main session removes `.claude/worktrees/*` whose HEAD is already in `main` and which have no uncommitted changes. Branches all stay. Unmerged or dirty ones are left alone and listed for the user.
+- **D191 Start the M0 checkpoint** (2026-09-28, the user: "yes to all three, go ahead"). All 16 M0 tasks and TEST-001…008 are done and pushed (origin/main `af08458`).
+  - The main session starts the M0 checkpoint (D114, D147): the integrator runs the full suite 3 times plus every browser test (D171, D172), and the main session runs `/insecure-defaults:audit` on the whole codebase (D128, skill approved for this run under D80).
+  - The user confirmed the other session is paused, so no milestone work runs alongside.
+  - Still asked separately: D160's one-time force-push, and the S1 task list and skills (D111).
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
