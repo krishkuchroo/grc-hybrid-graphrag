@@ -252,7 +252,8 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
     6. Search and chat.
     7. Admin, grants, break-glass and the audit viewer.
     8. The dashboard and the benchmark.
-  - The user approves at the end of each milestone (9 checkpoints, each with a demo and test results).
+  - **Run in parallel groups (D181):** S1 alone → S2, S3 and S7 together → S4 alone → S5 and S6 together → S8. Conflict rules for parallel slices: D183 (shared agent cap of 8, a merge queue, folders owned per slice, hot files one task at a time, migration numbers given at merge).
+  - The user approves at the end of each milestone, with one combined checkpoint per parallel group (D182). Each checkpoint has a demo and test results.
 - **Done means:**
   - The test writer's tests pass.
   - The code and security reviewers approve. After 3 send-backs, it goes to the user.
