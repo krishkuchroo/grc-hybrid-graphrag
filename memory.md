@@ -692,6 +692,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **D186 The audit viewer hides what the reader isn't cleared for** (2026-09-28, answer a; raised by TEST-003's security review): an audit entry about a record above the reader's clearance still shows that it exists (who, when, which record number, the action), but not its before/after contents. The chain stays checkable, and labels hold everywhere (D51, D56).
   - The security matrix's `audit_trail` row gets `labels: true`. **TEST-005:** a test pins the label value of every non-record row (uploads, review_queue, chat and audit_trail true; admin false), which TEST-003's security review found unpinned.
   - The viewer itself is built in S7 (D76), and S7's briefs carry this rule.
+  - **For S7's planner** (TEST-005's security review): the matrix flag isn't enforced until S7. S7's audit-viewer task must test, for each clearance × label pair, that before/after contents are hidden while who/when/record number/action stay visible (D59). It must also force `labels: true` on routes guarded by the audit_trail, uploads, review_queue and chat rows (TEST-003's route check only covers record-type routes).
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions
