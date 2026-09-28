@@ -711,6 +711,9 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - The single force-push is blocked by guard rail 3 for every agent and the main session (D84), so the user runs it from the prompt with `!`.
   - Task branches stay local with their old history, and none is on GitHub.
 - **D195 S1 planning happens in another session** (2026-09-28, the user: "Will run it in a different session just send me that you are done"). This session stops after the tag and D160, and tells the user it's done.
+- **D160 done** (2026-09-28): the user ran the rewrite of `main` and `m0` and the single force-push. GitHub `main` and `m0` are both at `95969b4`, with 156 commits, 0 attribution lines, and the same files as `cf5d64a`.
+  - git's backup of the old refs is under `refs/original/`.
+  - The local task branches and the 21 kept worktrees still carry the old history. Never merge them into `main` as they are: cherry-pick or rebase onto the new `main` first.
 - **D121 When the milestone workflow is written** (2026-09-27): **(a) Now**, as `.claude/workflows/milestone.js`. It gets a real test after setup, with a tiny throwaway milestone.
 
 ## Open questions

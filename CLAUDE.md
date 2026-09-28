@@ -32,7 +32,7 @@ It's a portfolio project and research prototype. It **must look like a finished 
 - **M0 is done, approved and tagged `m0`** (D193). All 16 M0 tasks and TEST-001…008 are merged and pushed. The report is `docs/checkpoints/m0.md`.
 - **Checkpoint results:** lint and typecheck clean; `pnpm test` 2,457/2,457 in each of 3 runs (none skipped, none flaky); e2e 4/4; insecure-defaults audit 0 findings; the esbuild advisory is accepted (SF-008, D192).
 - **Open security items:** SF-001…SF-007 in `SECURITY-FINDINGS.md`, left for the user (D184).
-- **D160 history rewrite:** runs right after the tag (D194). The user runs the one force-push from the prompt.
+- **D160 history rewrite: done.** GitHub `main` and `m0` = `95969b4`, with no attribution lines. Old task branches and worktrees still carry the pre-rewrite history, so never merge them as they are.
 - **Next: S1**, planned in another session (D195). Then the parallel groups (D181–D183). The user OKs the S1 task list and skills first (D111).
 - **Open:** Q39's context hand-off part.
 - **Environment:**
