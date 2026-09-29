@@ -16,5 +16,9 @@
     "eslint": "^10.11.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
+  },
+  "dependencies": {
+    "@faker-js/faker": "10.6.0",
+    "@grc/shared": "workspace:*"
   }
 }
