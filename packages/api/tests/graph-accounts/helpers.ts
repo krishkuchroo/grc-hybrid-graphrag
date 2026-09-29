@@ -6,8 +6,9 @@
 // Where the settings come from:
 // - fullEnv(): every name in the nearest `.env` (walking up from this folder, so a worktree
 //   finds the main checkout's `.env`), with process.env winning. It is handed whole to
-//   `graphFromEnv` and to `pnpm setup:neo4j`, so whatever settings the builder adds for the 28
-//   accounts reach them without these tests knowing their names.
+//   `pnpm setup:neo4j`, and `secretValues()` reads it.
+// - newGraph() builds `GraphService` from `appTestEnv()` (tests/platform/helpers.ts), the app's
+//   own settings list (S1-013, D210 (4)).
 // - The tests use the Desktop `neo4j` account only to set up fixtures, to check, and to run a
 //   session *as* a query account (Neo4j Enterprise impersonation): privileges are then those
 //   of the query account, so the database's own rules are tested without their passwords.
@@ -22,6 +23,7 @@ import neo4j, { type Driver, type ManagedTransaction } from 'neo4j-driver';
 import { LABELS, ROLES, ROLE_TABLE, type Label, type Role } from '@grc/shared';
 import { ROOT, dropDatabases, refused, runOn, superDriver } from '../graph/helpers.js';
 import { graphFromEnv } from '../../src/graph/graph.module.js';
+import { appTestEnv } from '../platform/helpers.js';
 
 export { ROOT, dropDatabases, refused, runOn, superDriver };
 
@@ -118,7 +120,7 @@ export function runSetupNeo4j(): { status: number | null; stdout: string; stderr
 
 /** A GraphService built the way the app builds it, from the environment. */
 export function newGraph(): QueryGraph {
-  return graphFromEnv(fullEnv()) as unknown as QueryGraph;
+  return graphFromEnv(appTestEnv()) as unknown as QueryGraph;
 }
 
 /** Fails with a clear message while `readAs` is missing. */

@@ -51,7 +51,7 @@ import {
   type Org,
   type SignedIn,
 } from '../auth/helpers.js';
-import { dropDatabases, fullEnv, runOn, superDriver } from '../graph-accounts/helpers.js';
+import { dropDatabases, runOn, superDriver } from '../graph-accounts/helpers.js';
 import {
   LogCapture,
   expectErrorFormat,
@@ -134,9 +134,6 @@ export interface ApiEnv {
 /** A throwaway Postgres database, the API app (and the worker, when asked) and the seeding kit. */
 export async function setUpRecordsApi(opts: { worker?: boolean } = {}): Promise<ApiEnv> {
   const db = await platformDb();
-  // readAs needs the query accounts' secret; prepareEnv copies only the other Neo4j keys.
-  const secret = fullEnv().NEO4J_QUERY_SECRET;
-  if (secret && !process.env.NEO4J_QUERY_SECRET) process.env.NEO4J_QUERY_SECRET = secret;
   const logs = new LogCapture();
   let app: ApiApp | undefined;
   let worker: WorkerApp | undefined;

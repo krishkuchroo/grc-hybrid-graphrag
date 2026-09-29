@@ -41,8 +41,8 @@ import { expect } from 'vitest';
 import { ROLES, LABELS, type Label, type RecordKind, type Role } from '@grc/shared';
 import { closeDb } from '../db/helpers.js';
 import { dropDatabases, runOn, superDriver } from '../graph/helpers.js';
-import { fullEnv } from '../graph-accounts/helpers.js';
 import { addMember, addUser } from '../org-wall/helpers.js';
+import { appTestEnv } from '../platform/helpers.js';
 import {
   LogCapture,
   makeLogger,
@@ -188,7 +188,7 @@ export async function setUpRecords(): Promise<RecEnv> {
   try {
     const { graphFromEnv } = await import('../../src/graph/graph.module.js');
     const { AuditOutbox } = await import('../../src/audit/outbox.js');
-    const graph = graphFromEnv(fullEnv()) as unknown as GraphLike;
+    const graph = graphFromEnv(appTestEnv()) as unknown as GraphLike;
     const log = new LogCapture();
     return {
       audit,
