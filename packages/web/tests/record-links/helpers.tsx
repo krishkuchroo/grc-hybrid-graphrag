@@ -19,6 +19,10 @@
 //   is missing or hidden, 400 `validation_failed` for a link to itself, 400 `link_not_allowed` when
 //   `isAllowedLink` fails, 403 `forbidden` when `canLinkRecords` fails (D200), 409 `link_exists`
 //   for the same link twice, else 201 with the link. The messages are the API's own.
+// - POST /api/v1/links/remove (S1-011, D201, D207) with `{ type, fromId, toId }` only: 400
+//   `validation_failed` for any other body; 404 `not_found` when either end is missing or hidden or
+//   there is no such link; 403 `forbidden` when `canLinkRecords` fails; 409 `ai_link_review_only`
+//   when `isRemovableLinkOrigin` fails; else 200 with `{ type, fromId, toId }` and the link is gone.
 //
 // Contract with the app (S1-008 brief):
 // - Each record page (`/risks/$id`, `/controls/$id`, `/policies/$id`, `/assets/$id`,
@@ -46,6 +50,7 @@ import {
   canLinkRecords,
   formatNumber,
   isAllowedLink,
+  isRemovableLinkOrigin,
   isRole,
   isVisible,
   LABELS,
@@ -355,6 +360,10 @@ export class LinksApi {
     return this.callsTo('/api/v1/links', 'POST');
   }
 
+  removeLinkCalls(): RecordedCall[] {
+    return this.callsTo('/api/v1/links/remove', 'POST');
+  }
+
   readonly fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const method = (
@@ -403,6 +412,7 @@ export class LinksApi {
     }
     if (method === 'GET' && path === '/api/v1/people') return this.listPeople(url.searchParams);
     if (method === 'POST' && path === '/api/v1/links') return this.createLink(body);
+    if (method === 'POST' && path === '/api/v1/links/remove') return this.removeLink(body);
 
     const m = /^\/api\/v1\/(risks|controls|policies|assets|incidents)(?:\/([^/]+))?(\/links)?$/.exec(path);
     const kind = m ? KIND_OF_PATH[m[1]!] : undefined;
@@ -528,7 +538,38 @@ export class LinksApi {
     this.links.push(saved);
     return json(201, saved);
   }
+
+  private removeLink(body: unknown): Response {
+    const b = body as Record<string, unknown> | undefined;
+    const keys = b && typeof b === 'object' ? Object.keys(b).sort() : [];
+    if (
+      keys.join(',') !== 'fromId,toId,type' ||
+      typeof b!.type !== 'string' ||
+      typeof b!.fromId !== 'string' ||
+      typeof b!.toId !== 'string'
+    ) {
+      return apiError(400, 'validation_failed', 'The request body is not valid.');
+    }
+    const { type, fromId, toId } = b as { type: string; fromId: string; toId: string };
+    const from = this.record(fromId);
+    const to = this.record(toId);
+    const index = this.links.findIndex((l) => l.type === type && l.fromId === fromId && l.toId === toId);
+    if (!from || !to || !this.visible(from) || !this.visible(to) || index < 0) {
+      return apiError(404, 'not_found', 'The record was not found.');
+    }
+    const caller = { userId: this.me.id, role: this.me.role, clearance: this.me.clearance };
+    if (!canLinkRecords(caller, from, to)) return apiError(403, 'forbidden', 'You may not do this.');
+    if (!isRemovableLinkOrigin(this.links[index]!.origin)) {
+      return apiError(409, 'ai_link_review_only', AI_LINK_MESSAGE);
+    }
+    this.links.splice(index, 1);
+    return json(200, { type, fromId, toId });
+  }
 }
+
+// ---- Link removal (S1-011) -------------------------------------------------------------------
+
+export const AI_LINK_MESSAGE = "This link was found by the AI. It can only be removed through the Analyst's review.";
 
 // ---- Rendering ---------------------------------------------------------------------------------
 
