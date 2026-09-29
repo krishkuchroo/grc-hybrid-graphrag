@@ -37,6 +37,8 @@ const TRACKING_HELPERS = [
 
 /** Files that name a database create but never make a Neo4j database. */
 const MAKES_NO_DATABASE: Record<string, string> = {
+  'api/tests/graph/create-org-database.unit.test.ts':
+    'unit test: neo4j-driver is mocked; the scripted system session never reaches a real Neo4j',
   'api/tests/graph/org-database-name.unit.test.ts':
     'unit test: a stub driver; a bad org ID is refused before any query is sent',
   'infra/tests/org-script-env/scripts-host-swap.stack.test.ts':
