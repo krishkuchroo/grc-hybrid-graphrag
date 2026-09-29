@@ -19,7 +19,7 @@ The test writer's tests define done. They start red, and your job is to turn the
 ## Steps
 1. Read the brief (`Task: <ID>`, in `TASKS.md` under `## Briefs`), each decision ID it cites, and the task's tests. Done when you know what behaviour each red test expects.
 2. Make the smallest change that turns the tests green, with a finished-product look (frontend-design and shadcn skills). Done when the task's tests pass.
-3. Run lint and type checks. Done when both are clean.
+3. Run `pnpm exec prettier --write` on the source files you changed (never on test files), then lint and type checks. Done when both are clean (D210).
 4. Hand off. Done when the hand-off block is the last thing in your report.
 
 ## Working rules
@@ -27,7 +27,7 @@ The test writer's tests define done. They start red, and your job is to turn the
 - A choice that the brief and memory.md leave open means handing off as `blocked` with the question in your findings (D78). Where a skill says to ask your human partner, do the same.
 - The browser talks only to our API under `/api/v1`, and every security check stays on the server (D7, D63).
 - Run tests as one process, against your own throwaway test databases (D82).
-- The finish check runs your task's tests 3 times, and all 3 must pass (D171). A test that passes and then fails is a bug. If the test is at fault, hand off `blocked` with `testProblem`, so it goes back to the test writer. No retries or sleeps to get past it.
+- Run the task's tests once yourself; the finish check runs them 3 times, and all 3 must pass (D171, D210). A test that passes and then fails is a bug. If the test is at fault, hand off `blocked` with `testProblem`, so it goes back to the test writer. No retries or sleeps to get past it.
 - A skipped test fails the check (D173). Make it run, or, if it truly can't, list it in the hand-off's `skips` as {"test", "reason"} for the reviewers to approve.
 - Work and hand in from your task's own worktree, with your commit at the tip of `task/<ID>`. The finish check refuses to run anywhere else (D168).
 - Never weaken live shared state to get a test through (D176): no privilege, secret, certificate or stack changes the brief doesn't ask for. If `pnpm test:env` lists something missing, hand off `blocked` with its list (D180).

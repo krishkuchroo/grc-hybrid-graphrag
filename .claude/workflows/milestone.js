@@ -32,6 +32,10 @@ const resumeNotes = given.notes ?? {}
 // when its tests (and, for review, its code) are already on its branch. Its
 // note, if any, goes to the first agent of that stage.
 const startFrom = given.from ?? {}
+// Optional ["<task ID>", ...]: run only these tasks, so a second run can take
+// them beside a run already going (D210). The others are left alone; a task
+// they wait on must be done on the board.
+const only = Array.isArray(given.only) && given.only.length ? new Set(given.only.map((x) => String(x).toUpperCase())) : null
 const badMs = group.filter((m) => !MILESTONES.includes(m))
 if (!group.length || badMs.length || new Set(group).size !== group.length) {
   return { error: `the milestone must be one of ${MILESTONES.join(', ')}, or a list of different ones; got ${JSON.stringify(given.milestone)}` }
@@ -172,6 +176,7 @@ if (step === 'plan') {
         ...PARALLEL_RULES,
         others(m).length ? `Plan only ${M}. The other slices of this run (${others(m).join(', ')}) are planned separately; read their tasks on the board if they are there already.` : '',
         'Each task has one builder as its owner; the test writer, the reviewers and the integrator take part in every task.',
+        'Keep waiting chains short so many tasks can run at once (D210): give each task only the `dependsOn` it truly needs, and where a feature has a backend part and a screen, make them separate tasks so the screen waits only on what it calls.',
         'Also return every task in `tasks`: its ID, its owner, and the IDs of the tasks it waits on (`dependsOn`, [] if none).',
         "List each task's hot files in `hotFiles` and in its brief: files many tasks touch, such as the API app module, the generated API client, the web router and menu, the role table, the security matrix, and `package.json`/`pnpm-lock.yaml` when it adds a package. Only one task at a time may change each (D183).",
         'Never fix a database migration number in a brief. Say "a new migration"; the integrator gives it the next number when it merges (D183).',
@@ -242,6 +247,7 @@ const loops = (id) => {
   return found
 }
 for (const t of tasks) if (loops(t.id)) problems.push(`the tasks around ${t.id} wait on each other in a loop`)
+if (only) for (const id of only) if (!byId.has(id)) problems.push(`\`only\` names ${id}, which isn't in ${MS}`)
 if (problems.length) return { milestone, step, error: 'the task list needs fixing before the build', problems }
 
 const results = {}
@@ -361,6 +367,7 @@ async function runTask(t) {
   const merged = await mainLock(() =>
     handIn(id, 'integrator', [
       `Merge \`${branch}\` into \`main\` in the main checkout (your steps).`,
+      "Another run may be merging too (D210). Before you touch `main`, take the merge lock: `mkdir .git/grc-merge.lock` (it fails while another integrator holds it; then wait a minute and try again, and treat a lock older than 2 hours as stale and remove it). Hold it until your push is done or you hand in blocked, then `rmdir .git/grc-merge.lock`. Merge the latest `main`, and push only after your checks pass.",
       'If the branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only this task\'s own new migration (D183).',
       group.length > 1 ? `Other slices (${group.map((m) => m.toUpperCase()).join(', ')}) are merging in this same queue, so \`main\` may have moved since the branch started: merge \`main\` in first and run the full suite on the result.` : '',
       worktrees.length ? `After a successful push, remove this task's worktrees that still exist: ${worktrees.map((w) => `\`git worktree remove --force ${w}\``).join(', ')}. Keep the branch (D118).` : '',
@@ -384,6 +391,7 @@ function start(t) {
       (async () => {
         const board = String(t.boardStatus ?? '').toLowerCase()
         if (board === 'done') return (results[t.id] = { status: 'done', findings: 'already done' }).status
+        if (only && !only.has(t.id)) return (results[t.id] = { status: 'waiting', findings: 'not in `only`; another run or a later one takes it' }).status
         const deps = await Promise.all(t.dependsOn.map((d) => start(byId.get(d))))
         const stuck = t.dependsOn.filter((_, k) => deps[k] !== 'done')
         if (stuck.length) return (results[t.id] = { status: 'waiting', findings: `waits on ${stuck.join(', ')}` }).status
