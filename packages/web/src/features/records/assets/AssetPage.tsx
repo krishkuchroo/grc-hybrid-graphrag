@@ -9,6 +9,7 @@ import type { FormFieldDef } from '../RecordForm';
 import { NewRecordPage, RecordPage } from '../RecordPage';
 import type { AnyRecord } from '../useRecords';
 import { ValueBadge } from '../ValueBadge';
+import { DependencyMap } from './DependencyMap';
 
 export type Asset = AnyRecord & {
   assetType: string;
@@ -63,6 +64,7 @@ export function AssetPage({ id }: { id: string }) {
         { label: 'Criticality', value: <ValueBadge value={asset.criticality} /> },
         { label: 'Data classification', value: <LabelBadge label={asset.dataClassification as Label} /> },
       ]}
+      sections={(asset) => <DependencyMap key={asset.id} assetId={asset.id} />}
       formFields={ASSET_FORM_FIELDS}
       formValues={(asset) => ({
         assetType: asset.assetType,

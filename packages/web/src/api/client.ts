@@ -205,6 +205,48 @@ export type PatchAssetsIdBody = {
   version: number;
 };
 
+/** GET /api/v1/assets/{id}/links response. */
+export type GetAssetsIdLinksResponse = {
+  items: Array<{
+    type: string;
+    direction: 'out' | 'in';
+    other: {
+      id: string;
+      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+      number: string;
+      name: string;
+      label: string;
+      status: string;
+    };
+    origin: 'manual' | 'import' | 'ai';
+    createdAt: string;
+    createdBy: string;
+  }>;
+};
+
+/** GET /api/v1/assets/{id}/map response. */
+export type GetAssetsIdMapResponse = {
+  nodes: Array<{
+    id: string;
+    number: string;
+    name: string;
+    assetType: string;
+    criticality: string;
+    label: string;
+  }>;
+  edges: Array<{
+    type: 'HOSTS' | 'RUNS';
+    fromId: string;
+    toId: string;
+  }>;
+  truncated: boolean;
+};
+
+/** GET /api/v1/assets/{id}/map query parameters. */
+export type GetAssetsIdMapQuery = {
+  depth?: string;
+};
+
 /** POST /api/v1/assets/{id}/retire response. */
 export type PostAssetsIdRetireResponse = {
   id: string;
@@ -414,6 +456,25 @@ export type PatchControlsIdBody = {
   version: number;
 };
 
+/** GET /api/v1/controls/{id}/links response. */
+export type GetControlsIdLinksResponse = {
+  items: Array<{
+    type: string;
+    direction: 'out' | 'in';
+    other: {
+      id: string;
+      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+      number: string;
+      name: string;
+      label: string;
+      status: string;
+    };
+    origin: 'manual' | 'import' | 'ai';
+    createdAt: string;
+    createdBy: string;
+  }>;
+};
+
 /** POST /api/v1/controls/{id}/retire response. */
 export type PostControlsIdRetireResponse = {
   id: string;
@@ -553,6 +614,25 @@ export type PatchIncidentsIdBody = {
   version: number;
 };
 
+/** GET /api/v1/incidents/{id}/links response. */
+export type GetIncidentsIdLinksResponse = {
+  items: Array<{
+    type: string;
+    direction: 'out' | 'in';
+    other: {
+      id: string;
+      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+      number: string;
+      name: string;
+      label: string;
+      status: string;
+    };
+    origin: 'manual' | 'import' | 'ai';
+    createdAt: string;
+    createdBy: string;
+  }>;
+};
+
 /** POST /api/v1/incidents/{id}/retire response. */
 export type PostIncidentsIdRetireResponse = {
   id: string;
@@ -576,6 +656,37 @@ export type PostIncidentsIdRetireResponse = {
 /** POST /api/v1/incidents/{id}/retire request body. */
 export type PostIncidentsIdRetireBody = {
   version: number;
+};
+
+/** POST /api/v1/links response. */
+export type PostLinksResponse = {
+  type: string;
+  fromId: string;
+  toId: string;
+  origin: 'manual' | 'import' | 'ai';
+  createdAt: string;
+  createdBy: string;
+};
+
+/** POST /api/v1/links request body. */
+export type PostLinksBody = {
+  type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+  fromId: string;
+  toId: string;
+};
+
+/** POST /api/v1/links/remove response. */
+export type PostLinksRemoveResponse = {
+  type: string;
+  fromId: string;
+  toId: string;
+};
+
+/** POST /api/v1/links/remove request body. */
+export type PostLinksRemoveBody = {
+  type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+  fromId: string;
+  toId: string;
 };
 
 /** GET /api/v1/me response. */
@@ -704,6 +815,25 @@ export type PatchPoliciesIdBody = {
   policyVersion?: string;
   effectiveDate?: string;
   version: number;
+};
+
+/** GET /api/v1/policies/{id}/links response. */
+export type GetPoliciesIdLinksResponse = {
+  items: Array<{
+    type: string;
+    direction: 'out' | 'in';
+    other: {
+      id: string;
+      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+      number: string;
+      name: string;
+      label: string;
+      status: string;
+    };
+    origin: 'manual' | 'import' | 'ai';
+    createdAt: string;
+    createdBy: string;
+  }>;
 };
 
 /** POST /api/v1/policies/{id}/retire response. */
@@ -852,6 +982,25 @@ export type PatchRisksIdBody = {
   version: number;
 };
 
+/** GET /api/v1/risks/{id}/links response. */
+export type GetRisksIdLinksResponse = {
+  items: Array<{
+    type: string;
+    direction: 'out' | 'in';
+    other: {
+      id: string;
+      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+      number: string;
+      name: string;
+      label: string;
+      status: string;
+    };
+    origin: 'manual' | 'import' | 'ai';
+    createdAt: string;
+    createdBy: string;
+  }>;
+};
+
 /** POST /api/v1/risks/{id}/retire response. */
 export type PostRisksIdRetireResponse = {
   id: string;
@@ -899,6 +1048,12 @@ export const api = {
   /** Edit a asset; a stale version is refused (409 stale_version) */
   patchAssetsId: (path: { id: string }, body: PatchAssetsIdBody): Promise<PatchAssetsIdResponse> =>
     request<PatchAssetsIdResponse>('PATCH', `/api/v1/assets/${encodeURIComponent(path.id)}`, body),
+  /** The asset's links whose other end the caller can see */
+  getAssetsIdLinks: (path: { id: string }): Promise<GetAssetsIdLinksResponse> =>
+    request<GetAssetsIdLinksResponse>('GET', `/api/v1/assets/${encodeURIComponent(path.id)}/links`),
+  /** The HOSTS and RUNS map around one asset: depth 1 to 3 (default 2), at most 200 assets */
+  getAssetsIdMap: (path: { id: string }, query?: GetAssetsIdMapQuery): Promise<GetAssetsIdMapResponse> =>
+    request<GetAssetsIdMapResponse>('GET', `/api/v1/assets/${encodeURIComponent(path.id)}/map${queryString(query)}`),
   /** Retire a asset; it is kept, never deleted */
   postAssetsIdRetire: (path: { id: string }, body: PostAssetsIdRetireBody): Promise<PostAssetsIdRetireResponse> =>
     request<PostAssetsIdRetireResponse>('POST', `/api/v1/assets/${encodeURIComponent(path.id)}/retire`, body),
@@ -931,6 +1086,9 @@ export const api = {
   /** Edit a control; a stale version is refused (409 stale_version) */
   patchControlsId: (path: { id: string }, body: PatchControlsIdBody): Promise<PatchControlsIdResponse> =>
     request<PatchControlsIdResponse>('PATCH', `/api/v1/controls/${encodeURIComponent(path.id)}`, body),
+  /** The control's links whose other end the caller can see */
+  getControlsIdLinks: (path: { id: string }): Promise<GetControlsIdLinksResponse> =>
+    request<GetControlsIdLinksResponse>('GET', `/api/v1/controls/${encodeURIComponent(path.id)}/links`),
   /** Retire a control; it is kept, never deleted */
   postControlsIdRetire: (path: { id: string }, body: PostControlsIdRetireBody): Promise<PostControlsIdRetireResponse> =>
     request<PostControlsIdRetireResponse>('POST', `/api/v1/controls/${encodeURIComponent(path.id)}/retire`, body),
@@ -948,12 +1106,21 @@ export const api = {
   /** Edit a incident; a stale version is refused (409 stale_version) */
   patchIncidentsId: (path: { id: string }, body: PatchIncidentsIdBody): Promise<PatchIncidentsIdResponse> =>
     request<PatchIncidentsIdResponse>('PATCH', `/api/v1/incidents/${encodeURIComponent(path.id)}`, body),
+  /** The incident's links whose other end the caller can see */
+  getIncidentsIdLinks: (path: { id: string }): Promise<GetIncidentsIdLinksResponse> =>
+    request<GetIncidentsIdLinksResponse>('GET', `/api/v1/incidents/${encodeURIComponent(path.id)}/links`),
   /** Retire a incident; it is kept, never deleted */
   postIncidentsIdRetire: (
     path: { id: string },
     body: PostIncidentsIdRetireBody,
   ): Promise<PostIncidentsIdRetireResponse> =>
     request<PostIncidentsIdRetireResponse>('POST', `/api/v1/incidents/${encodeURIComponent(path.id)}/retire`, body),
+  /** Link two records (D200: the caller can edit either and see both) */
+  postLinks: (body: PostLinksBody): Promise<PostLinksResponse> =>
+    request<PostLinksResponse>('POST', '/api/v1/links', body),
+  /** Remove a link added by mistake (D201: the same people who may add it). Answers 404 not_found, 403 forbidden, or 409 ai_link_review_only for a link found by the AI (D207) */
+  postLinksRemove: (body: PostLinksRemoveBody): Promise<PostLinksRemoveResponse> =>
+    request<PostLinksRemoveResponse>('POST', '/api/v1/links/remove', body),
   /** The signed-in user, their org, role and clearance, and whether MFA is set up */
   getMe: (): Promise<GetMeResponse> => request<GetMeResponse>('GET', '/api/v1/me'),
   /** The caller's org members for the owner picker, paged: id, name and role only */
@@ -971,6 +1138,9 @@ export const api = {
   /** Edit a policy; a stale version is refused (409 stale_version) */
   patchPoliciesId: (path: { id: string }, body: PatchPoliciesIdBody): Promise<PatchPoliciesIdResponse> =>
     request<PatchPoliciesIdResponse>('PATCH', `/api/v1/policies/${encodeURIComponent(path.id)}`, body),
+  /** The policy's links whose other end the caller can see */
+  getPoliciesIdLinks: (path: { id: string }): Promise<GetPoliciesIdLinksResponse> =>
+    request<GetPoliciesIdLinksResponse>('GET', `/api/v1/policies/${encodeURIComponent(path.id)}/links`),
   /** Retire a policy; it is kept, never deleted */
   postPoliciesIdRetire: (path: { id: string }, body: PostPoliciesIdRetireBody): Promise<PostPoliciesIdRetireResponse> =>
     request<PostPoliciesIdRetireResponse>('POST', `/api/v1/policies/${encodeURIComponent(path.id)}/retire`, body),
@@ -986,6 +1156,9 @@ export const api = {
   /** Edit a risk; a stale version is refused (409 stale_version) */
   patchRisksId: (path: { id: string }, body: PatchRisksIdBody): Promise<PatchRisksIdResponse> =>
     request<PatchRisksIdResponse>('PATCH', `/api/v1/risks/${encodeURIComponent(path.id)}`, body),
+  /** The risk's links whose other end the caller can see */
+  getRisksIdLinks: (path: { id: string }): Promise<GetRisksIdLinksResponse> =>
+    request<GetRisksIdLinksResponse>('GET', `/api/v1/risks/${encodeURIComponent(path.id)}/links`),
   /** Retire a risk; it is kept, never deleted */
   postRisksIdRetire: (path: { id: string }, body: PostRisksIdRetireBody): Promise<PostRisksIdRetireResponse> =>
     request<PostRisksIdRetireResponse>('POST', `/api/v1/risks/${encodeURIComponent(path.id)}/retire`, body),

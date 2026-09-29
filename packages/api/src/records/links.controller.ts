@@ -13,7 +13,7 @@ import { Requires } from '../access/requires.decorator.js';
 import { ApiError } from '../common/errors.js';
 import { documentRoute } from '../common/openapi.js';
 import type { AuthedRequest } from '../identity/session.guard.js';
-import { assetMapSchema, type AssetMap } from './asset-map.js';
+import { assetMapSchema, mapQuerySchema, type AssetMap } from './asset-map.js';
 import {
   LinksService,
   createLinkSchema,
@@ -141,4 +141,5 @@ documentRoute({
   path: '/assets/{id}/map',
   summary: 'The HOSTS and RUNS map around one asset: depth 1 to 3 (default 2), at most 200 assets',
   response: assetMapSchema,
+  query: mapQuerySchema,
 });

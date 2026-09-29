@@ -115,6 +115,20 @@ interface Operation {
   pathParams: string[];
   /** A paged list (D47) takes its page, sort and filters as query parameters. */
   paged: boolean;
+  /** The documented query parameters of a route that isn't a paged list, as an object schema. */
+  query?: Json;
+}
+
+/** The OpenAPI `in: query` parameters as one object schema, or undefined when there are none. */
+function querySchemaOf(parameters: unknown): Json | undefined {
+  if (!Array.isArray(parameters)) return undefined;
+  const params = (parameters as Json[]).filter((p) => p.in === 'query');
+  if (params.length === 0) return undefined;
+  return {
+    type: 'object',
+    properties: Object.fromEntries(params.map((p) => [String(p.name), p.schema ?? {}])),
+    required: params.filter((p) => p.required === true).map((p) => String(p.name)),
+  };
 }
 
 /** A GET whose answer is `{ items, page, pageSize, total }`. */
@@ -140,6 +154,7 @@ function operations(doc: Json): Operation[] {
         response: jsonSchemaOf(responses['200']?.content),
         pathParams: [...path.matchAll(/\{([A-Za-z_$][\w$]*)\}/g)].map((m) => m[1]!),
         paged: isPaged(method, jsonSchemaOf(responses['200']?.content)),
+        query: querySchemaOf(op.parameters),
       });
     }
   }
@@ -232,11 +247,17 @@ function render(doc: Json): string {
     const args: string[] = [];
     if (op.pathParams.length > 0) args.push(`path: { ${op.pathParams.map((p) => `${p}: string`).join('; ')} }`);
     if (op.body !== undefined) args.push(`body: ${base}Body`);
-    if (op.paged) args.push('query?: ListQuery');
+    if (op.paged) {
+      args.push('query?: ListQuery');
+    } else if (op.query !== undefined) {
+      types.push(`/** ${op.method} ${op.path} query parameters. */\nexport type ${base}Query = ${tsType(op.query)};`);
+      args.push(`query?: ${base}Query`);
+    }
+    const hasQuery = op.paged || op.query !== undefined;
     // Path parameters are URL-encoded into the relative address; the query is appended.
     const address =
-      op.pathParams.length > 0 || op.paged
-        ? `\`${op.path.replace(/\{([A-Za-z_$][\w$]*)\}/g, (_m, p: string) => `\${encodeURIComponent(path.${p})}`)}${op.paged ? '${queryString(query)}' : ''}\``
+      op.pathParams.length > 0 || hasQuery
+        ? `\`${op.path.replace(/\{([A-Za-z_$][\w$]*)\}/g, (_m, p: string) => `\${encodeURIComponent(path.${p})}`)}${hasQuery ? '${queryString(query)}' : ''}\``
         : `'${op.path}'`;
     const call =
       op.body !== undefined
