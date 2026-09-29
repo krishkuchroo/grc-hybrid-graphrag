@@ -73,9 +73,19 @@ export interface Me {
 }
 
 export const ADMIN: Me = { id: 'user-marcus', name: 'Marcus Bell', role: 'admin', clearance: 'restricted' };
-export const RISK_MANAGER: Me = { id: 'user-dana', name: 'Dana Whitfield', role: 'risk_manager', clearance: 'confidential' };
+export const RISK_MANAGER: Me = {
+  id: 'user-dana',
+  name: 'Dana Whitfield',
+  role: 'risk_manager',
+  clearance: 'confidential',
+};
 export const ANALYST: Me = { id: 'user-omar', name: 'Omar Haddad', role: 'analyst', clearance: 'confidential' };
-export const CONTROL_OWNER: Me = { id: 'user-priya', name: 'Priya Raman', role: 'control_owner', clearance: 'confidential' };
+export const CONTROL_OWNER: Me = {
+  id: 'user-priya',
+  name: 'Priya Raman',
+  role: 'control_owner',
+  clearance: 'confidential',
+};
 export const VIEWER: Me = { id: 'user-vic', name: 'Vic Lowe', role: 'viewer', clearance: 'internal' };
 
 /** Someone with this role and the highest clearance, so labels never hide a record. The Control
@@ -198,8 +208,20 @@ export interface StoredLink {
   createdBy: string;
 }
 
-export function link(type: string, from: StoredRecord, to: StoredRecord, origin: StoredLink['origin'] = 'manual'): StoredLink {
-  return { type, fromId: from.id, toId: to.id, origin, createdAt: '2026-09-20T09:00:00.000Z', createdBy: 'user-marcus' };
+export function link(
+  type: string,
+  from: StoredRecord,
+  to: StoredRecord,
+  origin: StoredLink['origin'] = 'manual',
+): StoredLink {
+  return {
+    type,
+    fromId: from.id,
+    toId: to.id,
+    origin,
+    createdAt: '2026-09-20T09:00:00.000Z',
+    createdBy: 'user-marcus',
+  };
 }
 
 /**
@@ -495,7 +517,14 @@ export class LinksApi {
     if (this.links.some((l) => l.type === type && l.fromId === fromId && l.toId === toId)) {
       return apiError(409, 'link_exists', 'This link already exists.');
     }
-    const saved: StoredLink = { type, fromId, toId, origin: 'manual', createdAt: '2026-09-28T09:00:00.000Z', createdBy: this.me.id };
+    const saved: StoredLink = {
+      type,
+      fromId,
+      toId,
+      origin: 'manual',
+      createdAt: '2026-09-28T09:00:00.000Z',
+      createdBy: this.me.id,
+    };
     this.links.push(saved);
     return json(201, saved);
   }
@@ -609,13 +638,17 @@ function searchBox(dialog: HTMLElement): HTMLElement {
 }
 
 /** Types `text` into the dialog's search and waits for the other end's list route to be asked. */
-export async function search(user: User, dialog: HTMLElement, api: LinksApi, kind: RecordKind, text: string): Promise<void> {
+export async function search(
+  user: User,
+  dialog: HTMLElement,
+  api: LinksApi,
+  kind: RecordKind,
+  text: string,
+): Promise<void> {
   const box = searchBox(dialog);
   await user.clear(box);
   await user.type(box, text);
-  await waitFor(() =>
-    expect(api.searches(kind).some((c) => c.url.searchParams.get('q') === text)).toBe(true),
-  );
+  await waitFor(() => expect(api.searches(kind).some((c) => c.url.searchParams.get('q') === text)).toBe(true));
   await flush();
 }
 

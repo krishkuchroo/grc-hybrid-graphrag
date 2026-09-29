@@ -82,10 +82,15 @@ describe('the related-records groups on each record page', () => {
   it('asset: HOSTS both ways, telling "Hosts" from "Hosted by"', async () => {
     await openRecord(A.claims, new LinksApi());
     // A1 hosts A2; A4 hosts A1.
-    await expectBothWays({ combined: /^hosts \/ hosted by$/i, out: /^hosts$/i, in: /^hosted by$/i }, A.claimsApp, A.core, {
-      outWord: /\bhosts\b/i,
-      inWord: /\bhosted by\b/i,
-    });
+    await expectBothWays(
+      { combined: /^hosts \/ hosted by$/i, out: /^hosts$/i, in: /^hosted by$/i },
+      A.claimsApp,
+      A.core,
+      {
+        outWord: /\bhosts\b/i,
+        inWord: /\bhosted by\b/i,
+      },
+    );
   });
 
   it('asset: RUNS both ways, telling "Runs" from "Runs on"', async () => {

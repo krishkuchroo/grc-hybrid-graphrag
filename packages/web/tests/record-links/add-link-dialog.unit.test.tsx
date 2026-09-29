@@ -152,7 +152,14 @@ async function addThrough(
 describe('the link it adds goes the ontology’s way', () => {
   it('risk → control: MITIGATED_BY from the risk, found by name', async () => {
     const api = new LinksApi({ me: ADMIN });
-    const { body } = await addThrough(api, R.vendor, /^controls that treat this risk/i, 'control', 'backups', C.backups);
+    const { body } = await addThrough(
+      api,
+      R.vendor,
+      /^controls that treat this risk/i,
+      'control',
+      'backups',
+      C.backups,
+    );
     expect(body).toEqual({ type: 'MITIGATED_BY', fromId: R.vendor.id, toId: C.backups.id });
   });
 
@@ -226,7 +233,11 @@ describe('only records the person can see, and only ends that pass canLinkRecord
     await pickLinkType(user, dialog, /^controls that treat this risk/i);
     await search(user, dialog, api, 'control', 'CTL');
     await within(dialog).findAllByText(new RegExp(C.backups.number));
-    expect(numbersIn(dialog).filter((n) => n.startsWith('CTL')).sort()).toEqual([C.mfa.number, C.backups.number].sort());
+    expect(
+      numbersIn(dialog)
+        .filter((n) => n.startsWith('CTL'))
+        .sort(),
+    ).toEqual([C.mfa.number, C.backups.number].sort());
   });
 
   it('Risk Manager on an asset: risks are offered, but no asset (they can edit neither asset)', async () => {

@@ -28,7 +28,8 @@ afterEach(resetApp);
 const HIDDEN = [A.portal, C.mfa, C.vault, I.phishing, I.fileShare];
 
 /** Words a placeholder or count for hidden links would use. */
-const PLACEHOLDER = /hidden|can.?t see|cannot see|not shown|restricted link|more link|other link|\+\s?\d+|\b\d+\s+(more|other|hidden)/i;
+const PLACEHOLDER =
+  /hidden|can.?t see|cannot see|not shown|restricted link|more link|other link|\+\s?\d+|\b\d+\s+(more|other|hidden)/i;
 
 describe('only the links the API returns', () => {
   it('shows the visible ends and nothing of the hidden ones', async () => {
