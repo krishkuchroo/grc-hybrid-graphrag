@@ -51,7 +51,8 @@ import {
   type Org,
   type SignedIn,
 } from '../auth/helpers.js';
-import { dropDatabases, runOn, superDriver } from '../graph/helpers.js';
+import { runOn, superDriver } from '../graph/helpers.js';
+import { ThrowawayDatabases } from '../graph/throwaway-databases.js';
 import {
   LogCapture,
   platformDb,
@@ -76,7 +77,7 @@ export interface LinksEnv {
   app: ApiApp;
   k: Kit;
   sup: Driver;
-  databases: Set<string>;
+  databases: ThrowawayDatabases;
   logs: LogCapture;
 }
 
@@ -90,13 +91,14 @@ export async function setUpLinks(): Promise<LinksEnv> {
     await db.drop();
     throw err;
   }
-  return { db, app, k: kit(db), sup: superDriver(), databases: new Set(), logs };
+  const sup = superDriver();
+  return { db, app, k: kit(db), sup, databases: new ThrowawayDatabases(sup), logs };
 }
 
 export async function tearDownLinks(env: LinksEnv | undefined): Promise<void> {
   if (!env) return;
   try {
-    await dropDatabases(env.sup, env.databases).catch(() => undefined);
+    await env.databases.dropAll();
   } finally {
     await env.app.close().catch(() => undefined);
     await env.sup.close().catch(() => undefined);
@@ -120,7 +122,7 @@ export async function appGraph(env: LinksEnv): Promise<GraphLike> {
 export async function newLinksOrg(env: LinksEnv, name: string): Promise<Org> {
   const org = await seedOrg(env.k, name);
   const graph = await appGraph(env);
-  env.databases.add(`org-${org.id}`);
+  env.databases.track(`org-${org.id}`);
   await graph.createOrgDatabase(org.id);
   const { ensureOrgSchema } = await import('../../src/graph/org-schema.js');
   await ensureOrgSchema(graph as never, org.id);

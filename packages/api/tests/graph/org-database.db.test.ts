@@ -17,20 +17,13 @@
 // - `tx` is the neo4j-driver transaction (`tx.run(cypher, params)`).
 //
 // Setup: `pnpm setup:neo4j` runs first (idempotent), so the two accounts exist. Every
-// org here has a fresh random UUID; the databases are dropped at the end.
+// org here has a fresh random UUID, tracked before it is made; the databases are dropped at the end
+// with ThrowawayDatabases.dropAll (S1-014), which fails loudly.
 // Needs the running Neo4j Desktop DBMS (bolt://127.0.0.1:7687).
 import type { Driver, ManagedTransaction } from 'neo4j-driver';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  databaseStatuses,
-  dropDatabases,
-  graphTestEnv,
-  newOrgId,
-  refused,
-  runOn,
-  runSetupNeo4j,
-  superDriver,
-} from './helpers.js';
+import { databaseStatuses, graphTestEnv, newOrgId, refused, runOn, runSetupNeo4j, superDriver } from './helpers.js';
+import { ThrowawayDatabases } from './throwaway-databases.js';
 
 const LONG = 120_000;
 
@@ -39,7 +32,7 @@ type GraphServiceInstance = InstanceType<GraphServiceCtor>;
 
 let sup: Driver;
 const services: GraphServiceInstance[] = [];
-const createdDatabases = new Set<string>();
+let databases: ThrowawayDatabases;
 
 async function makeService(
   overrides: Partial<{ adminPassword: string; writerPassword: string }> = {},
@@ -58,7 +51,7 @@ async function makeService(
 
 function trackOrg(): string {
   const id = newOrgId();
-  createdDatabases.add(`org-${id}`);
+  databases.track(`org-${id}`);
   return id;
 }
 
@@ -70,15 +63,19 @@ async function markerCount(database: string, marker: string): Promise<number> {
 beforeAll(async () => {
   graphTestEnv();
   sup = superDriver();
+  databases = new ThrowawayDatabases(sup);
   await runOn(sup, 'system', 'SHOW DATABASES YIELD name RETURN count(*) AS n');
   const setup = await runSetupNeo4j();
   if (setup.status !== 0) throw new Error(`pnpm setup:neo4j failed (${setup.status}): ${setup.stderr}`);
 }, LONG);
 
 afterAll(async () => {
-  for (const svc of services) await svc.close().catch(() => undefined);
-  if (sup) await dropDatabases(sup, createdDatabases).catch(() => undefined);
-  await sup?.close();
+  try {
+    for (const svc of services) await svc.close().catch(() => undefined);
+    if (databases) await databases.dropAll();
+  } finally {
+    await sup?.close();
+  }
 }, LONG);
 
 describe('createOrgDatabase (criterion 2)', () => {

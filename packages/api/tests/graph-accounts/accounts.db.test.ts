@@ -25,7 +25,7 @@ import {
   ACCOUNTS,
   LONG,
   createFixtureOrg,
-  dropDatabases,
+  ThrowawayDatabases,
   loadQueryAccountName,
   newGraph,
   requireReadAs,
@@ -38,6 +38,7 @@ import {
 } from './helpers.js';
 
 let sup: Driver;
+let databases: ThrowawayDatabases;
 let graph: QueryGraph | undefined;
 let org: FixtureOrg;
 let firstRun: { status: number | null; stdout: string; stderr: string };
@@ -85,8 +86,9 @@ const READING = /^GRANT (ACCESS|TRAVERSE|READ|MATCH|SHOW (INDEX|CONSTRAINT)|EXEC
 
 beforeAll(async () => {
   sup = superDriver();
+  databases = new ThrowawayDatabases(sup);
   firstRun = runSetupNeo4j();
-  org = await createFixtureOrg(sup);
+  org = await createFixtureOrg(sup, databases);
   try {
     graph = newGraph();
   } catch {
@@ -95,9 +97,12 @@ beforeAll(async () => {
 }, LONG);
 
 afterAll(async () => {
-  await graph?.close();
-  if (sup && org) await dropDatabases(sup, [org.database]).catch(() => undefined);
-  await sup?.close();
+  try {
+    await graph?.close();
+    if (databases) await databases.dropAll();
+  } finally {
+    await sup?.close();
+  }
 }, LONG);
 
 describe('queryAccountName', () => {

@@ -43,7 +43,8 @@ import { randomUUID } from 'node:crypto';
 import type { Driver, ManagedTransaction } from 'neo4j-driver';
 import type { Logger } from 'pino';
 import { closeDb, rows } from '../db/helpers.js';
-import { dropDatabases, graphTestEnv, runOn, runSetupNeo4j, superDriver } from '../graph/helpers.js';
+import { graphTestEnv, runOn, runSetupNeo4j, superDriver } from '../graph/helpers.js';
+import { ThrowawayDatabases } from '../graph/throwaway-databases.js';
 import {
   column,
   newOrg,
@@ -137,7 +138,7 @@ export interface OutboxEnv {
   audit: AuditEnv;
   graph: GraphLike;
   sup: Driver;
-  databases: Set<string>;
+  databases: ThrowawayDatabases;
   relays: RelayLike[];
   extraDbs: unknown[];
 }
@@ -162,11 +163,12 @@ export async function setUpOutbox(): Promise<OutboxEnv> {
     setUpNeo4jDone = true;
   }
   const audit = await setUpAudit();
+  const sup = superDriver();
   return {
     audit,
     graph: await newGraphService(),
-    sup: superDriver(),
-    databases: new Set(),
+    sup,
+    databases: new ThrowawayDatabases(sup),
     relays: [],
     extraDbs: [],
   };
@@ -174,18 +176,21 @@ export async function setUpOutbox(): Promise<OutboxEnv> {
 
 export async function tearDownOutbox(env: OutboxEnv | undefined): Promise<void> {
   if (!env) return;
-  for (const r of env.relays) await r.stop().catch(() => undefined);
-  for (const db of env.extraDbs) await closeDb(db);
-  await dropDatabases(env.sup, env.databases).catch(() => undefined);
-  await env.graph.close().catch(() => undefined);
-  await env.sup.close();
-  await tearDownAudit(env.audit);
+  try {
+    for (const r of env.relays) await r.stop().catch(() => undefined);
+    for (const db of env.extraDbs) await closeDb(db);
+    await env.databases.dropAll();
+  } finally {
+    await env.graph.close().catch(() => undefined);
+    await env.sup.close();
+    await tearDownAudit(env.audit);
+  }
 }
 
 /** An org with its Postgres row, its audit partition and its Neo4j database `org-<id>`. */
 export async function newOutboxOrg(env: OutboxEnv, name: string): Promise<SeededOrg> {
   const org = await newOrg(env.audit, name);
-  env.databases.add(`org-${org.id}`);
+  env.databases.track(`org-${org.id}`);
   await env.graph.createOrgDatabase(org.id);
   return org;
 }

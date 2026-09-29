@@ -31,7 +31,6 @@ import {
   ROOT,
   databaseExists,
   driverAs,
-  dropDatabases,
   graphTestEnv,
   newOrgId,
   refused,
@@ -39,6 +38,7 @@ import {
   runSetupNeo4j,
   superDriver,
 } from './helpers.js';
+import { ThrowawayDatabases } from './throwaway-databases.js';
 
 const LONG = 120_000;
 
@@ -67,7 +67,7 @@ let admin: Driver;
 let writer: Driver;
 let firstRun: { status: number | null; stdout: string; stderr: string };
 
-const createdDatabases = new Set<string>();
+let databases: ThrowawayDatabases;
 const probeUser = `grc_probe_${Math.random().toString(36).slice(2, 10)}`;
 const probeRole = `grc_probe_role_${Math.random().toString(36).slice(2, 10)}`;
 
@@ -101,6 +101,7 @@ async function snapshot(): Promise<Snapshot> {
 beforeAll(async () => {
   const env = graphTestEnv();
   sup = superDriver();
+  databases = new ThrowawayDatabases(sup);
   await runOn(sup, 'system', 'SHOW DATABASES YIELD name RETURN count(*) AS n');
 
   firstRun = await runSetupNeo4j();
@@ -108,27 +109,30 @@ beforeAll(async () => {
   admin = driverAs('grc_admin', env.adminPassword);
   writer = driverAs('grc_writer', env.writerPassword);
 
-  createdDatabases.add(orgDb);
+  databases.track(orgDb);
   await runOn(sup, 'system', `CREATE DATABASE \`${orgDb}\` IF NOT EXISTS WAIT`);
   await runOn(sup, orgDb, 'CREATE (:GrcTestProbe {owner: "desktop"})');
 }, LONG);
 
 afterAll(async () => {
-  if (sup) {
-    // Undo anything a wrongly-allowed command managed to do.
-    await runOn(sup, 'system', `DROP USER \`${probeUser}\` IF EXISTS`).catch(() => undefined);
-    await runOn(sup, 'system', `DROP ROLE \`${probeRole}\` IF EXISTS`).catch(() => undefined);
-    for (const u of ACCOUNTS) {
-      await runOn(sup, 'system', `ALTER USER \`${u}\` IF EXISTS SET STATUS ACTIVE`).catch(() => undefined);
-      await runOn(sup, 'system', `REVOKE ROLE admin FROM \`${u}\``).catch(() => undefined);
+  try {
+    if (sup) {
+      // Undo anything a wrongly-allowed command managed to do.
+      await runOn(sup, 'system', `DROP USER \`${probeUser}\` IF EXISTS`).catch(() => undefined);
+      await runOn(sup, 'system', `DROP ROLE \`${probeRole}\` IF EXISTS`).catch(() => undefined);
+      for (const u of ACCOUNTS) {
+        await runOn(sup, 'system', `ALTER USER \`${u}\` IF EXISTS SET STATUS ACTIVE`).catch(() => undefined);
+        await runOn(sup, 'system', `REVOKE ROLE admin FROM \`${u}\``).catch(() => undefined);
+      }
+      await runOn(sup, 'system', 'REVOKE GRANT ALL GRAPH PRIVILEGES ON GRAPH * FROM PUBLIC').catch(() => undefined);
+      await runOn(sup, 'neo4j', 'MATCH (n:GrcTestProbe) DETACH DELETE n').catch(() => undefined);
+      await databases.dropAll();
     }
-    await runOn(sup, 'system', 'REVOKE GRANT ALL GRAPH PRIVILEGES ON GRAPH * FROM PUBLIC').catch(() => undefined);
-    await runOn(sup, 'neo4j', 'MATCH (n:GrcTestProbe) DETACH DELETE n').catch(() => undefined);
-    await dropDatabases(sup, createdDatabases).catch(() => undefined);
+  } finally {
+    await admin?.close();
+    await writer?.close();
+    await sup?.close();
   }
-  await admin?.close();
-  await writer?.close();
-  await sup?.close();
 }, LONG);
 
 describe('pnpm setup:neo4j (criterion 1)', () => {
@@ -194,7 +198,7 @@ describe('grc_admin may create databases and nothing else (criterion 1, D57)', (
     'can create an org database',
     async () => {
       const name = `org-${newOrgId()}`;
-      createdDatabases.add(name);
+      databases.track(name);
       await runOn(admin, 'system', `CREATE DATABASE \`${name}\` WAIT`);
       expect(await databaseExists(sup, name)).toBe(true);
     },
@@ -381,7 +385,7 @@ describe('grc_writer reads and writes org databases, never neo4j or system (crit
     'cannot run CREATE DATABASE',
     async () => {
       const name = `org-${newOrgId()}`;
-      createdDatabases.add(name);
+      databases.track(name);
       await refused(runOn(writer, 'system', `CREATE DATABASE \`${name}\``));
       expect(await databaseExists(sup, name)).toBe(false);
     },

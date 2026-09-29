@@ -40,7 +40,8 @@ import type { Logger } from 'pino';
 import { expect } from 'vitest';
 import { ROLES, LABELS, type Label, type RecordKind, type Role } from '@grc/shared';
 import { closeDb } from '../db/helpers.js';
-import { dropDatabases, runOn, superDriver } from '../graph/helpers.js';
+import { runOn, superDriver } from '../graph/helpers.js';
+import { ThrowawayDatabases } from '../graph/throwaway-databases.js';
 import { addMember, addUser } from '../org-wall/helpers.js';
 import { appTestEnv } from '../platform/helpers.js';
 import {
@@ -177,7 +178,7 @@ export interface RecEnv {
   graph: GraphLike;
   outbox: OutboxLike;
   sup: Driver;
-  databases: Set<string>;
+  databases: ThrowawayDatabases;
   log: LogCapture;
   logger: Logger;
 }
@@ -190,12 +191,13 @@ export async function setUpRecords(): Promise<RecEnv> {
     const { AuditOutbox } = await import('../../src/audit/outbox.js');
     const graph = graphFromEnv(appTestEnv()) as unknown as GraphLike;
     const log = new LogCapture();
+    const sup = superDriver();
     return {
       audit,
       graph,
       outbox: new AuditOutbox(graph as never) as unknown as OutboxLike,
-      sup: superDriver(),
-      databases: new Set(),
+      sup,
+      databases: new ThrowawayDatabases(sup),
       log,
       logger: await makeLogger(log),
     };
@@ -208,7 +210,7 @@ export async function setUpRecords(): Promise<RecEnv> {
 export async function tearDownRecords(env: RecEnv | undefined): Promise<void> {
   if (!env) return;
   try {
-    await dropDatabases(env.sup, env.databases).catch(() => undefined);
+    await env.databases.dropAll();
   } finally {
     await env.graph.close().catch(() => undefined);
     await env.sup.close().catch(() => undefined);
@@ -235,7 +237,7 @@ export async function newTestOrg(env: RecEnv, name: string, opts: { graph?: bool
   const controlOwner2 = await addUser(env.audit.wall, `${name} control owner two`);
   await addMember(env.audit.wall, org.id, controlOwner2, 'control_owner', 'restricted');
   if (opts.graph !== false) {
-    env.databases.add(`org-${org.id}`);
+    env.databases.track(`org-${org.id}`);
     await env.graph.createOrgDatabase(org.id);
     const { ensureOrgSchema } = await import('../../src/graph/org-schema.js');
     await ensureOrgSchema(env.graph as never, org.id);

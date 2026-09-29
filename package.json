@@ -19,6 +19,7 @@
     "test:env": "node packages/infra/scripts/test-env.ts",
     "org:create": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/create-org.ts",
     "graph:schema": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/graph-schema.ts",
+    "graph:leftovers": "node packages/infra/scripts/leftover-org-databases.ts",
     "seed:demo": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/seed-demo.ts",
     "gen:api-client": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/web/scripts/gen-api-client.ts"
   },

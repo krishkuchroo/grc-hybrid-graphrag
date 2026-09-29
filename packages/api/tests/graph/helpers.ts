@@ -9,8 +9,9 @@
 //   to check and clean up, the same way `pnpm setup:neo4j` uses it only to set up.
 // - NEO4J_ADMIN_PASSWORD and NEO4J_WRITER_PASSWORD come from `pnpm setup:secrets`.
 //
-// Throwaway data (D82): every org database a test makes is `org-<random uuid>` and is
-// dropped in afterAll. Nothing else is touched.
+// Throwaway data (D82): every org database a test makes is `org-<random uuid>`, tracked by
+// the one ThrowawayDatabases tracker (./throwaway-databases.ts, S1-014) before it is made, and
+// dropped in afterAll with `dropAll()`, which fails loudly. Nothing else is touched.
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -129,12 +130,6 @@ export async function databaseStatuses(driver: Driver, name: string): Promise<st
 
 export async function databaseExists(driver: Driver, name: string): Promise<boolean> {
   return (await databaseStatuses(driver, name)).length > 0;
-}
-
-export async function dropDatabases(driver: Driver, names: Iterable<string>): Promise<void> {
-  for (const name of names) {
-    await runOn(driver, 'system', `DROP DATABASE \`${name}\` IF EXISTS WAIT`);
-  }
 }
 
 /** Runs the root `pnpm setup:neo4j` from the repo root. */

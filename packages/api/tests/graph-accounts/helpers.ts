@@ -13,7 +13,8 @@
 //   session *as* a query account (Neo4j Enterprise impersonation): privileges are then those
 //   of the query account, so the database's own rules are tested without their passwords.
 //
-// Throwaway data (D82): two org databases `org-<random uuid>`, dropped in afterAll.
+// Throwaway data (D82): two org databases `org-<random uuid>`, tracked by a ThrowawayDatabases
+// before they are made (S1-014) and dropped in afterAll with `dropAll()`.
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -21,11 +22,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import neo4j, { type Driver, type ManagedTransaction } from 'neo4j-driver';
 import { LABELS, ROLES, ROLE_TABLE, type Label, type Role } from '@grc/shared';
-import { ROOT, dropDatabases, refused, runOn, superDriver } from '../graph/helpers.js';
+import { ROOT, refused, runOn, superDriver } from '../graph/helpers.js';
+import { ThrowawayDatabases } from '../graph/throwaway-databases.js';
 import { graphFromEnv } from '../../src/graph/graph.module.js';
 import { appTestEnv } from '../platform/helpers.js';
 
-export { ROOT, dropDatabases, refused, runOn, superDriver };
+export { ROOT, ThrowawayDatabases, refused, runOn, superDriver };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const API_DIR = join(HERE, '..', '..');
@@ -192,9 +194,10 @@ export function fixtureNodeId(orgId: string, type: NodeType, label: Label): stri
  * link between every ordered pair of them, and AuditOutbox entries (one per label, one without
  * a label) each linked to a public Asset.
  */
-export async function createFixtureOrg(sup: Driver): Promise<FixtureOrg> {
+export async function createFixtureOrg(sup: Driver, databases: ThrowawayDatabases): Promise<FixtureOrg> {
   const orgId = randomUUID();
   const database = `org-${orgId}`;
+  databases.track(database);
   await runOn(sup, 'system', `CREATE DATABASE \`${database}\` IF NOT EXISTS WAIT`);
   const nodes: FixtureNode[] = NODE_TYPE_NAMES.flatMap((type) =>
     LABELS.map((label) => ({ id: fixtureNodeId(orgId, type, label), type, label })),

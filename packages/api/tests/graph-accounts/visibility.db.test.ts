@@ -29,7 +29,7 @@ import {
   ACCOUNTS,
   LONG,
   createFixtureOrg,
-  dropDatabases,
+  ThrowawayDatabases,
   expectedNodes,
   expectedRels,
   fixtureNodeId,
@@ -49,15 +49,17 @@ import {
 } from './helpers.js';
 
 let sup: Driver;
+let databases: ThrowawayDatabases;
 let graph: QueryGraph | undefined;
 let orgA: FixtureOrg;
 let orgB: FixtureOrg;
 
 beforeAll(async () => {
   sup = superDriver();
+  databases = new ThrowawayDatabases(sup);
   runSetupNeo4j();
-  orgA = await createFixtureOrg(sup);
-  orgB = await createFixtureOrg(sup);
+  orgA = await createFixtureOrg(sup, databases);
+  orgB = await createFixtureOrg(sup, databases);
   try {
     graph = newGraph();
   } catch {
@@ -66,13 +68,12 @@ beforeAll(async () => {
 }, LONG);
 
 afterAll(async () => {
-  await graph?.close();
-  if (sup)
-    await dropDatabases(
-      sup,
-      [orgA, orgB].filter(Boolean).map((o) => o.database),
-    ).catch(() => undefined);
-  await sup?.close();
+  try {
+    await graph?.close();
+    if (databases) await databases.dropAll();
+  } finally {
+    await sup?.close();
+  }
 }, LONG);
 
 describe('fixtures', () => {
