@@ -10,7 +10,6 @@ import {
   addButton,
   ADMIN,
   C,
-  findGroup,
   flush,
   LinksApi,
   numbersIn,
@@ -18,7 +17,6 @@ import {
   openRecord,
   pickLinkType,
   pickRecord,
-  queryGroup,
   R,
   resetApp,
   search,
@@ -47,8 +45,15 @@ async function refusal(): Promise<string> {
   return alert.textContent ?? '';
 }
 
+/**
+ * The group behind the open dialog still lists only the three linked controls. "Add link" is a
+ * modal dialog, so the page behind it is aria-hidden while it is open (correct behaviour: screen
+ * readers reach only the dialog). The group is therefore looked up with `hidden: true`.
+ */
 async function expectGroupUnchanged(): Promise<void> {
-  const group = queryGroup(/^controls that treat this risk$/i) ?? (await findGroup(/^controls that treat this risk$/i));
+  const group = await waitFor(() =>
+    screen.getByRole('region', { name: /^controls that treat this risk$/i, hidden: true }),
+  );
   expect(numbersIn(group).sort()).toEqual([C.mfa.number, C.review.number, C.vault.number].sort());
 }
 
