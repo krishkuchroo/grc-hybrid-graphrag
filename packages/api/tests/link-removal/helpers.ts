@@ -30,7 +30,6 @@ import { expect } from 'vitest';
 import { LINK_TYPES, type LinkType } from '@grc/shared';
 import { q } from '../auth/helpers.js';
 import { createKey, useKey, type NewKey } from '../api-keys/helpers.js';
-import { setting } from '../db/helpers.js';
 import { runOn, superDriver } from '../graph/helpers.js';
 import {
   LogCapture,
@@ -61,7 +60,6 @@ export interface RemovalEnv extends LinksEnv {
 export async function setUpRemoval(opts: { worker?: boolean } = {}): Promise<RemovalEnv> {
   const db = await platformDb();
   const logs = new LogCapture();
-  process.env.NEO4J_QUERY_SECRET ||= setting('NEO4J_QUERY_SECRET');
   let app;
   let worker: WorkerApp | undefined;
   try {

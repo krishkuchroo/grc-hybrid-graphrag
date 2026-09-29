@@ -29,18 +29,18 @@
 // dev switch at 127.0.0.1:8333). DATABASE_URL_MIGRATE and the superuser password are never put in
 // the environment the apps see.
 import 'reflect-metadata';
-import { randomBytes } from 'node:crypto';
 import { Body, Controller, Get, Module, Post, Query } from '@nestjs/common';
 import pg from 'pg';
 import { expect } from 'vitest';
+import { loadAppSettings, readDotEnv } from '../../src/config/app-settings.js';
 import {
+  API_DIR,
   appUrl,
   createThrowaway,
   dropThrowaway,
   load,
   migrateUrl,
   runMigrations,
-  setting,
   superUrl,
   type Loaded,
 } from '../db/helpers.js';
@@ -150,25 +150,15 @@ export async function testModule(): Promise<unknown> {
 
 // ---------- environment and throwaway database ----------
 
-function optional(name: string): string | undefined {
-  try {
-    return setting(name);
-  } catch {
-    return undefined;
-  }
+// S1-013 (D210 (4)): every setting the API and worker read comes from the one list,
+// `APP_SETTINGS` in src/config/app-settings.ts, filled from the overrides, the environment, the
+// nearest `.env` and the Mac defaults. A missing required setting fails loudly by name.
+export function appTestEnv(overrides?: Record<string, string>): Record<string, string> {
+  return loadAppSettings({ dotEnv: readDotEnv(API_DIR), overrides });
 }
 
 export function prepareEnv(database: string): void {
-  process.env.DATABASE_URL_APP = appUrl(database);
-  for (const name of ['NEO4J_ADMIN_PASSWORD', 'NEO4J_WRITER_PASSWORD', 'S3_ACCESS_KEY', 'S3_SECRET_KEY']) {
-    const value = optional(name);
-    if (value && !process.env[name]) process.env[name] = value;
-  }
-  // Better Auth (M0-010): its secret and address. The trusted origin is the front door (D60).
-  process.env.BETTER_AUTH_SECRET ||= optional('BETTER_AUTH_SECRET') || randomBytes(32).toString('base64url');
-  process.env.BETTER_AUTH_URL ||= 'https://grc.localhost';
-  process.env.NEO4J_URI ||= 'bolt://127.0.0.1:7687';
-  process.env.S3_ENDPOINT ||= 'http://127.0.0.1:8333';
+  Object.assign(process.env, appTestEnv({ DATABASE_URL_APP: appUrl(database) }));
   delete process.env.DATABASE_URL_MIGRATE;
 }
 
