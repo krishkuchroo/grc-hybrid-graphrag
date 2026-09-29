@@ -25,6 +25,17 @@ const ALREADY_EXISTS = 'Neo.ClientError.Database.ExistingDatabaseFound';
 const QUERY_POOL_SIZE = 5;
 const ONLINE_WAIT_MS = 120_000;
 
+/** A new org database that Neo4j did not bring online (D217). Names the database and its state only. */
+export class OrgDatabaseNotOnline extends Error {
+  constructor(
+    readonly database: string,
+    readonly state: string,
+  ) {
+    super(`Database ${database} did not start: ${state}`);
+    this.name = 'OrgDatabaseNotOnline';
+  }
+}
+
 function assertNoUse(query: unknown): void {
   const text = typeof query === 'string' ? query : (query as { text?: unknown } | null)?.text;
   assertNoDatabaseReference(text as string);
@@ -61,13 +72,19 @@ export class GraphService {
     this.querySecret = options.querySecret;
   }
 
-  /** Creates `org-<orgId>` and waits until it is online. Does nothing if it already exists. */
+  /**
+   * Creates `org-<orgId>` and checks it is online. Does nothing if it already exists. A database
+   * Neo4j failed to start rejects at once with OrgDatabaseNotOnline (D217); no retries (D171).
+   */
   async createOrgDatabase(orgId: string): Promise<void> {
     const name = orgDatabaseName(orgId);
     const session = this.admin.session({ database: 'system' });
     try {
       try {
-        await session.run('CREATE DATABASE $name IF NOT EXISTS WAIT', { name });
+        const res = await session.run('CREATE DATABASE $name IF NOT EXISTS WAIT', { name });
+        // The WAIT result has one row per server: address, state, message, success.
+        const failed = res.records.find((r) => r.has('success') && r.get('success') === false);
+        if (failed) throw new OrgDatabaseNotOnline(name, String(failed.has('state') ? failed.get('state') : 'failed'));
       } catch (err) {
         // Another caller created it between our check and our create.
         if ((err as { code?: string }).code !== ALREADY_EXISTS) throw err;
@@ -154,13 +171,17 @@ export class GraphService {
     return this.writer.session({ database: orgDatabaseName(orgId), defaultAccessMode: mode });
   }
 
+  /** Only `starting` is checked again; any other status than `online` fails at once (D217). */
   private async waitOnline(session: Session, name: string): Promise<void> {
     const deadline = Date.now() + ONLINE_WAIT_MS;
     for (;;) {
       const res = await session.run('SHOW DATABASE $name YIELD currentStatus', { name });
       const statuses = res.records.map((r) => String(r.get('currentStatus')));
-      if (statuses.length > 0 && statuses.every((s) => s === 'online')) return;
-      if (Date.now() > deadline) throw new Error(`Database ${name} did not come online in time`);
+      if (statuses.length === 0) throw new OrgDatabaseNotOnline(name, 'not listed');
+      const bad = statuses.find((s) => s !== 'online' && s !== 'starting');
+      if (bad !== undefined) throw new OrgDatabaseNotOnline(name, bad);
+      if (statuses.every((s) => s === 'online')) return;
+      if (Date.now() > deadline) throw new OrgDatabaseNotOnline(name, 'starting');
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
