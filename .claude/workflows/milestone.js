@@ -111,7 +111,6 @@ function limiter(n) {
 }
 const slot = limiter(MAX_AT_ONCE)
 const boardLock = limiter(1) // one planner edits TASKS.md at a time
-const mainLock = limiter(1) // the merge queue: one integrator at a time (D183)
 
 // Hot-file locks (D183): a task holds its hot files from the builder until it
 // is merged or blocked. Taken in sorted order, so two tasks can't wait on
@@ -134,8 +133,8 @@ async function holdHotFiles(files) {
 const brief = (id, lines) => [`Task: ${id}`, ...lines.filter(Boolean)].join('\n')
 
 // An agent's hand-off; a skipped or dead agent counts as blocked.
-async function handIn(id, agentType, lines, { label, phase: ph = 'Build', schema = handoffSchema(), isolation } = {}) {
-  const h = await slot(() => agent(brief(id, lines), { agentType, label: label ?? `${agentType}:${id}`, phase: ph, schema, isolation }))
+async function handIn(id, agentType, lines, { label, phase: ph = 'Build', schema = handoffSchema(), isolation, model, effort } = {}) {
+  const h = await slot(() => agent(brief(id, lines), { agentType, label: label ?? `${agentType}:${id}`, phase: ph, schema, isolation, model, effort }))
   return h ?? { taskId: id, status: 'blocked', findings: `${agentType} stopped without a hand-off` }
 }
 
@@ -154,7 +153,8 @@ function record(id, from, h, boardStatus) {
           boardStatus === 'blocked' ? `Blocked notes: ${h.findings}` : '',
           'Hand off with status "done".',
         ],
-        { label: `board:${id}` },
+        // One status on one row: a small model on low effort is enough (D215).
+        { label: `board:${id}`, model: 'haiku', effort: 'low' },
       ),
     ),
   )
@@ -177,6 +177,7 @@ if (step === 'plan') {
         others(m).length ? `Plan only ${M}. The other slices of this run (${others(m).join(', ')}) are planned separately; read their tasks on the board if they are there already.` : '',
         'Each task has one builder as its owner; the test writer, the reviewers and the integrator take part in every task.',
         'Keep waiting chains short so many tasks can run at once (D210): give each task only the `dependsOn` it truly needs, and where a feature has a backend part and a screen, make them separate tasks so the screen waits only on what it calls.',
+        'Every task costs five agent steps, so fold a very small change (one file, or a few lines) into the neighbouring task that needs it rather than giving it its own task (D215).',
         'Also return every task in `tasks`: its ID, its owner, and the IDs of the tasks it waits on (`dependsOn`, [] if none).',
         "List each task's hot files in `hotFiles` and in its brief: files many tasks touch, such as the API app module, the generated API client, the web router and menu, the role table, the security matrix, and `package.json`/`pnpm-lock.yaml` when it adds a package. Only one task at a time may change each (D183).",
         'Never fix a database migration number in a brief. Say "a new migration"; the integrator gives it the next number when it merges (D183).',
@@ -347,6 +348,9 @@ async function runTask(t) {
         `You work in a fresh worktree. Start with \`git switch --detach ${branch}\`. The base is \`main\`.`,
         sendBacks ? `This is review round ${sendBacks + 1}; it was sent back ${sendBacks} time(s) before.` : '',
         startAt === 'review' && sendBacks === 0 && resumeNotes[id],
+        who === 'code-reviewer'
+          ? "The finish check already ran lint, type checks and the task's tests on this commit (D97, D171); trust its result and rerun only the earlier tests you need for the agreement check (D174, D215)."
+          : "The finish check already ran lint, type checks and the task's tests on this commit (D97, D171); rerun only the isolation and access tests the change touches, plus the security-matrix test (D59, D175, D215).",
       ], { isolation: 'worktree' })
     const [code, security] = await Promise.all([review('code-reviewer'), review('security-reviewer')])
     for (const [who, h] of [['code-reviewer', code], ['security-reviewer', security]]) {
@@ -363,21 +367,78 @@ async function runTask(t) {
   }
 
   // The merge queue: merge, full suite, push; then the task's worktrees go
-  // and the branch stays (D118, D183).
-  const merged = await mainLock(() =>
-    handIn(id, 'integrator', [
-      `Merge \`${branch}\` into \`main\` in the main checkout (your steps).`,
-      "Another run may be merging too (D210). Before you touch `main`, take the merge lock: `mkdir .git/grc-merge.lock` (it fails while another integrator holds it; then wait a minute and try again, and treat a lock older than 2 hours as stale and remove it). Hold it until your push is done or you hand in blocked, then `rmdir .git/grc-merge.lock`. Merge the latest `main`, and push only after your checks pass.",
-      'If the branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only this task\'s own new migration (D183).',
-      group.length > 1 ? `Other slices (${group.map((m) => m.toUpperCase()).join(', ')}) are merging in this same queue, so \`main\` may have moved since the branch started: merge \`main\` in first and run the full suite on the result.` : '',
-      worktrees.length ? `After a successful push, remove this task's worktrees that still exist: ${worktrees.map((w) => `\`git worktree remove --force ${w}\``).join(', ')}. Keep the branch (D118).` : '',
-    ]),
-  )
+  // and the branch stays (D118, D183, D215).
+  const merged = await queueMerge({ id, branch, worktrees })
   if (merged.status !== 'done') return blocked('integrator', merged)
   record(id, 'integrator', merged, 'done')
   return { status: 'done', findings: merged.findings, worktrees }
   } finally {
     if (releaseHot) releaseHot()
+  }
+}
+
+// The merge queue (D183, D215). Approved tasks wait here. One integrator at a
+// time takes everything waiting: several tasks merge as one batch with one
+// full suite and one push; if the batch fails, they merge one at a time.
+const MERGE_LOCK = "Another run may be merging too (D210). Before you touch `main`, take the merge lock: `mkdir .git/grc-merge.lock` (it fails while another integrator holds it; then wait a minute and try again, and treat a lock older than 2 hours as stale and remove it). Hold it until your push is done or you hand in blocked, then `rmdir .git/grc-merge.lock`. Push only after your checks pass."
+const MIGRATIONS = 'If a branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only that task\'s own new migration (D183).'
+const cleanUp = (items) => {
+  const trees = items.flatMap((x) => x.worktrees)
+  return trees.length ? `After a successful push, remove these worktrees that still exist: ${trees.map((w) => `\`git worktree remove --force ${w}\``).join(', ')}. Keep the branches (D118).` : ''
+}
+const mergeOne = (x) =>
+  handIn(x.id, 'integrator', [
+    `Merge \`${x.branch}\` into \`main\` in the main checkout (your steps).`,
+    MERGE_LOCK,
+    'Merge the latest `main`.',
+    MIGRATIONS,
+    group.length > 1 ? `Other slices (${group.map((m) => m.toUpperCase()).join(', ')}) are merging in this same queue, so \`main\` may have moved since the branch started: merge \`main\` in first and run the full suite on the result.` : '',
+    cleanUp([x]),
+  ])
+function mergeBatch(items) {
+  const ids = items.map((x) => x.id)
+  const name = `batch/${ids.join('-')}`
+  return handIn(ids[0], 'integrator', [
+    `Batch merge (D215) of ${ids.join(', ')}: each has both approvals. Merge them together, run the checks once and push once.`,
+    MERGE_LOCK,
+    `1. Make a batch branch in its own worktree: \`git worktree add .claude/worktrees/${name.replace('/', '-')} -b ${name} main\` (after taking the lock, from the latest \`main\`).`,
+    `2. There, merge each branch in this order with \`--no-ff\`, resolving conflicts as usual: ${items.map((x) => `\`${x.branch}\``).join(', ')}.`,
+    MIGRATIONS,
+    '3. There, run lint, type checks and the full suite once, and the browser tests if any of these tasks touched the web app, the API or Caddy (D172).',
+    `4. If everything passes: in the main checkout, \`git merge --ff-only ${name}\` on \`main\`, push once, and hand in "done" listing every task ID in findings.`,
+    '5. If anything fails: push nothing and leave `main` as it was (never reset it). Hand in "blocked" with the failing output and, if you can tell, which task broke it; the tasks then merge one at a time.',
+    `Remove the batch worktree when you're done. ${cleanUp(items)}`,
+  ], { label: `integrator:${ids.join('+')}` })
+}
+const waitingToMerge = []
+let merging = false
+function queueMerge(item) {
+  return new Promise((done) => {
+    waitingToMerge.push({ ...item, done })
+    pumpMerges()
+  })
+}
+async function pumpMerges() {
+  if (merging || !waitingToMerge.length) return
+  merging = true
+  const batch = waitingToMerge.splice(0)
+  try {
+    let hands = null
+    if (batch.length > 1) {
+      const h = await mergeBatch(batch)
+      if (h.status === 'done') hands = batch.map(() => h)
+      else log(`batch merge of ${batch.map((x) => x.id).join(', ')} failed; merging one at a time`)
+    }
+    if (!hands) {
+      hands = []
+      for (const x of batch) hands.push(await mergeOne(x))
+    }
+    batch.forEach((x, k) => x.done(hands[k]))
+  } catch (err) {
+    batch.forEach((x) => x.done({ taskId: x.id, status: 'blocked', findings: `the merge queue failed: ${err}` }))
+  } finally {
+    merging = false
+    pumpMerges()
   }
 }
 
