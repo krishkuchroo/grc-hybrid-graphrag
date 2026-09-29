@@ -1,6 +1,8 @@
 // M0-014 criterion 4 (D114): `pnpm seed:demo` creates two orgs, each with one user per role, at
 // mixed clearances, with a printed login list. The password comes from DEMO_USER_PASSWORD
 // (the environment or `.env`), never from the code, and is never printed.
+// S1-010 (D176): the run sets DEMO_ORG_SLUG_SUFFIX, so the orgs it makes (and the clean-up drops)
+// are never the live demo orgs, whose IDs come from the slugs `demo-acme` and `demo-globex`.
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -23,6 +25,7 @@ import {
 
 const T = 300_000;
 const PASSWORD = `demo-${randomBytes(18).toString('base64url')}`;
+const SUFFIX = `t${randomBytes(4).toString('hex')}`;
 
 let env: ProvEnv;
 
@@ -35,7 +38,7 @@ afterAll(async () => {
 }, T);
 
 function seed(password: string): Promise<RunResult> {
-  return runRoot('seed:demo', [], scriptEnv(env, { DEMO_USER_PASSWORD: password }));
+  return runRoot('seed:demo', [], scriptEnv(env, { DEMO_USER_PASSWORD: password, DEMO_ORG_SLUG_SUFFIX: SUFFIX }));
 }
 
 function output(r: RunResult): string {
