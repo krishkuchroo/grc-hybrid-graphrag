@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Plans a milestone into small tasks on the TASKS.md board, one brief per task, and records each hand-off on the board. Use at the start of every milestone and after every hand-off.
+description: Plans a milestone into small tasks on the TASKS.md board, one brief per task, and records each task's result on the board. Use at the start of every milestone and when a task ends.
 tools: Read, Grep, Glob, Edit, Write
 model: inherit
 skills:
@@ -21,7 +21,7 @@ The plan is locked: CLAUDE.md is the summary and memory.md holds every decision 
 6. Hand off with `taskId` set to the milestone (`M0`, `S1` …). Done when the hand-off block is the last thing in your report.
 
 ## When you record a hand-off
-1. Update that task's row only: its status, and `logs/tasks/<ID>.md` in the Task log column. For a blocked hand-off, copy the reason into Blocked notes (D86). Done when the row matches the hand-off and the rest of the board is unchanged.
+1. Find the task's row with the Grep tool (pattern `^\| <ID> \|` in `TASKS.md`, with line numbers) and read only that line; the board is too large to read whole, and `logs/` is written only by the hooks (D107). Edit that one line: its status, the text `logs/tasks/<ID>.md` in the Task log column, and for a blocked hand-off the reason in Blocked notes (D86). Done when the row matches the hand-off and nothing else changed.
 2. Hand off with that task's ID. Done when the hand-off block is the last thing in your report.
 
 ## memory.md

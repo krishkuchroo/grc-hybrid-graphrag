@@ -82,6 +82,37 @@ export function milestonesOf(tasks, order = []) {
   return [...rows.values()].sort((a, b) => rank(a.id) - rank(b.id));
 }
 
+// One row per task with agent work in the last `hours` (D219): the stage the
+// task is at (its latest agent's role), minutes since its first agent started,
+// and how that agent stands. Board updates (the planner) aren't a stage.
+const STAGES = [['builder-', 'building'], ['test-writer', 'testing'], ['code-reviewer', 'review'], ['security-reviewer', 'review'], ['integrator', 'merging']];
+const stageOf = (type) => STAGES.find(([prefix]) => String(type).startsWith(prefix))?.[1] ?? null;
+const RESULT_ORDER = { working: 0, quiet: 1, blocked: 2, waiting: 3, merged: 4 };
+
+export function tasksNow(agents, t = Date.now(), hours = 12) {
+  const rows = new Map();
+  for (const a of agents) {
+    if (!/^[A-Z]+\d*-\d{3}$/.test(String(a.taskId ?? '')) || !stageOf(a.type)) continue;
+    if (t - Date.parse(a.lastTs) > hours * 3_600_000) continue;
+    const row = rows.get(a.taskId) ?? { taskId: a.taskId, firstStart: a.startedAt, latest: a };
+    if (a.startedAt < row.firstStart) row.firstStart = a.startedAt;
+    if (a.startedAt > row.latest.startedAt) row.latest = a;
+    rows.set(a.taskId, row);
+  }
+  return [...rows.values()]
+    .map(({ taskId, firstStart, latest: a }) => {
+      const finished = a.status === 'finished';
+      const result = a.finish?.blocked
+        ? 'blocked'
+        : !finished
+          ? a.status === 'quiet' ? 'quiet' : 'working'
+          : stageOf(a.type) === 'merging' && a.finish?.cleared ? 'merged' : 'waiting';
+      const end = finished ? Date.parse(a.stoppedAt ?? a.lastTs) : t;
+      return { taskId, stage: stageOf(a.type), agent: a.type, minutes: Math.max(0, Math.round((end - Date.parse(firstStart)) / 60_000)), result, lastTs: a.lastTs };
+    })
+    .sort((x, y) => RESULT_ORDER[x.result] - RESULT_ORDER[y.result] || y.lastTs.localeCompare(x.lastTs));
+}
+
 // The bullets under `heading` that start with a bold ID ("- **Q33:** …").
 // Continuation lines indented under a bullet belong to it.
 export function parseOpenQuestions(text, heading) {

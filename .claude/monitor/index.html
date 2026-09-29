@@ -288,6 +288,10 @@ dialog pre { margin: 0; padding: 16px; white-space: pre-wrap; overflow-wrap: any
   <!-- ============================================================ overview -->
   <div class="panel" id="tab-overview" role="tabpanel" data-panel="overview">
     <ul class="attention" id="problems" hidden></ul>
+    <section aria-labelledby="tasks-now-h">
+      <div class="section-head"><h2 id="tasks-now-h">Tasks now <span class="muted" id="tasks-now-count"></span></h2><p class="hint">One row per task worked on in the last 12 h: its stage, time so far, and how it stands.</p></div>
+      <div class="table-wrap" id="tasks-now"></div>
+    </section>
     <section aria-labelledby="attention-h">
       <h2 id="attention-h">Needs attention</h2>
       <ul class="attention" id="attention"></ul>
@@ -598,6 +602,26 @@ function segmentBar(parts, whole, label) {
     bar.append(segment);
   }
   return bar;
+}
+const RESULT_PILLS = { working: 'pill-in-progress', quiet: '', blocked: 'pill-blocked', waiting: '', merged: 'pill-done' };
+const RESULT_WORDS = { working: 'working', quiet: 'quiet', blocked: 'blocked', waiting: 'waiting for the next step', merged: 'merged' };
+const minutes = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`);
+function renderTasksNow(rows) {
+  const working = rows.filter((r) => r.result === 'working').length;
+  $('tasks-now-count').textContent = rows.length ? `${working} working · ${rows.length} in all` : '';
+  if (!rows.length) {
+    $('tasks-now').replaceChildren(h('p', { class: 'empty-state', text: 'No task has had agent work in the last 12 hours.' }));
+    return;
+  }
+  $('tasks-now').replaceChildren(h('table', {},
+    h('thead', {}, h('tr', {}, ...['Task', 'Stage', 'Agent', 'Time', 'Result', 'Last step'].map((c) => h('th', { text: c })))),
+    h('tbody', {}, ...rows.map((r) => h('tr', {},
+      h('td', { class: 'mono', text: r.taskId }),
+      h('td', { text: r.stage }),
+      h('td', { class: 'muted', text: r.agent }),
+      h('td', { class: 'num', text: minutes(r.minutes) }),
+      h('td', {}, h('span', { class: `pill ${RESULT_PILLS[r.result]}`.trim(), text: RESULT_WORDS[r.result] })),
+      h('td', { class: 'muted', text: ago(r.lastTs) }))))));
 }
 function renderMilestones(milestones) {
   if (!milestones.length) {
@@ -1087,6 +1111,7 @@ function applyState(s) {
   setBadge('badge-overview', s.attention.filter((a) => a.kind !== 'quiet').length + unanswered);
   renderIfChanged('attention', s.attention, renderAttention);
   renderIfChanged('questions', s.questions, renderQuestions);
+  renderIfChanged('tasks-now', s.tasksNow, renderTasksNow);
   renderIfChanged('milestones', s.milestones, renderMilestones);
   renderAgents(s.agents);
   renderIfChanged('launches', s.launches, renderLaunches);

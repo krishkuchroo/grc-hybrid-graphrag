@@ -4,7 +4,7 @@ import { appendFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { milestonesOf, parseBoard, parseOpenQuestions } from '../lib/board.mjs';
+import { milestonesOf, parseBoard, parseOpenQuestions, tasksNow } from '../lib/board.mjs';
 import { DEFAULT_CONFIG, follow, loadConfig, redact } from '../lib/core.mjs';
 import { checkContainers, checkHttp, checkPort } from '../lib/health.mjs';
 import { createTokenStore, identify, totalOf } from '../lib/tokens.mjs';
@@ -123,4 +123,26 @@ test('health: container rows by prefix, ports, and only local addresses', async 
 
 test('logs stay where the config says', () => {
   assert.ok(LOGS.startsWith(ROOT));
+});
+
+test('tasks now: one row per task, at its latest stage, with its time and result (D219)', () => {
+  const t = Date.parse('2026-09-29T12:00:00Z');
+  const at = (min) => new Date(t - min * 60_000).toISOString();
+  const agent = (taskId, type, start, extra = {}) => ({ taskId, type, startedAt: at(start), lastTs: at(extra.last ?? 0), status: 'running', finish: null, ...extra });
+  const rows = tasksNow([
+    agent('S2-001', 'builder-backend', 50, { status: 'finished', stoppedAt: at(30), last: 30, finish: { cleared: true } }),
+    agent('S2-001', 'test-writer', 29),
+    agent('S2-001', 'planner', 1), // a board update is not a stage
+    agent('S2-002', 'integrator', 20, { status: 'finished', stoppedAt: at(5), last: 5, finish: { cleared: true } }),
+    agent('S2-003', 'builder-data', 15, { status: 'finished', stoppedAt: at(10), last: 10, finish: { blocked: true, cleared: true } }),
+    agent('S2-004', 'code-reviewer', 9, { status: 'finished', stoppedAt: at(8), last: 8, finish: { cleared: true } }),
+    agent('S2-005', 'builder-backend', 2000, { status: 'finished', stoppedAt: at(1900), last: 1900 }), // older than 12 h
+    agent('S2', 'integrator', 3), // a tag step, not a task
+  ], t);
+  assert.deepEqual(rows.map((r) => [r.taskId, r.stage, r.minutes, r.result]), [
+    ['S2-001', 'testing', 50, 'working'],
+    ['S2-003', 'building', 5, 'blocked'],
+    ['S2-004', 'review', 1, 'waiting'],
+    ['S2-002', 'merging', 15, 'merged'],
+  ]);
 });

@@ -2,10 +2,10 @@ export const meta = {
   name: 'milestone',
   description: 'Run one GRC milestone, or a parallel group of slices: plan it, build its tasks through the agent chain, or tag it',
   whenToUse:
-    'Start with the milestone ID (m0, s1 … s8), or a parallel group of slices (D181), e.g. ["s2", "s3", "s7"]. Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81, D182). Args: "s1", or { milestone: "s1" | ["s2", "s3", "s7"], step: "build", notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "review" } }.',
+    'Start with the milestone ID (m0, s1 … s8), or a parallel group of slices (D181), e.g. ["s2", "s3", "s7"]. Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81, D182). Args: "s1", or { milestone: "s1" | ["s2", "s3", "s7"], step: "build", notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "test" | "review" }, only?: ["<task ID>"] }.',
   phases: [
     { title: 'Plan', detail: 'the planner splits the milestone into tasks and briefs' },
-    { title: 'Build', detail: 'test writer → builder → reviewers → integrator, per task' },
+    { title: 'Build', detail: 'builder → test writer → reviewers → integrator, per task (D219)' },
     { title: 'Real Gemma', detail: 'the real-Gemma steps, one at a time (D113)' },
     { title: 'Tag', detail: 'the integrator tags the approved milestone' },
   ],
@@ -13,24 +13,30 @@ export const meta = {
 
 // One workflow per milestone, or per parallel group of slices (D109, D116,
 // D181–D183). The chain, the retry limits and the stops come from D78, D86,
-// D109–D118; CLAUDE.md ("Orchestration") has the summary.
+// D109–D118 and D219; CLAUDE.md ("Orchestration") has the summary.
 
 const MILESTONES = ['m0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8']
 const BUILDERS = ['builder-platform', 'builder-backend', 'builder-frontend', 'builder-data']
-const MAX_AT_ONCE = 8 // agents at once, shared by every slice in the run (D79, D110, D183)
-const MAX_ROUNDS = 3 // test-writer rounds, and reviewer send-backs (D78, D86)
+const MAX_AT_ONCE = 4 // agents at once, shared by every slice in the run (D183, D219)
+const MAX_ROUNDS = 3 // builder ↔ test-writer rounds, and reviewer send-backs (D78, D86)
+const STAGES = ['build', 'test', 'review']
+
+// Effort per agent (D219): xhigh where the work is judgement (building,
+// testing, security), high everywhere else.
+const EFFORT = { 'test-writer': 'xhigh', 'security-reviewer': 'xhigh', 'code-reviewer': 'high', integrator: 'high', planner: 'high' }
+const effortOf = (agentType) => (BUILDERS.includes(agentType) ? 'xhigh' : EFFORT[agentType] ?? 'high')
 
 const given = typeof args === 'string' || Array.isArray(args) ? { milestone: args } : args ?? {}
 // One milestone, or a parallel group of slices built in one run (D181, D183).
 const group = (Array.isArray(given.milestone) ? given.milestone : [given.milestone]).map((m) => String(m ?? '').trim().toLowerCase())
 const milestone = group.join('+')
 const step = given.step ?? 'plan'
-// Optional { "<task ID>": "note" }: the note goes into that task's first
-// test-writer brief only, and a task blocked on the board runs again.
+// Optional { "<task ID>": "note" }: the note goes to that task's first agent
+// only, and a task blocked on the board runs again.
 const resumeNotes = given.notes ?? {}
-// Optional { "<task ID>": "build" | "review" }: restart a task at that stage,
-// when its tests (and, for review, its code) are already on its branch. Its
-// note, if any, goes to the first agent of that stage.
+// Optional { "<task ID>": "build" | "test" | "review" }: restart a task at
+// that stage, when its code (for "test") or its code and tests (for
+// "review") are already on its branch.
 const startFrom = given.from ?? {}
 // Optional ["<task ID>", ...]: run only these tasks, so a second run can take
 // them beside a run already going (D210). The others are left alone; a task
@@ -90,6 +96,11 @@ const TASK = {
 }
 const TASKS = { type: 'array', items: TASK }
 const WORKTREE = { worktree: { type: 'string', description: 'the output of `pwd` in your worktree' } }
+// A reviewer's send-back, split by who fixes it (D219).
+const REVIEW_FIXES = {
+  builderFixes: { type: 'string', description: 'what the builder must change in the code; empty if nothing' },
+  testFixes: { type: 'string', description: 'what the test writer must change in the tests; empty if nothing' },
+}
 
 // Runs at most `n` jobs at once.
 function limiter(n) {
@@ -134,12 +145,13 @@ const brief = (id, lines) => [`Task: ${id}`, ...lines.filter(Boolean)].join('\n'
 
 // An agent's hand-off; a skipped or dead agent counts as blocked.
 async function handIn(id, agentType, lines, { label, phase: ph = 'Build', schema = handoffSchema(), isolation, model, effort } = {}) {
-  const h = await slot(() => agent(brief(id, lines), { agentType, label: label ?? `${agentType}:${id}`, phase: ph, schema, isolation, model, effort }))
+  const h = await slot(() => agent(brief(id, lines), { agentType, label: label ?? `${agentType}:${id}`, phase: ph, schema, isolation, model, effort: effort ?? effortOf(agentType) }))
   return h ?? { taskId: id, status: 'blocked', findings: `${agentType} stopped without a hand-off` }
 }
 
-// The planner records every hand-off on the board (D85). The task doesn't
-// wait for it; the workflow waits for all of them at the end.
+// The planner records each task's result on the board once, when the task
+// ends (D85, D219); the monitor shows the stages as they happen. The task
+// doesn't wait for it; the workflow waits for all of them at the end.
 const boardUpdates = []
 function record(id, from, h, boardStatus) {
   boardUpdates.push(
@@ -148,13 +160,12 @@ function record(id, from, h, boardStatus) {
         id,
         'planner',
         [
-          'Record a hand-off on the board (your "When you record a hand-off" steps).',
+          "Record a task's result on the board (your \"When you record a hand-off\" steps).",
           `From: ${from}. Its status: ${h.status}. Set the task's board status to "${boardStatus}".`,
           boardStatus === 'blocked' ? `Blocked notes: ${h.findings}` : '',
           'Hand off with status "done".',
         ],
-        // One status on one row: a small model on low effort is enough (D215).
-        { label: `board:${id}`, model: 'haiku', effort: 'low' },
+        { label: `board:${id}` },
       ),
     ),
   )
@@ -176,6 +187,7 @@ if (step === 'plan') {
         ...PARALLEL_RULES,
         others(m).length ? `Plan only ${M}. The other slices of this run (${others(m).join(', ')}) are planned separately; read their tasks on the board if they are there already.` : '',
         'Each task has one builder as its owner; the test writer, the reviewers and the integrator take part in every task.',
+        'The builder goes first and the test writer tests the finished code (D219). So each brief describes the behaviour and the pass criteria, not the shape of the code, and its "Tests to write" names behaviours to check, not code internals.',
         'Keep waiting chains short so many tasks can run at once (D210): give each task only the `dependsOn` it truly needs, and where a feature has a backend part and a screen, make them separate tasks so the screen waits only on what it calls.',
         'Every task costs five agent steps, so fold a very small change (one file, or a few lines) into the neighbouring task that needs it rather than giving it its own task (D215).',
         'Also return every task in `tasks`: its ID, its owner, and the IDs of the tasks it waits on (`dependsOn`, [] if none).',
@@ -249,11 +261,17 @@ const loops = (id) => {
 }
 for (const t of tasks) if (loops(t.id)) problems.push(`the tasks around ${t.id} wait on each other in a loop`)
 if (only) for (const id of only) if (!byId.has(id)) problems.push(`\`only\` names ${id}, which isn't in ${MS}`)
+for (const [id, s] of Object.entries(startFrom)) {
+  if (!byId.has(id)) problems.push(`\`from\` names ${id}, which isn't in ${MS}`)
+  if (!STAGES.includes(s)) problems.push(`\`from\` for ${id} must be ${STAGES.join(', ')}; got "${s}"`)
+}
 if (problems.length) return { milestone, step, error: 'the task list needs fixing before the build', problems }
 
 const results = {}
 
-// One task through the chain. Returns { status, findings, worktrees }.
+// One task through the chain (D219): the builder writes the code, the test
+// writer tests the finished code, both reviewers check both, then the merge
+// queue. Returns { status, findings, worktrees }.
 async function runTask(t) {
   const id = t.id
   const branch = `task/${id}`
@@ -267,95 +285,114 @@ async function runTask(t) {
     return h
   }
 
-  // Test writer, then builder. A test the builder shows is wrong goes back to
-  // the test writer (D89), up to MAX_ROUNDS times.
-  let testNote = ''
-  let codeNote = ''
-  let reviewNote = ''
-  let rounds = 0
+  let stage = startFrom[id] ?? 'build'
+  let note = resumeNotes[id] ?? '' // for the task's first agent only
+  const firstNote = () => {
+    const n = note
+    note = ''
+    return n
+  }
+  let tested = stage === 'review' // the test writer has handed in
+  let testCommand = '' // the task's tests, from the test writer's hand-off
+  let codeNote = '' // tests that show the code is wrong: for the builder
+  let testNote = '' // a test the builder shows is wrong: for the test writer
+  let reviewNote = '' // the reviewers' fixes for the builder
+  let reviewTestNote = '' // the reviewers' fixes for the test writer
+  let testRounds = 0
   let sendBacks = 0
-  const startAt = startFrom[id]
-  let needTests = !startAt
-  let skipBuild = startAt === 'review'
   let releaseHot = null
   try {
+  // From the builder until the merge, this task alone changes its hot files (D183).
+  releaseHot = await holdHotFiles(t.hotFiles ?? [])
   while (true) {
-    if (needTests) {
-      rounds += 1
+    if (stage === 'build') {
+      const b = keep(
+        await handIn(
+          id,
+          t.owner,
+          [
+            `You work in a fresh worktree. Start with \`git switch ${branch}\` if the branch exists, otherwise \`git switch -c ${branch} main\` (D112, D118).`,
+            firstNote(),
+            codeNote && `The test writer's tests show the code is wrong. Fix the code, not the tests:\n${codeNote}`,
+            reviewNote && `The reviewers sent it back. Fix these:\n${reviewNote}`,
+            !codeNote && !reviewNote && 'Build the task from its brief. The test writer tests your finished code after you (D219).',
+            testCommand
+              ? `The task's tests: \`${testCommand}\`. Put that in \`tests.run\`; they must pass.`
+              : "In `tests.run`, name this task's tests if the branch already has them; otherwise the existing tests nearest your change (a package's `test:unit` if nothing is closer), to show nothing broke.",
+            tested && 'If a test looks wrong, hand off as "blocked", set `testProblem` to true, and say why in your findings. It goes back to the test writer.',
+            `Commit your code with a message starting "${id}:". Then run \`git switch --detach\`, so the next agent can take the branch.`,
+            'Put the output of `pwd` in `worktree`.',
+          ],
+          { schema: handoffSchema({ ...WORKTREE, testProblem: { type: 'boolean' } }), isolation: 'worktree' },
+        ),
+      )
+      codeNote = ''
+      reviewNote = ''
+      if (b.status === 'blocked' && b.testProblem && tested && testRounds < MAX_ROUNDS) {
+        testNote = b.findings
+        stage = 'test'
+        continue
+      }
+      if (b.status !== 'done') return blocked(t.owner, b)
+      stage = !tested || reviewTestNote ? 'test' : 'review'
+      continue
+    }
+
+    if (stage === 'test') {
+      testRounds += 1
       const tw = keep(
         await handIn(
           id,
           'test-writer',
           [
-            `You work in a fresh worktree. Start with \`git switch ${branch}\` if the branch exists, otherwise \`git switch -c ${branch} main\` (D112, D118).`,
-            rounds === 1 && resumeNotes[id],
+            `You work in a fresh worktree. Start with \`git switch ${branch}\`; the builder's code is committed there.`,
+            firstNote(),
+            !tested && "Write this task's tests now, after the code (D219): your \"Steps\".",
             testNote && `The builder says a test is wrong. Fix it if they're right, and say why in your findings either way:\n${testNote}`,
-            testNote && "If the builder's code is already on the branch, your corrected tests may pass at once: then hand in with `fixReason` saying why (D167). Never fake a red.",
-            testNote && "If your fixed tests are right but a finish check fails only in the builder's code, commit your tests, hand off as \"blocked\", set `codeProblem` to true, and say what the builder must change. It goes back to the builder.",
-            `Commit your tests with a message starting "${id}:". Then run \`git switch --detach\`, so the builder can take the branch.`,
+            reviewTestNote && `The reviewers want these test changes:\n${reviewTestNote}`,
+            'Hand in with `fixReason` "tests written after the code (D219)", or your reason for a change: the finish check then expects your tests to pass, and allows test-file changes only (D167).',
+            'If a test fails because the code is wrong, commit your tests, hand off as "blocked", set `codeProblem` to true, and name each failing test and what the code gets wrong. It goes to the builder.',
+            `Commit your tests with a message starting "${id}:". Then run \`git switch --detach\`.`,
             'Put the output of `pwd` in `worktree`.',
           ],
           { schema: handoffSchema({ ...WORKTREE, codeProblem: { type: 'boolean' } }), isolation: 'worktree' },
         ),
       )
-      needTests = false
-      // A check that fails only in the builder's code goes back to the builder.
-      if (tw.status === 'blocked' && tw.codeProblem && testNote && rounds < MAX_ROUNDS) {
-        record(id, 'test-writer', tw, 'in progress')
+      testNote = ''
+      reviewTestNote = ''
+      if (tw.tests?.run) testCommand = tw.tests.run
+      if (tw.status === 'blocked' && tw.codeProblem && testRounds < MAX_ROUNDS) {
+        tested = true
         codeNote = tw.findings
-        skipBuild = false
-      } else {
-        if (tw.status !== 'done') return blocked('test-writer', tw)
-        record(id, 'test-writer', tw, 'in progress')
+        stage = 'build'
+        continue
       }
-    }
-
-    // From the builder until the merge, this task alone changes its hot files (D183).
-    if (!releaseHot) releaseHot = await holdHotFiles(t.hotFiles ?? [])
-    if (skipBuild) {
-      skipBuild = false
-    } else {
-    const b = keep(
-      await handIn(
-        id,
-        t.owner,
-        [
-          `You work in a fresh worktree. Start with \`git switch ${branch}\`; the tests are committed there (D112).`,
-          startAt === 'build' && rounds === 0 && !reviewNote && resumeNotes[id],
-          reviewNote && `The reviewers sent it back. Fix these:\n${reviewNote}`,
-          codeNote && `The test writer fixed the tests, but a check fails in your code. Fix it:\n${codeNote}`,
-          `Commit your code with a message starting "${id}:". Then run \`git switch --detach\`, so the reviewers can take the branch.`,
-          'If a test looks wrong, hand off as "blocked", set `testProblem` to true, and say why in your findings. It goes back to the test writer.',
-          'Put the output of `pwd` in `worktree`.',
-        ],
-        { schema: handoffSchema({ ...WORKTREE, testProblem: { type: 'boolean' } }), isolation: 'worktree' },
-      ),
-    )
-    codeNote = ''
-    if (b.status === 'blocked' && b.testProblem && rounds < MAX_ROUNDS) {
-      record(id, t.owner, b, 'in progress')
-      testNote = b.findings
-      needTests = true
+      if (tw.status !== 'done') return blocked('test-writer', tw)
+      tested = true
+      stage = 'review'
       continue
-    }
-    if (b.status !== 'done') return blocked(t.owner, b)
-    record(id, t.owner, b, 'in review')
     }
 
     // Both reviewers look at the same commit, side by side.
+    const reviewNoteFirst = firstNote()
     const review = (who) =>
-      handIn(id, who, [
-        `You work in a fresh worktree. Start with \`git switch --detach ${branch}\`. The base is \`main\`.`,
-        sendBacks ? `This is review round ${sendBacks + 1}; it was sent back ${sendBacks} time(s) before.` : '',
-        startAt === 'review' && sendBacks === 0 && resumeNotes[id],
-        who === 'code-reviewer'
-          ? "The finish check already ran lint, type checks and the task's tests on this commit (D97, D171); trust its result and rerun only the earlier tests you need for the agreement check (D174, D215)."
-          : "The finish check already ran lint, type checks and the task's tests on this commit (D97, D171); rerun only the isolation and access tests the change touches, plus the security-matrix test (D59, D175, D215).",
-      ], { isolation: 'worktree' })
+      handIn(
+        id,
+        who,
+        [
+          `You work in a fresh worktree. Start with \`git switch --detach ${branch}\`. The base is \`main\`.`,
+          sendBacks ? `This is review round ${sendBacks + 1}; it was sent back ${sendBacks} time(s) before.` : '',
+          reviewNoteFirst,
+          who === 'code-reviewer'
+            ? "The finish checks already ran lint, type checks and the task's tests on this commit (D97); trust them and rerun only the earlier tests you need for the agreement check (D174, D215)."
+            : "The finish checks already ran lint, type checks and the task's tests on this commit (D97); rerun only the isolation and access tests the change touches, plus the security-matrix test (D59, D175, D215).",
+          'If you send it back, put what the builder must change in `builderFixes` and what the test writer must change in `testFixes` (D219).',
+        ],
+        { schema: handoffSchema(REVIEW_FIXES), isolation: 'worktree' },
+      )
     const [code, security] = await Promise.all([review('code-reviewer'), review('security-reviewer')])
     for (const [who, h] of [['code-reviewer', code], ['security-reviewer', security]]) {
       if (h.status === 'blocked') return blocked(who, h)
-      record(id, who, h, h.status === 'approved' ? 'in review' : 'in progress')
     }
     if (code.status === 'approved' && security.status === 'approved') break
 
@@ -363,7 +400,10 @@ async function runTask(t) {
     if (sendBacks >= MAX_ROUNDS) {
       return blocked('reviewers', { status: 'blocked', findings: `sent back ${sendBacks} times, so it goes to the user (D78)` })
     }
-    reviewNote = [code, security].filter((h) => h.status === 'sent-back').map((h) => h.findings).join('\n\n')
+    const back = [code, security].filter((h) => h.status === 'sent-back')
+    reviewNote = back.map((h) => h.builderFixes || (h.testFixes ? '' : h.findings)).filter(Boolean).join('\n\n')
+    reviewTestNote = back.map((h) => h.testFixes).filter(Boolean).join('\n\n')
+    stage = reviewNote ? 'build' : 'test'
   }
 
   // The merge queue: merge, full suite, push; then the task's worktrees go

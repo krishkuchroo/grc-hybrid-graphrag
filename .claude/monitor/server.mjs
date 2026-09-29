@@ -14,7 +14,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { readFileSync, watch } from 'node:fs';
 import { createServer } from 'node:http';
 import { join, relative } from 'node:path';
-import { readBoard, milestonesOf, readOpenQuestions } from './lib/board.mjs';
+import { readBoard, milestonesOf, readOpenQuestions, tasksNow } from './lib/board.mjs';
 import {
   CONFIG_FILE,
   LOGS_DIR,
@@ -235,6 +235,7 @@ function buildState() {
     problems: configProblems,
     settings: { agentColors: config.agentColors, guardRails: config.guardRails, maxConcurrent: config.launch.maxConcurrent },
     milestones: milestonesOf(tasks, config.milestones),
+    tasksNow: tasksNow(all, t),
     tasks,
     boardColumns: columns,
     agents: shown,

@@ -28,19 +28,14 @@ It's a portfolio project and research prototype. It **must look like a finished 
 8. **Orchestration layer.** A multi-agent setup that is configured from the finished plan. ✅ Decisions locked 2026-09-26 (D74–D107). ✅ Done 2026-09-27: 9 agents, the hooks, the monitor and the board, verified by smoke tests, with the review's findings fixed (D119).
 9. **Workflow generation.** Build workflows that support the orchestration layer and build out the solid project layer. Decided 2026-09-27 (D109–D121). The milestone workflow is written, and gets a real test after setup. ← *current phase*
 
-## Current state (saved 2026-09-28; resume from here)
-- **M0 is done, approved and tagged `m0`** (D193). The report is `docs/checkpoints/m0.md`. The D160 history rewrite is done: old task branches and worktrees carry the pre-rewrite history, so never merge them as they are.
-- **Overnight plan (D216, 2026-09-29):** S1 is 12 of 13 merged; S1-010 is building in run `wf_71b52935-918`. When it merges: the S1 checkpoint (rebuild the stack, full suite 3×, browser tests, `/insecure-defaults:audit`, `docs/checkpoints/s1.md`). If clean, start `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: ["s2","s3","s7"], step: "build"}})` without waiting; the `s1` tag waits for the user. S2/S3/S7 are planned (51 tasks, answers D212–D214); their briefs are being updated (run `wf_60cab563-e10`), then a planner folds tiny tasks (D215 E). Workflow speed-ups: D210, D215.
-- **Earlier: S1 build ran as `wf_2cf6c9f5-960` (D208: the writer builds the schema).** Before that: Run `wf_b6a20329-94d` ended: S1-001 merged (60d422c); S1-002 blocked because no Neo4j service account may create indexes and constraints (code at ab3fb27 on `task/S1-002`); every other S1 task waits on it. Options: (a) grant INDEX and CONSTRAINT MANAGEMENT on `DATABASE *` to grc_writer in `setup-neo4j.ts` (recommended: the running API already holds both passwords), (b) grant them to grc_admin, (c) a schema-only account. After the answer: record it, change `setup-neo4j.ts` through S1-002 (the user reruns `pnpm setup:neo4j` if the auto-mode check refuses it), then start a fresh run with `args: {milestone: "s1", step: "build", from: {"S1-002": "build"}, notes: {"S1-002": "<the decision>"}}`.
-- **S1 build, how it runs:** `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: "s1", step: "build"}})`.
-  - 12 tasks, S1-001 to S1-012, planned and approved (D196–D205). S1-001 and S1-002 start first. No real-Gemma steps.
-  - If the run dies: start a **fresh** build run with the same args (done tasks are skipped by the board). A task stuck mid-stage restarts with `from: {"S1-00x": "build" | "review"}` and a note in `notes`.
-  - Watch it with the main session's event watcher (scratchpad `wait-event.mjs` on the run's `journal.jsonl`), the monitor at http://127.0.0.1:4800, or `/workflows`.
-- **Then:** the S1 checkpoint (suite 3×, browser tests, `/insecure-defaults:audit`, an easy-to-read report, the user's approval, tag `s1`). Then **S2 + S3 + S7 in one run** (`milestone: ["s2","s3","s7"]`), then S4, then **S5 + S6**, then S8 (D181–D183).
-- **Workflow for parallel slices (D183):** `milestone.js` takes a list of slices; 8 agents shared; hot-file locks from build to merge; one integrator at a time; migration numbers given at merge; one tag per slice.
+## Current state (saved 2026-09-29; resume from here)
+- **M0 and S1 are done, approved and tagged** `m0` (D193) and `s1` (D218). Reports: `docs/checkpoints/m0.md`, `docs/checkpoints/s1.md`. The D160 history rewrite is done: old task branches and worktrees carry the pre-rewrite history, so never merge them as they are.
+- **S2 + S3 + S7 are paused** (53 tasks, answers D212–D214). The user stopped run `wf_d3ad83c7-95c` on 2026-09-29 after S3-001 and S3-016 merged (`main` 02ded0c), to lighten the workflow: **D219** (builder → test writer → both reviewers → integrator; 4 agents at once; one board update per task). Restart with `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: ["s2","s3","s7"], step: "build"}})`; done tasks are skipped by the board, and a task whose code is already on its branch can start with `from: {"<ID>": "test"}`.
+- **Waiting on the user:** the two D219 hook changes (`BUILDER_RUNS` 3 → 1; the integrator's finish check without its full suite); whether to drop the test-driven-development skill (D219); S3-Q9, S3-Q10, and S7-Q9 with Q-S1-014b.
+- **How a build runs:** if a run dies, start a fresh one with the same args. A task stuck mid-stage restarts with `from: {"<ID>": "build" | "test" | "review"}` and a note in `notes`. Watch it in the monitor (http://127.0.0.1:4800, Overview → "Tasks now"), `/workflows`, or the main session's watcher (scratchpad `wait-event.mjs` on the run's `journal.jsonl`).
+- **Then:** the S2 + S3 + S7 checkpoint (suite 3×, browser tests, `/insecure-defaults:audit`, an easy-to-read report, the user's approval, tags `s2`, `s3`, `s7`). Then S4, then **S5 + S6**, then S8 (D181–D183).
+- **Workflow for parallel slices (D183, D219):** `milestone.js` takes a list of slices; 4 agents shared; hot-file locks from build to merge; one integrator at a time, merging waiting tasks as one batch (D215); migration numbers given at merge; one tag per slice.
 - **Open, not blocking:**
-  - May a Control Owner hand their control to another owner (D199 as written: yes)?
-  - For S4/S5: can AI-made links be removed through `POST /api/v1/links/remove`, or only through the Analyst's false-positive handling?
   - The planner's S1 readings to confirm: the S1-Q6 split into S1-011/S1-012; names `POST /api/v1/links/remove`, `canLinkRecords`, `linkRemovedAudit`, `FIRST_NUMBER`, `MAP_*`; values stored lowercase with `_`.
   - Q39's context hand-off part.
 - **Open security items:** SF-001…SF-007 in `SECURITY-FINDINGS.md`, left for the user (D184). S1-004 fixes SF-006.
@@ -232,7 +227,7 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
   - Job keys prevent duplicates.
 
 ## Orchestration (locked 2026-09-26; details in memory.md D74–D107, D119)
-- **Runs inside Claude Code on this Mac.** There's no API key, and the agents need the local Docker, Neo4j Desktop and Ollama. Workflows run up to 8 agents at once.
+- **Runs inside Claude Code on this Mac.** There's no API key, and the agents need the local Docker, Neo4j Desktop and Ollama. Workflows run up to 4 agents at once (D219).
 - **Git:**
   - A local repo plus a private GitHub repo: https://github.com/krishkuchroo/grc-hybrid-graphrag (the user created it on 2026-09-27, D122). The remote is `origin`.
   - Each builder works in its own worktree.
@@ -241,8 +236,8 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
   - **Commit messages and PR text never mention Claude, Anthropic or AI tooling:** no `Co-Authored-By`, `Claude-Session` or "Generated with" lines (D159). The `commit-msg` git hook strips them if they slip in.
 - **Agents** (`.claude/agents/`), all on the session model (Opus 5.5):
   - **Planner:** writes the tasks and pass criteria, keeps `TASKS.md`, and is the only agent that edits `memory.md`.
-  - **Test writer:** writes each task's tests before any code exists.
-  - **Builders** (platform, backend, frontend, data): **can't edit test files.** If a test looks wrong, it goes back to the test writer.
+  - **Test writer:** tests each task's finished code on its own: behaviour tests from the brief, then probing the code (D219).
+  - **Builders** (platform, backend, frontend, data): go first on each task, writing general code for the behaviour in the brief (D219). They **can't edit test files.** If a test looks wrong, it goes back to the test writer.
   - **Security reviewer:** checks against D49–D59 and runs the isolation tests.
   - **Code reviewer:** checks against the plan and the code standards.
   - **Integrator:** merges approved work, runs the full suite, resolves conflicts and pushes.
@@ -257,7 +252,7 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
     6. Search and chat.
     7. Admin, grants, break-glass and the audit viewer.
     8. The dashboard and the benchmark.
-  - **Run in parallel groups (D181):** S1 alone → S2, S3 and S7 together → S4 alone → S5 and S6 together → S8. Conflict rules for parallel slices: D183 (shared agent cap of 8, a merge queue, folders owned per slice, hot files one task at a time, migration numbers given at merge).
+  - **Run in parallel groups (D181):** S1 alone → S2, S3 and S7 together → S4 alone → S5 and S6 together → S8. Conflict rules for parallel slices: D183 (shared agent cap of 4 (D219), a merge queue, folders owned per slice, hot files one task at a time, migration numbers given at merge).
   - The user approves at the end of each milestone, with one combined checkpoint per parallel group (D182). Each checkpoint has a demo and test results.
 - **Done means:**
   - The test writer's tests pass.
@@ -279,11 +274,11 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
   5. Only the planner edits `memory.md`, and no agent edits `CLAUDE.md`.
   6. Only approved skills can be used.
   7. Builders can't edit test files.
-- **Task board:** `TASKS.md`. Each task has an ID, milestone, owner, status, pass criteria and tests. Each task's brief sits under "Briefs" and starts with `Task: <ID>` (D91).
+- **Task board:** `TASKS.md`. Each task has an ID, milestone, owner, status, pass criteria and tests. Each task's brief sits under "Briefs" and starts with `Task: <ID>` (D91). Agents read theirs with `node .claude/scripts/brief.mjs <ID>`, never the whole board (D219).
 - **Skills:** marketplace skills only, listed in `skills.md`. The user approves each agent's skills before every milestone.
 - **Milestone workflow (D109–D118):** `.claude/workflows/milestone.js`, started with the milestone ID.
   1. Step `plan`: the planner splits the milestone. The user OKs the task list and skills (D111).
-  2. Step `build`: each task goes test writer → builder → both reviewers → integrator, on branch `task/<ID>`. Up to 8 agents run at once. A blocked task holds only the tasks that wait on it. Real-Gemma steps run one at a time at the end.
+  2. Step `build`: each task goes builder → test writer → both reviewers → integrator, on branch `task/<ID>` (D219). Up to 4 agents run at once. A blocked task holds only the tasks that wait on it. Real-Gemma steps run one at a time at the end.
   3. The checkpoint (D114), including a whole-codebase `/insecure-defaults:audit` run (D128). Then step `tag`, after the user approves.
 - **Agent monitor (D100–D103, v2: D148–D158, D161):**
   - Run `node .claude/monitor/server.mjs`, then open http://127.0.0.1:4800. How it works and how to reuse it: `.claude/monitor/README.md`.
@@ -331,9 +326,9 @@ Every agent ends its report with one hand-off block (D91). The hooks read it at 
 - **Environment check (D180):** `pnpm test:env` checks the stack, migrations, Neo4j DENYs, `.env` keys (names only), Caddy's cert and the hosts line. It changes nothing, and db/stack runs call it first. Missing items go to the main session or the user.
 - **Mac scripts (D170):** host-side scripts swap the container host for 127.0.0.1:5433 themselves. `.env` keeps one set of addresses.
 - **Guard rail 4:**
-  - New tests must be red. A **fix** (`fixReason`) may be green, but only when the builder's code is already on the branch and the test writer changed test files only (D167).
+  - The test writer's tests come after the code, so it hands in through the fix path (`fixReason`): the tests must pass, and only test files may change after the builder's code (D167, D219). New tests handed in without a fix reason must be red.
   - The check runs only in the task's own worktree, at the tip of `task/<ID>` (D168).
-  - Builders' tests run 3 times (D171).
+  - Builders' tests run 3 times (D171), until the user sets `BUILDER_RUNS` to 1 (D219).
   - A skipped test fails unless it's listed in `skips` (D173).
 - **Flaky tests (D171):** no retries anywhere. A test that fails and then passes is a bug for the test writer. The integrator runs the full suite once before each push. The checkpoint runs it 3 times, plus every browser test.
 - **Browser tests (D172):** the integrator runs `pnpm test:e2e` when a task touched the web app, the API or Caddy.
