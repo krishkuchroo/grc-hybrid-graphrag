@@ -45,6 +45,8 @@ interface Props<R extends AnyRecord> {
   details: (record: R) => DetailItem[];
   /** An optional panel at the top of the side column (a risk's rating). */
   summary?: (record: R) => ReactNode;
+  /** Shown under the details: the record's related records (S1-008). */
+  related?: (record: R) => ReactNode;
   /** Optional sections under the details (an asset's dependency map). */
   sections?: (record: R) => ReactNode;
   formFields: readonly FormFieldDef[];
@@ -58,7 +60,7 @@ interface Props<R extends AnyRecord> {
   onHandedOver?: (record: R, ownerName: string) => void;
 }
 
-function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
@@ -185,6 +187,7 @@ export function RecordPage<R extends AnyRecord>({
   back,
   details,
   summary,
+  related,
   sections,
   formFields,
   formValues,
@@ -380,6 +383,7 @@ export function RecordPage<R extends AnyRecord>({
               <Sheet items={[{ label: 'Name', value: record.name, wide: true }, ...details(record)]} />
             </Panel>
           )}
+          {related ? related(record) : null}
           {sections ? sections(record) : null}
         </div>
 

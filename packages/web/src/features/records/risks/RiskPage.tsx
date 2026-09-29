@@ -5,6 +5,7 @@ import { RISK_SCALE } from '@grc/shared';
 import { ChevronLeft } from 'lucide-react';
 import { formatDollars } from '../format';
 import type { FormFieldDef } from '../RecordForm';
+import { RelatedRecords } from '../links/RelatedRecords';
 import { NewRecordPage, RecordPage } from '../RecordPage';
 import type { AnyRecord } from '../useRecords';
 import { RatingBadge } from './RatingBadge';
@@ -78,6 +79,7 @@ export function RiskPage({ id }: { id: string }) {
       noun="risk"
       back={<BackToRegister />}
       summary={(risk) => <RatingPanel risk={risk} />}
+      related={(risk) => <RelatedRecords kind="risk" noun="risk" record={risk} />}
       details={(risk) => [
         { label: 'Impact', value: risk.impact },
         { label: 'Likelihood', value: risk.likelihood },
