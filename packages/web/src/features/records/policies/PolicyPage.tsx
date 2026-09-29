@@ -4,6 +4,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { ChevronLeft } from 'lucide-react';
 import { formatDate } from '../format';
 import type { FormFieldDef } from '../RecordForm';
+import { RelatedRecords } from '../links/RelatedRecords';
 import { NewRecordPage, RecordPage } from '../RecordPage';
 import type { AnyRecord } from '../useRecords';
 
@@ -44,6 +45,7 @@ export function PolicyPage({ id }: { id: string }) {
       id={id}
       noun="policy"
       back={<BackToPolicies />}
+      related={(policy) => <RelatedRecords kind="policy" noun="policy" record={policy} />}
       details={(policy) => [
         { label: 'Policy version', value: policy.policyVersion },
         { label: 'Effective date', value: formatDate(policy.effectiveDate) },

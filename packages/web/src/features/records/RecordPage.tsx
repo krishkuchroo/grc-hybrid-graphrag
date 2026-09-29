@@ -45,6 +45,8 @@ interface Props<R extends AnyRecord> {
   details: (record: R) => DetailItem[];
   /** An optional panel at the top of the side column (a risk's rating). */
   summary?: (record: R) => ReactNode;
+  /** Shown under the details: the record's related records (S1-008). */
+  related?: (record: R) => ReactNode;
   formFields: readonly FormFieldDef[];
   /** The record's own fields as the form holds them (text). */
   formValues: (record: R) => FormValues;
@@ -56,7 +58,7 @@ interface Props<R extends AnyRecord> {
   onHandedOver?: (record: R, ownerName: string) => void;
 }
 
-function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
@@ -183,6 +185,7 @@ export function RecordPage<R extends AnyRecord>({
   back,
   details,
   summary,
+  related,
   formFields,
   formValues,
   onHandedOver,
@@ -377,6 +380,7 @@ export function RecordPage<R extends AnyRecord>({
               <Sheet items={[{ label: 'Name', value: record.name, wide: true }, ...details(record)]} />
             </Panel>
           )}
+          {related ? related(record) : null}
         </div>
 
         <aside className="grid content-start gap-4">
