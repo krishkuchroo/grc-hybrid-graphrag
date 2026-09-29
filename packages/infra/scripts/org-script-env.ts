@@ -113,7 +113,8 @@ interface DrizzleModule {
 }
 
 const API_SRC = new URL('../../api/src/', import.meta.url);
-const load = async <T>(path: string): Promise<T> => (await import(new URL(path, API_SRC).href)) as T;
+/** Loads a module from the api package's sources, by its path under `packages/api/src/`. */
+export const load = async <T>(path: string): Promise<T> => (await import(new URL(path, API_SRC).href)) as T;
 
 export const provisioning = await load<ProvisionModule>('identity/provision-org.ts');
 
@@ -134,7 +135,7 @@ export interface Connections {
 export async function connect(): Promise<Connections> {
   const { createDb } = await load<{ createDb(url: string, opts?: { max?: number }): ScriptDb }>('db/client.ts');
   const { GraphService } = await load<{
-    GraphService: new (o: { uri: string; adminPassword: string; writerPassword: string }) => {
+    GraphService: new (o: { uri: string; adminPassword: string; writerPassword: string; querySecret?: string }) => {
       close(): Promise<void>;
     };
   }>('graph/graph.service.ts');
@@ -147,6 +148,8 @@ export async function connect(): Promise<Connections> {
     uri: get('NEO4J_URI'),
     adminPassword: get('NEO4J_ADMIN_PASSWORD'),
     writerPassword: get('NEO4J_WRITER_PASSWORD'),
+    // Optional: only reads as a role x clearance account need it (`pnpm seed:demo`'s links).
+    querySecret: setting('NEO4J_QUERY_SECRET') || undefined,
   });
   const files = new SeaweedFileStore({
     endpoint: get('S3_ENDPOINT'),

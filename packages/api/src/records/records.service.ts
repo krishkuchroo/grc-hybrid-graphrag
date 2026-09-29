@@ -170,7 +170,15 @@ export class RecordsService {
     this.log = (deps.log ?? createLogger()).child({ context: 'RecordsService' });
   }
 
-  async create(caller: Caller, kind: RecordKind, input: unknown): Promise<RecordOut> {
+  /** `options.sourceIds` is for our own server-side callers (the demo seed, later imports): the
+   * API's create body refuses it, so a person can't set it. */
+  async create(
+    caller: Caller,
+    kind: RecordKind,
+    input: unknown,
+    options: { sourceIds?: string[] } = {},
+  ): Promise<RecordOut> {
+    const sourceIds = options.sourceIds ?? [];
     const body = createSchemas[kind].parse(input) as Record<string, unknown>;
     if (ROLE_TABLE[kind][caller.role] !== 'edit') throw FORBIDDEN();
     const label = (body['label'] as Label | undefined) ?? defaultLabel(kind, body as { dataClassification?: Label });
@@ -188,7 +196,7 @@ export class RecordsService {
       const now = new Date().toISOString();
       const props = {
         id,
-        sourceIds: [],
+        sourceIds,
         ...fields,
         sensitivity: label,
         status: 'active',
@@ -206,6 +214,7 @@ export class RecordsService {
           const [saved] = await rows(tx, createQuery(kind, toNeo({ ...props, number })));
           const out = toOut(kind, saved!);
           const after: Record<string, unknown> = { ...fields, label, owner: out.owner, status: 'active' };
+          if (sourceIds.length > 0) after['sourceIds'] = sourceIds;
           return { result: out, audit: this.entry('record.created', kind, out, null, after, label) };
         });
       } catch (err) {
