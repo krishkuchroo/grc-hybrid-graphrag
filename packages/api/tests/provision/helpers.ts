@@ -33,8 +33,10 @@
 //   throwaway Postgres database, Neo4j Desktop and the dev-switch SeaweedFS.
 //
 // Throwaway data (D82): each test file makes its own `test-…` Postgres database. Every org in it is
-// cleaned up in afterAll: its `org-<orgId>` Neo4j database is dropped and its bucket emptied and
-// deleted, so the tests leave nothing behind.
+// cleaned up in afterAll: its `org-<orgId>` Neo4j database is tracked by the env's
+// ThrowawayDatabases (S1-014) and dropped with `dropAll()`, which fails loudly, and its bucket
+// emptied and deleted, so the tests leave nothing behind. A test that makes an org database itself
+// calls `env.databases.track(name)` before it does.
 import {
   DeleteBucketCommand,
   DeleteObjectCommand,
@@ -43,9 +45,11 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { spawn } from 'node:child_process';
+import type { Driver } from 'neo4j-driver';
 import { randomBytes } from 'node:crypto';
 import { appUrl, closeDb, migrateUrl, rows, type Db } from '../db/helpers.js';
-import { ROOT, databaseStatuses, dropDatabases, graphTestEnv, superDriver } from '../graph/helpers.js';
+import { ROOT, databaseStatuses, graphTestEnv, superDriver } from '../graph/helpers.js';
+import { ThrowawayDatabases } from '../graph/throwaway-databases.js';
 import { setUpWall, tearDownWall, type Wall } from '../org-wall/helpers.js';
 import { bucketFor, liveConfig } from '../storage/helpers.js';
 
@@ -89,6 +93,8 @@ export interface ProvEnv {
   graph: { createOrgDatabase(orgId: string): Promise<void>; close(): Promise<void> };
   files: { ensureBucket(orgId: string): Promise<void> };
   audit: AuditLike;
+  neo: Driver; // the Desktop `neo4j` account: cleaning up only
+  databases: ThrowawayDatabases;
 }
 
 export async function setUpProvision(): Promise<ProvEnv> {
@@ -100,6 +106,7 @@ export async function setUpProvision(): Promise<ProvEnv> {
     const { AuditService } = await import('../../src/audit/audit.service.js');
     const appDb = wall.loaded.createDb(appUrl(wall.dbName), { max: 4 });
     const migrator = wall.loaded.createDb(migrateUrl(wall.dbName), { max: 2 });
+    const neo = superDriver();
     return {
       wall,
       sup: wall.sup,
@@ -108,6 +115,8 @@ export async function setUpProvision(): Promise<ProvEnv> {
       graph: new GraphService({ uri: g.uri, adminPassword: g.adminPassword, writerPassword: g.writerPassword }),
       files: new SeaweedFileStore(liveConfig()),
       audit: new AuditService(appDb),
+      neo,
+      databases: new ThrowawayDatabases(neo),
     };
   } catch (err) {
     await tearDownWall(wall);
@@ -129,9 +138,14 @@ export async function tearDownProvision(env: ProvEnv | undefined): Promise<void>
     // the organization table may be missing if the set-up failed early
   }
   try {
-    await removeOrgDatabases(orgIds);
-    await removeBuckets(orgIds);
+    for (const id of orgIds) if (LOWERCASE_UUID.test(id)) env.databases.track(`org-${id}`);
+    try {
+      await env.databases.dropAll();
+    } finally {
+      await removeBuckets(orgIds);
+    }
   } finally {
+    await env.neo.close();
     await env.graph.close();
     await closeDb(env.appDb);
     await closeDb(env.migrator);
@@ -248,19 +262,6 @@ export async function orgDatabaseStatuses(orgId: string): Promise<string[]> {
   const driver = superDriver();
   try {
     return await databaseStatuses(driver, `org-${orgId}`);
-  } finally {
-    await driver.close();
-  }
-}
-
-async function removeOrgDatabases(orgIds: string[]): Promise<void> {
-  if (orgIds.length === 0) return;
-  const driver = superDriver();
-  try {
-    await dropDatabases(
-      driver,
-      orgIds.filter((id) => LOWERCASE_UUID.test(id)).map((id) => `org-${id}`),
-    );
   } finally {
     await driver.close();
   }

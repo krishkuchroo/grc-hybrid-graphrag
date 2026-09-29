@@ -30,7 +30,7 @@ import {
   ACCOUNTS,
   LONG,
   createFixtureOrg,
-  dropDatabases,
+  ThrowawayDatabases,
   newGraph,
   requireReadAs,
   runOn,
@@ -41,12 +41,14 @@ import {
 } from './helpers.js';
 
 let sup: Driver;
+let databases: ThrowawayDatabases;
 let graph: QueryGraph | undefined;
 let org: FixtureOrg;
 
 beforeAll(async () => {
   sup = superDriver();
-  org = await createFixtureOrg(sup);
+  databases = new ThrowawayDatabases(sup);
+  org = await createFixtureOrg(sup, databases);
   try {
     graph = newGraph();
   } catch {
@@ -55,9 +57,12 @@ beforeAll(async () => {
 }, LONG);
 
 afterAll(async () => {
-  await graph?.close();
-  if (sup && org) await dropDatabases(sup, [org.database]).catch(() => undefined);
-  await sup?.close();
+  try {
+    await graph?.close();
+    if (databases) await databases.dropAll();
+  } finally {
+    await sup?.close();
+  }
 }, LONG);
 
 /** Runs `RETURN 1` through readAs as `account`, and returns the Bolt connection it ran on. */

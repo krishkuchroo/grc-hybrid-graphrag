@@ -8,7 +8,7 @@
 // Desktop `neo4j` account only reads the schema and privileges back, and cleans up.
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dropDatabases, graphTestEnv, driverAs, refused, runOn, superDriver } from '../graph/helpers.js';
+import { graphTestEnv, driverAs, refused, runOn, superDriver } from '../graph/helpers.js';
 import {
   deps,
   loadProvisionOrg,
@@ -41,21 +41,16 @@ const T = 180_000;
 let env: ProvEnv;
 /** An org database made directly with createOrgDatabase: no Postgres org, no schema yet. */
 const orgId = randomUUID();
-const extraDatabases = new Set<string>([`org-${orgId}`]);
 
 beforeAll(async () => {
   env = await setUpProvision();
+  // Tracked before it is made (S1-014); tearDownProvision drops it with dropAll.
+  env.databases.track(`org-${orgId}`);
   await env.graph.createOrgDatabase(orgId);
 }, T);
 
 afterAll(async () => {
-  const driver = superDriver();
-  try {
-    await dropDatabases(driver, extraDatabases);
-  } finally {
-    await driver.close();
-    await tearDownProvision(env);
-  }
+  await tearDownProvision(env);
 }, T);
 
 // The first ensureOrgSchema on the throwaway org, run once and shared by the checks that need it.
@@ -238,7 +233,7 @@ describe("ensureOrgSchema leaves the query accounts' privileges alone (criterion
     const before = await privileges();
     expect(before.length).toBeGreaterThan(0);
     const fresh = randomUUID();
-    extraDatabases.add(`org-${fresh}`);
+    env.databases.track(`org-${fresh}`);
     await env.graph.createOrgDatabase(fresh);
     const { ensureOrgSchema } = await loadOrgSchema();
     await ensureOrgSchema(env.graph, fresh);

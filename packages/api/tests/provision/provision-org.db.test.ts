@@ -131,6 +131,7 @@ describe('provisionOrg: safe to re-run (criterion 2)', { timeout: T }, () => {
     const input = newOrgInput('neo4jfail');
     const failing = {
       createOrgDatabase: async (orgId: string) => {
+        env.databases.track(`org-${orgId}`);
         await env.graph.createOrgDatabase(orgId);
         throw new Error('injected failure after the Neo4j step');
       },

@@ -15,7 +15,7 @@ import {
   ACCOUNTS,
   LONG,
   createFixtureOrg,
-  dropDatabases,
+  ThrowawayDatabases,
   fixtureNodeId,
   impersonatedRunner,
   newGraph,
@@ -29,6 +29,7 @@ import {
 } from './helpers.js';
 
 let sup: Driver;
+let databases: ThrowawayDatabases;
 let graph: QueryGraph | undefined;
 let org: FixtureOrg;
 // A node every account may see: frameworks are viewable by every role (D50), and public by label.
@@ -68,8 +69,9 @@ function writes(): Record<string, string> {
 
 beforeAll(async () => {
   sup = superDriver();
+  databases = new ThrowawayDatabases(sup);
   runSetupNeo4j();
-  org = await createFixtureOrg(sup);
+  org = await createFixtureOrg(sup, databases);
   target = fixtureNodeId(org.orgId, 'Framework', 'public');
   otherTarget = fixtureNodeId(org.orgId, 'Requirement', 'public');
   try {
@@ -80,9 +82,12 @@ beforeAll(async () => {
 }, LONG);
 
 afterAll(async () => {
-  await graph?.close();
-  if (sup && org) await dropDatabases(sup, [org.database]).catch(() => undefined);
-  await sup?.close();
+  try {
+    await graph?.close();
+    if (databases) await databases.dropAll();
+  } finally {
+    await sup?.close();
+  }
 }, LONG);
 
 describe.each(ACCOUNTS)('$name cannot write (criterion 2)', (account) => {

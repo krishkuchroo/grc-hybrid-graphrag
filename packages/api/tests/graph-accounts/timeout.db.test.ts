@@ -14,7 +14,7 @@ import {
   ACCOUNTS,
   LONG,
   createFixtureOrg,
-  dropDatabases,
+  ThrowawayDatabases,
   newGraph,
   requireReadAs,
   runOn,
@@ -25,6 +25,7 @@ import {
 } from './helpers.js';
 
 let sup: Driver;
+let databases: ThrowawayDatabases;
 let graph: QueryGraph | undefined;
 let org: FixtureOrg;
 
@@ -34,8 +35,9 @@ const slowQuery = (marker: string): string =>
 
 beforeAll(async () => {
   sup = superDriver();
+  databases = new ThrowawayDatabases(sup);
   runSetupNeo4j();
-  org = await createFixtureOrg(sup);
+  org = await createFixtureOrg(sup, databases);
   try {
     graph = newGraph();
   } catch {
@@ -44,9 +46,12 @@ beforeAll(async () => {
 }, LONG);
 
 afterAll(async () => {
-  await graph?.close();
-  if (sup && org) await dropDatabases(sup, [org.database]).catch(() => undefined);
-  await sup?.close();
+  try {
+    await graph?.close();
+    if (databases) await databases.dropAll();
+  } finally {
+    await sup?.close();
+  }
 }, LONG);
 
 async function stillRunning(marker: string): Promise<number> {

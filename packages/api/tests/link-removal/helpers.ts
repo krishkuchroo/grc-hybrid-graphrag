@@ -31,6 +31,7 @@ import { LINK_TYPES, type LinkType } from '@grc/shared';
 import { q } from '../auth/helpers.js';
 import { createKey, useKey, type NewKey } from '../api-keys/helpers.js';
 import { runOn, superDriver } from '../graph/helpers.js';
+import { ThrowawayDatabases } from '../graph/throwaway-databases.js';
 import {
   LogCapture,
   platformDb,
@@ -70,7 +71,8 @@ export async function setUpRemoval(opts: { worker?: boolean } = {}): Promise<Rem
     await db.drop();
     throw err;
   }
-  return { db, app, k: kit(db), sup: superDriver(), databases: new Set(), logs, worker };
+  const sup = superDriver();
+  return { db, app, k: kit(db), sup, databases: new ThrowawayDatabases(sup), logs, worker };
 }
 
 export async function tearDownRemoval(env: RemovalEnv | undefined): Promise<void> {

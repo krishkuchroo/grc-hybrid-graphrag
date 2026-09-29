@@ -51,7 +51,8 @@ import {
   type Org,
   type SignedIn,
 } from '../auth/helpers.js';
-import { dropDatabases, runOn, superDriver } from '../graph-accounts/helpers.js';
+import { runOn, superDriver } from '../graph-accounts/helpers.js';
+import { ThrowawayDatabases } from '../graph/throwaway-databases.js';
 import {
   LogCapture,
   expectErrorFormat,
@@ -127,7 +128,7 @@ export interface ApiEnv {
   graph: { createOrgDatabase(orgId: string): Promise<void> } & Record<string, unknown>;
   records: RecordsServiceLike;
   sup: Driver;
-  databases: Set<string>;
+  databases: ThrowawayDatabases;
   worker?: WorkerApp;
 }
 
@@ -144,7 +145,8 @@ export async function setUpRecordsApi(opts: { worker?: boolean } = {}): Promise<
     const graph = app.get<ApiEnv['graph']>(GRAPH);
     const records = app.get<RecordsServiceLike>(RecordsService);
     if (opts.worker) worker = await startWorker();
-    return { db, app, k: kit(db), logs, graph, records, sup: superDriver(), databases: new Set(), worker };
+    const sup = superDriver();
+    return { db, app, k: kit(db), logs, graph, records, sup, databases: new ThrowawayDatabases(sup), worker };
   } catch (err) {
     await worker?.close().catch(() => undefined);
     await app?.close().catch(() => undefined);
@@ -158,7 +160,7 @@ export async function tearDownRecordsApi(env: ApiEnv | undefined): Promise<void>
   try {
     await env.worker?.close().catch(() => undefined);
     await env.app.close().catch(() => undefined);
-    await dropDatabases(env.sup, env.databases).catch(() => undefined);
+    await env.databases.dropAll();
   } finally {
     await env.sup.close().catch(() => undefined);
     await closeKit(env.k);
@@ -169,7 +171,7 @@ export async function tearDownRecordsApi(env: ApiEnv | undefined): Promise<void>
 /** An org in Postgres (row and audit partition) and its `org-<id>` Neo4j database with the S1-002 schema. */
 export async function newApiOrg(env: ApiEnv, name: string): Promise<Org> {
   const org = await seedOrg(env.k, name);
-  env.databases.add(`org-${org.id}`);
+  env.databases.track(`org-${org.id}`);
   await env.graph.createOrgDatabase(org.id);
   const { ensureOrgSchema } = await import('../../src/graph/org-schema.js');
   await ensureOrgSchema(env.graph as never, org.id);

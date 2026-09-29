@@ -15,14 +15,14 @@
 // privileges instead.
 //
 // Needs the running Neo4j Desktop DBMS (bolt://127.0.0.1:7687). Throwaway data (D82): one empty
-// org database `org-<random uuid>`, dropped in afterAll.
+// org database `org-<random uuid>`, tracked before it is made and dropped in afterAll (S1-014).
 import { randomUUID } from 'node:crypto';
 import type { Driver } from 'neo4j-driver';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   ACCOUNTS,
   LONG,
-  dropDatabases,
+  ThrowawayDatabases,
   impersonatedRunner,
   newGraph,
   readAsRunner,
@@ -83,14 +83,17 @@ const IMPORT_PROCEDURES: [string, string][] = [
 const OUTSIDE_PREFIXES = ['apoc.load.', 'apoc.import.', 'apoc.export.', 'apoc.bolt.', 'apoc.spatial.'];
 
 let sup: Driver;
+let databases: ThrowawayDatabases;
 let graph: QueryGraph | undefined;
 let org: FixtureOrg;
 
 beforeAll(async () => {
   sup = superDriver();
+  databases = new ThrowawayDatabases(sup);
   runSetupNeo4j();
   const orgId = randomUUID();
   const database = `org-${orgId}`;
+  databases.track(database);
   await runOn(sup, 'system', `CREATE DATABASE \`${database}\` IF NOT EXISTS WAIT`);
   org = { orgId, database, nodes: [], rels: [], outboxIds: [] };
   try {
@@ -101,9 +104,12 @@ beforeAll(async () => {
 }, LONG);
 
 afterAll(async () => {
-  await graph?.close();
-  if (sup && org) await dropDatabases(sup, [org.database]).catch(() => undefined);
-  await sup?.close();
+  try {
+    await graph?.close();
+    if (databases) await databases.dropAll();
+  } finally {
+    await sup?.close();
+  }
 }, LONG);
 
 /** Runs `cypher` and returns Neo4j's error; fails the test if the query ran. */

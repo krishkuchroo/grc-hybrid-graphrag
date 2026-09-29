@@ -15,7 +15,7 @@
 // database is ever dropped or broken. The expected names are in api's tests/org-schema/expected.ts.
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dropDatabases, graphTestEnv, superDriver } from '../../../api/tests/graph/helpers.js';
+import { graphTestEnv } from '../../../api/tests/graph/helpers.js';
 import { expectFullSchema, expectNoSchema, readSchema } from '../../../api/tests/org-schema/helpers.js';
 import {
   runRoot,
@@ -30,22 +30,16 @@ const T = 300_000;
 
 interface Fixture {
   env: ProvEnv;
-  databases: Set<string>;
 }
 
 async function setUp(): Promise<Fixture> {
-  return { env: await setUpProvision(), databases: new Set() };
+  return { env: await setUpProvision() };
 }
 
+/** tearDownProvision drops every tracked `org-<uuid>` database with dropAll (S1-014). */
 async function tearDown(f: Fixture | undefined): Promise<void> {
   if (!f) return;
-  const driver = superDriver();
-  try {
-    await dropDatabases(driver, f.databases);
-  } finally {
-    await driver.close();
-    await tearDownProvision(f.env);
-  }
+  await tearDownProvision(f.env);
 }
 
 type AuditModule = { createAuditPartition(db: unknown, orgId: string): Promise<void> };
@@ -54,7 +48,7 @@ type AuditModule = { createAuditPartition(db: unknown, orgId: string): Promise<v
 async function addOrg(f: Fixture, orgId: string, withDatabase = true): Promise<string> {
   const { createAuditPartition } = (await import('../../../api/src/audit/audit.service.js')) as AuditModule;
   await createAuditPartition(f.env.migrator, orgId);
-  f.databases.add(`org-${orgId}`);
+  f.env.databases.track(`org-${orgId}`);
   if (withDatabase) await f.env.graph.createOrgDatabase(orgId);
   return orgId;
 }
