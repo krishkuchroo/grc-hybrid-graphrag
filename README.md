@@ -32,6 +32,12 @@ The goal is to **prove with benchmarks** that this "hybrid" search gives better 
 - Every change is recorded in an audit trail that can't be edited.
 - Sign-in needs a password and a second factor (MFA).
 
+## Agent monitor
+
+The build agents can be watched live at **http://127.0.0.1:4800**. It shows milestone progress, what each agent is doing, the task board and any guard-rail blocks, and it can send an agent a note.
+
+Start it from the project folder with `node .claude/monitor/server.mjs`. It only listens on this machine (127.0.0.1).
+
 ## Status
 
 Work in progress. The foundation (database setup, the wall between companies, roles, sign-in) is being built now, followed by 8 feature slices ending with the dashboard and the benchmark.
