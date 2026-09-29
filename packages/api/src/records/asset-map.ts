@@ -47,7 +47,8 @@ export const assetMapSchema = z.object({
 
 const depthPattern = new RegExp(`^[1-${MAP_MAX_DEPTH}]$`);
 
-const mapQuerySchema = z.strictObject({
+/** The map's query string: only `depth`. */
+export const mapQuerySchema = z.strictObject({
   depth: z.string().regex(depthPattern, `must be a whole number from 1 to ${MAP_MAX_DEPTH}`).optional(),
 });
 

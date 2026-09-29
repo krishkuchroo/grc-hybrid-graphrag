@@ -47,6 +47,8 @@ interface Props<R extends AnyRecord> {
   summary?: (record: R) => ReactNode;
   /** Shown under the details: the record's related records (S1-008). */
   related?: (record: R) => ReactNode;
+  /** Optional sections under the details (an asset's dependency map). */
+  sections?: (record: R) => ReactNode;
   formFields: readonly FormFieldDef[];
   /** The record's own fields as the form holds them (text). */
   formValues: (record: R) => FormValues;
@@ -186,6 +188,7 @@ export function RecordPage<R extends AnyRecord>({
   details,
   summary,
   related,
+  sections,
   formFields,
   formValues,
   onHandedOver,
@@ -381,6 +384,7 @@ export function RecordPage<R extends AnyRecord>({
             </Panel>
           )}
           {related ? related(record) : null}
+          {sections ? sections(record) : null}
         </div>
 
         <aside className="grid content-start gap-4">

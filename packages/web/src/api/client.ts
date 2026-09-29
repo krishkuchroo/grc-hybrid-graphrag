@@ -242,6 +242,11 @@ export type GetAssetsIdMapResponse = {
   truncated: boolean;
 };
 
+/** GET /api/v1/assets/{id}/map query parameters. */
+export type GetAssetsIdMapQuery = {
+  depth?: string;
+};
+
 /** POST /api/v1/assets/{id}/retire response. */
 export type PostAssetsIdRetireResponse = {
   id: string;
@@ -1047,8 +1052,8 @@ export const api = {
   getAssetsIdLinks: (path: { id: string }): Promise<GetAssetsIdLinksResponse> =>
     request<GetAssetsIdLinksResponse>('GET', `/api/v1/assets/${encodeURIComponent(path.id)}/links`),
   /** The HOSTS and RUNS map around one asset: depth 1 to 3 (default 2), at most 200 assets */
-  getAssetsIdMap: (path: { id: string }): Promise<GetAssetsIdMapResponse> =>
-    request<GetAssetsIdMapResponse>('GET', `/api/v1/assets/${encodeURIComponent(path.id)}/map`),
+  getAssetsIdMap: (path: { id: string }, query?: GetAssetsIdMapQuery): Promise<GetAssetsIdMapResponse> =>
+    request<GetAssetsIdMapResponse>('GET', `/api/v1/assets/${encodeURIComponent(path.id)}/map${queryString(query)}`),
   /** Retire a asset; it is kept, never deleted */
   postAssetsIdRetire: (path: { id: string }, body: PostAssetsIdRetireBody): Promise<PostAssetsIdRetireResponse> =>
     request<PostAssetsIdRetireResponse>('POST', `/api/v1/assets/${encodeURIComponent(path.id)}/retire`, body),

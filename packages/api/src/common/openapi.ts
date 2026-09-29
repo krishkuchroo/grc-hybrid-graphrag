@@ -17,6 +17,8 @@ export interface RouteDoc {
   body?: z.ZodType;
   /** The schema of the 200 JSON response. */
   response: z.ZodType;
+  /** The query parameters the route takes (an object of strings), if any besides a list's paging. */
+  query?: z.ZodObject;
 }
 
 const routes = new Map<string, RouteDoc>();
@@ -31,6 +33,18 @@ function jsonSchema(schema: z.ZodType): Record<string, unknown> {
   return result;
 }
 
+/** A query schema's fields as OpenAPI query parameters. */
+function queryParameters(schema: z.ZodObject): Array<Record<string, unknown>> {
+  const json = jsonSchema(schema) as { properties?: Record<string, unknown>; required?: string[] };
+  const required = new Set(json.required ?? []);
+  return Object.entries(json.properties ?? {}).map(([name, value]) => ({
+    name,
+    in: 'query',
+    required: required.has(name),
+    schema: value,
+  }));
+}
+
 export function openApiDocument(): Record<string, unknown> {
   const paths: Record<string, Record<string, unknown>> = {};
   for (const route of routes.values()) {
@@ -38,6 +52,7 @@ export function openApiDocument(): Record<string, unknown> {
     paths[path] ??= {};
     paths[path][route.method] = {
       summary: route.summary,
+      ...(route.query ? { parameters: queryParameters(route.query) } : {}),
       ...(route.body
         ? {
             requestBody: {
