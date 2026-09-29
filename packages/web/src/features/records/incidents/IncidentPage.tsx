@@ -6,6 +6,7 @@ import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from '@grc/shared';
 import { ChevronLeft } from 'lucide-react';
 import { choices, formatMoment } from '../format';
 import { toLocalDateTime, type FormFieldDef } from '../RecordForm';
+import { RelatedRecords } from '../links/RelatedRecords';
 import { NewRecordPage, RecordPage } from '../RecordPage';
 import type { AnyRecord } from '../useRecords';
 import { ValueBadge } from '../ValueBadge';
@@ -56,6 +57,7 @@ export function IncidentPage({ id }: { id: string }) {
       id={id}
       noun="incident"
       back={<BackToIncidents />}
+      related={(incident) => <RelatedRecords kind="incident" noun="incident" record={incident} />}
       details={(incident) => [
         { label: 'Severity', value: <ValueBadge value={incident.severity} /> },
         { label: 'Incident status', value: <ValueBadge value={incident.incidentStatus} /> },

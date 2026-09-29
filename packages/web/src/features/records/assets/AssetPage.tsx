@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react';
 import { choices, words } from '../format';
 import { LabelBadge } from '../LabelBadge';
 import type { FormFieldDef } from '../RecordForm';
+import { RelatedRecords } from '../links/RelatedRecords';
 import { NewRecordPage, RecordPage } from '../RecordPage';
 import type { AnyRecord } from '../useRecords';
 import { ValueBadge } from '../ValueBadge';
@@ -58,6 +59,7 @@ export function AssetPage({ id }: { id: string }) {
       id={id}
       noun="asset"
       back={<BackToAssets />}
+      related={(asset) => <RelatedRecords kind="asset" noun="asset" record={asset} />}
       details={(asset) => [
         { label: 'Asset type', value: words(asset.assetType) },
         { label: 'Criticality', value: <ValueBadge value={asset.criticality} /> },

@@ -6,6 +6,7 @@ import { CONTROL_STATUSES } from '@grc/shared';
 import { ChevronLeft } from 'lucide-react';
 import { choices, formatDate } from '../format';
 import type { FormFieldDef } from '../RecordForm';
+import { RelatedRecords } from '../links/RelatedRecords';
 import { NewRecordPage, RecordPage } from '../RecordPage';
 import type { ListNotice } from '../RecordListPage';
 import type { AnyRecord } from '../useRecords';
@@ -65,6 +66,7 @@ export function ControlPage({ id }: { id: string }) {
       id={id}
       noun="control"
       back={<BackToControls />}
+      related={(control) => <RelatedRecords kind="control" noun="control" record={control} />}
       details={(control) => [
         { label: 'Code', value: control.code },
         { label: 'Framework', value: control.framework },
