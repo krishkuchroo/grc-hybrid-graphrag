@@ -421,7 +421,7 @@ async function runTask(t) {
 // time takes everything waiting: several tasks merge as one batch with one
 // full suite and one push; if the batch fails, they merge one at a time.
 const MERGE_LOCK = "Another run may be merging too (D210). Before you touch `main`, take the merge lock: `mkdir .git/grc-merge.lock` (it fails while another integrator holds it; then wait a minute and try again, and treat a lock older than 2 hours as stale and remove it). Hold it until your push is done or you hand in blocked, then `rmdir .git/grc-merge.lock`. Push only after your checks pass."
-const MIGRATIONS = 'If a branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only that task\'s own new migration (D183).'
+const MIGRATIONS = 'If a branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only that task\'s own new migration (D183). Whenever `main` has a migration the live dev database lacks (after you merge into `main` or fast-forward it), run `pnpm db:migrate` in the main checkout before you run checks there (D220).'
 const cleanUp = (items) => {
   const trees = items.flatMap((x) => x.worktrees)
   return trees.length ? `After a successful push, remove these worktrees that still exist: ${trees.map((w) => `\`git worktree remove --force ${w}\``).join(', ')}. Keep the branches (D118).` : ''
