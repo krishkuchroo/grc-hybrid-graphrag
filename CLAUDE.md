@@ -30,11 +30,11 @@ It's a portfolio project and research prototype. It **must look like a finished 
 
 ## Current state (saved 2026-09-29; resume from here)
 - **M0 and S1 are done, approved and tagged** `m0` (D193) and `s1` (D218). Reports: `docs/checkpoints/m0.md`, `docs/checkpoints/s1.md`. The D160 history rewrite is done: old task branches and worktrees carry the pre-rewrite history, so never merge them as they are.
-- **S2 + S3 + S7 are paused** (53 tasks, answers D212–D214). The user stopped run `wf_d3ad83c7-95c` on 2026-09-29 after S3-001 and S3-016 merged (`main` 02ded0c), to lighten the workflow: **D219** (builder → test writer → both reviewers → integrator; 4 agents at once; one board update per task). Restart with `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: ["s2","s3","s7"], step: "build"}})`; done tasks are skipped by the board, and a task whose code is already on its branch can start with `from: {"<ID>": "test"}`.
+- **Slices now run one at a time (D221): S2 → S3 → S7 → S4 → S5 → S6 → S8.** S2 builds alone first (8 tasks, D212), with `Workflow({scriptPath: ".claude/workflows/milestone.js", args: {milestone: "s2", step: "build"}})`. The S2/S3/S7 board is ready for it (D219, D220): S3-001 and S3-016 are merged; S7-001, S7-011 and S7-014 have code and tests on their branches; S7-002, S7-003 and S7-012 have code. Done tasks are skipped by the board, and a task whose code is already on its branch can start with `from: {"<ID>": "test"}`.
 - **Waiting on the user:** the two D219 hook changes (`BUILDER_RUNS` 3 → 1; the integrator's finish check without its full suite); whether to drop the test-driven-development skill (D219); S3-Q9, S3-Q10, and S7-Q9 with Q-S1-014b.
 - **How a build runs:** if a run dies, start a fresh one with the same args. A task stuck mid-stage restarts with `from: {"<ID>": "build" | "test" | "review"}` and a note in `notes`. Watch it in the monitor (http://127.0.0.1:4800, Overview → "Tasks now"), `/workflows`, or the main session's watcher (scratchpad `wait-event.mjs` on the run's `journal.jsonl`).
-- **Then:** the S2 + S3 + S7 checkpoint (suite 3×, browser tests, `/insecure-defaults:audit`, an easy-to-read report, the user's approval, tags `s2`, `s3`, `s7`). Then S4, then **S5 + S6**, then S8 (D181–D183).
-- **Workflow for parallel slices (D183, D219):** `milestone.js` takes a list of slices; 4 agents shared; hot-file locks from build to merge; one integrator at a time, merging waiting tasks as one batch (D215); migration numbers given at merge; one tag per slice.
+- **Then:** the S2 checkpoint (suite 3×, browser tests, `/insecure-defaults:audit`, an easy-to-read report, the user's approval, tag `s2`). Then S7-026 and S7-027 as a small S7 run (`only`), because S3-003 needs S7-026; then S3, S7, S4, S5, S6 and S8, each built and checkpointed on its own (D221).
+- **Workflow:** `milestone.js` builds one slice per run (D221); it still accepts a list of slices (D183), unused since D221. 4 agents at once; hot-file locks from build to merge; one integrator at a time, merging waiting tasks as one batch (D215); migration numbers given at merge.
 - **Open, not blocking:**
   - The planner's S1 readings to confirm: the S1-Q6 split into S1-011/S1-012; names `POST /api/v1/links/remove`, `canLinkRecords`, `linkRemovedAudit`, `FIRST_NUMBER`, `MAP_*`; values stored lowercase with `_`.
   - Q39's context hand-off part.
@@ -252,8 +252,8 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
     6. Search and chat.
     7. Admin, grants, break-glass and the audit viewer.
     8. The dashboard and the benchmark.
-  - **Run in parallel groups (D181):** S1 alone → S2, S3 and S7 together → S4 alone → S5 and S6 together → S8. Conflict rules for parallel slices: D183 (shared agent cap of 4 (D219), a merge queue, folders owned per slice, hot files one task at a time, migration numbers given at merge).
-  - The user approves at the end of each milestone, with one combined checkpoint per parallel group (D182). Each checkpoint has a demo and test results.
+  - **One slice at a time (D221):** S1 → S2 → S3 → S7 → S4 → S5 → S6 → S8, each built in its own run. (D181's parallel groups were dropped on 2026-10-02.)
+  - The user approves at the end of each milestone, with one checkpoint per slice (D114, D221). Each checkpoint has a demo and test results.
 - **Done means:**
   - The test writer's tests pass.
   - The code and security reviewers approve. After 3 send-backs, it goes to the user.
