@@ -2,7 +2,7 @@ export const meta = {
   name: 'milestone',
   description: 'Run one GRC milestone, or a parallel group of slices: plan it, build its tasks through the agent chain, or tag it',
   whenToUse:
-    'Start with the milestone ID (m0, s1 … s8), or a parallel group of slices (D181), e.g. ["s2", "s3", "s7"]. Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81, D182). Args: "s1", or { milestone: "s1" | ["s2", "s3", "s7"], step: "build", notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "test" | "review" }, only?: ["<task ID>"] }.',
+    'Start with the milestone ID (m0, s1 … s8), or a parallel group of slices (D181), e.g. ["s2", "s3", "s7"]. Step "plan" first; "build" after the user OKs the task list and skills (D111); "tag" after the user approves the checkpoint (D81, D182). Args: "s1", or { milestone: "s1" | ["s2", "s3", "s7"], step: "build", notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "test" | "review" | "merge" }, only?: ["<task ID>"] }.',
   phases: [
     { title: 'Plan', detail: 'the planner splits the milestone into tasks and briefs' },
     { title: 'Build', detail: 'builder → test writer → reviewers → integrator, per task (D219)' },
@@ -19,7 +19,7 @@ const MILESTONES = ['m0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8']
 const BUILDERS = ['builder-platform', 'builder-backend', 'builder-frontend', 'builder-data']
 const MAX_AT_ONCE = 4 // agents at once, shared by every slice in the run (D183, D219)
 const MAX_ROUNDS = 3 // builder ↔ test-writer rounds, and reviewer send-backs (D78, D86)
-const STAGES = ['build', 'test', 'review']
+const STAGES = ['build', 'test', 'review', 'merge']
 
 // Effort per agent (D219): xhigh where the work is judgement (building,
 // testing, security), high everywhere else.
@@ -34,9 +34,9 @@ const step = given.step ?? 'plan'
 // Optional { "<task ID>": "note" }: the note goes to that task's first agent
 // only, and a task blocked on the board runs again.
 const resumeNotes = given.notes ?? {}
-// Optional { "<task ID>": "build" | "test" | "review" }: restart a task at
-// that stage, when its code (for "test") or its code and tests (for
-// "review") are already on its branch.
+// Optional { "<task ID>": "build" | "test" | "review" | "merge" }: restart a
+// task at that stage, when its code (for "test"), its code and tests (for
+// "review"), or both approvals (for "merge") are already on its branch.
 const startFrom = given.from ?? {}
 // Optional ["<task ID>", ...]: run only these tasks, so a second run can take
 // them beside a run already going (D210). The others are left alone; a task
@@ -304,7 +304,7 @@ async function runTask(t) {
   try {
   // From the builder until the merge, this task alone changes its hot files (D183).
   releaseHot = await holdHotFiles(t.hotFiles ?? [])
-  while (true) {
+  while (stage !== 'merge') {
     if (stage === 'build') {
       const b = keep(
         await handIn(
@@ -408,7 +408,7 @@ async function runTask(t) {
 
   // The merge queue: merge, full suite, push; then the task's worktrees go
   // and the branch stays (D118, D183, D215).
-  const merged = await queueMerge({ id, branch, worktrees })
+  const merged = await queueMerge({ id, branch, worktrees, note: firstNote() })
   if (merged.status !== 'done') return blocked('integrator', merged)
   record(id, 'integrator', merged, 'done')
   return { status: 'done', findings: merged.findings, worktrees }
@@ -429,6 +429,7 @@ const cleanUp = (items) => {
 const mergeOne = (x) =>
   handIn(x.id, 'integrator', [
     `Merge \`${x.branch}\` into \`main\` in the main checkout (your steps).`,
+    x.note,
     MERGE_LOCK,
     'Merge the latest `main`.',
     MIGRATIONS,
@@ -440,6 +441,7 @@ function mergeBatch(items) {
   const name = `batch/${ids.join('-')}`
   return handIn(ids[0], 'integrator', [
     `Batch merge (D215) of ${ids.join(', ')}: each has both approvals. Merge them together, run the checks once and push once.`,
+    ...items.filter((x) => x.note).map((x) => `${x.id}: ${x.note}`),
     MERGE_LOCK,
     `1. Make a batch branch in its own worktree: \`git worktree add .claude/worktrees/${name.replace('/', '-')} -b ${name} main\` (after taking the lock, from the latest \`main\`).`,
     `2. There, merge each branch in this order with \`--no-ff\`, resolving conflicts as usual: ${items.map((x) => `\`${x.branch}\``).join(', ')}.`,
