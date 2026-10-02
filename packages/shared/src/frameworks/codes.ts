@@ -2,7 +2,9 @@
 // base control of an 800-53 enhancement, a natural-order sort key, and the stable IDs of catalog
 // nodes. Codes are kept exactly as the standard publishes them: never re-cased, re-padded or
 // re-written. Errors name no code (D163, D164).
-import { createHash } from 'node:crypto';
+// A namespace import, read only when an ID is made: the web app imports this package, and a
+// browser bundle must load it without touching Node crypto (only the API and worker make IDs).
+import * as nodeCrypto from 'node:crypto';
 import { FRAMEWORKS, isFrameworkKey, type FrameworkKey } from './frameworks.js';
 
 export const CODE_PATTERNS: Readonly<Record<FrameworkKey, RegExp>> = Object.freeze({
@@ -68,7 +70,7 @@ export const CATALOG_NAMESPACE = 'd0844755-5c9f-4603-a5c6-9a94211bcc69';
 /** RFC 9562 UUID v5 (SHA-1, name-based) of `name` in CATALOG_NAMESPACE, as `orgIdForSlug` makes org IDs. */
 function catalogUuid(name: string): string {
   const ns = Buffer.from(CATALOG_NAMESPACE.replace(/-/g, ''), 'hex');
-  const bytes = createHash('sha1').update(ns).update(name, 'utf8').digest().subarray(0, 16);
+  const bytes = nodeCrypto.createHash('sha1').update(ns).update(name, 'utf8').digest().subarray(0, 16);
   bytes[6] = (bytes[6]! & 0x0f) | 0x50;
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = bytes.toString('hex');
