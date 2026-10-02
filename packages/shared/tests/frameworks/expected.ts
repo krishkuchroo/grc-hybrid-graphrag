@@ -102,6 +102,70 @@ export const NAMED_GROUPS: [Key, string, string][] = [
   ['soc_2', 'CC6', 'Logical and Physical Access Controls'],
 ];
 
+/** The group names as their publishers print them, so the Frameworks screen shows the real names:
+ * the 20 NIST SP 800-53 Rev. 5 families, the 22 CSF 2.0 categories, and the SOC 2 common-criteria
+ * series (the short headings, as the brief's `CC6 Logical and Physical Access Controls`). The SOC 2
+ * A1, C1, PI1 and P1-P8 headings are left to the builder: the plan doesn't fix their wording. */
+export const PUBLISHED_GROUP_NAMES: Partial<Record<Key, Record<string, string>>> = {
+  nist_800_53: {
+    AC: 'Access Control',
+    AT: 'Awareness and Training',
+    AU: 'Audit and Accountability',
+    CA: 'Assessment, Authorization, and Monitoring',
+    CM: 'Configuration Management',
+    CP: 'Contingency Planning',
+    IA: 'Identification and Authentication',
+    IR: 'Incident Response',
+    MA: 'Maintenance',
+    MP: 'Media Protection',
+    PE: 'Physical and Environmental Protection',
+    PL: 'Planning',
+    PM: 'Program Management',
+    PS: 'Personnel Security',
+    PT: 'PII Processing and Transparency',
+    RA: 'Risk Assessment',
+    SA: 'System and Services Acquisition',
+    SC: 'System and Communications Protection',
+    SI: 'System and Information Integrity',
+    SR: 'Supply Chain Risk Management',
+  },
+  nist_csf_2: {
+    'GV.OC': 'Organizational Context',
+    'GV.RM': 'Risk Management Strategy',
+    'GV.RR': 'Roles, Responsibilities, and Authorities',
+    'GV.PO': 'Policy',
+    'GV.OV': 'Oversight',
+    'GV.SC': 'Cybersecurity Supply Chain Risk Management',
+    'ID.AM': 'Asset Management',
+    'ID.RA': 'Risk Assessment',
+    'ID.IM': 'Improvement',
+    'PR.AA': 'Identity Management, Authentication, and Access Control',
+    'PR.AT': 'Awareness and Training',
+    'PR.DS': 'Data Security',
+    'PR.PS': 'Platform Security',
+    'PR.IR': 'Technology Infrastructure Resilience',
+    'DE.CM': 'Continuous Monitoring',
+    'DE.AE': 'Adverse Event Analysis',
+    'RS.MA': 'Incident Management',
+    'RS.AN': 'Incident Analysis',
+    'RS.CO': 'Incident Response Reporting and Communication',
+    'RS.MI': 'Incident Mitigation',
+    'RC.RP': 'Incident Recovery Plan Execution',
+    'RC.CO': 'Incident Recovery Communication',
+  },
+  soc_2: {
+    CC1: 'Control Environment',
+    CC2: 'Communication and Information',
+    CC3: 'Risk Assessment',
+    CC4: 'Monitoring Activities',
+    CC5: 'Control Activities',
+    CC6: 'Logical and Physical Access Controls',
+    CC7: 'System Operations',
+    CC8: 'Change Management',
+    CC9: 'Risk Mitigation',
+  },
+};
+
 /** Valid sample codes (criterion 2), each with its group and parent code (criterion 3). */
 export const SAMPLES: [Key, string, string, string | null][] = [
   ['nist_800_53', 'AC-2', 'AC', null],

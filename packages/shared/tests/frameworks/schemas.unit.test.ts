@@ -8,6 +8,7 @@
 // - `requirementSchema` checks `code` against its own `framework`'s pattern.
 // - `catalogMappingSchema` checks each end's `code` against that end's framework.
 import { describe, expect, it } from 'vitest';
+import { LABELS } from './expected.js';
 import { loadFrameworks, type Schema } from './load.js';
 
 const NOW = '2026-09-29T08:00:00.000Z';
@@ -24,6 +25,18 @@ const COMMON = {
   updatedBy: 'system:framework-catalog',
   origin: 'import',
 };
+
+/** The other common fields every record carries (S1 shared notes, D68, D69, D73). */
+const COMMON_REQUIRED = [
+  'name',
+  'sourceIds',
+  'owner',
+  'version',
+  'createdAt',
+  'createdBy',
+  'updatedAt',
+  'updatedBy',
+] as const;
 
 const VALID_FRAMEWORK = {
   ...COMMON,
@@ -112,15 +125,33 @@ describe('criterion 6: frameworkSchema', () => {
     refuses(frameworkSchema, { ...VALID_FRAMEWORK, label });
   });
 
-  it.each(['key', 'frameworkVersion', 'publisher', 'description', 'id', 'number', 'label', 'status', 'origin'])(
-    'refuses a framework without %s',
-    async (field) => {
-      const { frameworkSchema } = await loadFrameworks();
-      const input: Record<string, unknown> = { ...VALID_FRAMEWORK };
-      delete input[field];
-      refuses(frameworkSchema, input);
-    },
-  );
+  it.each(LABELS)('accepts the label %s', async (label) => {
+    const { frameworkSchema } = await loadFrameworks();
+    accepts(frameworkSchema, { ...VALID_FRAMEWORK, label });
+  });
+
+  it('accepts a retired framework (records are retired, never deleted, D69)', async () => {
+    const { frameworkSchema } = await loadFrameworks();
+    accepts(frameworkSchema, { ...VALID_FRAMEWORK, status: 'retired' });
+  });
+
+  it.each([
+    'key',
+    'frameworkVersion',
+    'publisher',
+    'description',
+    'id',
+    'number',
+    'label',
+    'status',
+    'origin',
+    ...COMMON_REQUIRED,
+  ])('refuses a framework without %s', async (field) => {
+    const { frameworkSchema } = await loadFrameworks();
+    const input: Record<string, unknown> = { ...VALID_FRAMEWORK };
+    delete input[field];
+    refuses(frameworkSchema, input);
+  });
 
   it.each([
     ['status', 'deleted'],
@@ -173,15 +204,42 @@ describe('criterion 6: requirementSchema', () => {
     refuses(requirementSchema, { ...VALID_REQUIREMENT, label });
   });
 
-  it.each(['code', 'title', 'description', 'framework', 'group', 'parentCode', 'sortKey', 'id', 'number', 'label'])(
-    'refuses a requirement without %s',
-    async (field) => {
-      const { requirementSchema } = await loadFrameworks();
-      const input: Record<string, unknown> = { ...VALID_REQUIREMENT };
-      delete input[field];
-      refuses(requirementSchema, input);
-    },
-  );
+  it.each(LABELS)('accepts the label %s', async (label) => {
+    const { requirementSchema } = await loadFrameworks();
+    accepts(requirementSchema, { ...VALID_REQUIREMENT, label });
+  });
+
+  it('accepts a retired requirement (records are retired, never deleted, D69)', async () => {
+    const { requirementSchema } = await loadFrameworks();
+    accepts(requirementSchema, { ...VALID_REQUIREMENT, status: 'retired' });
+  });
+
+  it('keeps the code exactly as given (D212 (1))', async () => {
+    const { requirementSchema } = await loadFrameworks();
+    const result = requirementSchema.safeParse(VALID_REQUIREMENT);
+    expect(result.success && (result.data as { code: unknown }).code).toBe('AC-2(1)');
+  });
+
+  it.each([
+    'code',
+    'title',
+    'description',
+    'framework',
+    'group',
+    'parentCode',
+    'sortKey',
+    'id',
+    'number',
+    'label',
+    'status',
+    'origin',
+    ...COMMON_REQUIRED,
+  ])('refuses a requirement without %s', async (field) => {
+    const { requirementSchema } = await loadFrameworks();
+    const input: Record<string, unknown> = { ...VALID_REQUIREMENT };
+    delete input[field];
+    refuses(requirementSchema, input);
+  });
 });
 
 describe('criterion 6: catalogRequirementSchema', () => {

@@ -67,11 +67,29 @@ const CROSS: [Key, string][] = [
   ['soc_2', 'P8.1'],
 ];
 
+/** Codes the brief's pattern for each framework accepts, beyond the samples: the edges of each range. */
+const PATTERN_EDGES: Record<Key, string[]> = {
+  nist_800_53: ['AC-1', 'SR-12', 'AC-99', 'AC-2(99)', 'SC-7(5)'],
+  nist_csf_2: ['GV.OC-01', 'RC.CO-04', 'ID.AM-99'],
+  iso_27001: ['A.5.1', 'A.8.34', 'A.6.99'],
+  soc_2: ['CC1.1', 'CC9.99', 'A1.1', 'C1.2', 'PI1.5', 'P1.1', 'P8.1'],
+};
+
 describe('criterion 2: CODE_PATTERNS', () => {
-  it.each(KEYS)('%s has the pattern the brief names', async (key) => {
+  // The behaviour of the brief's patterns, not their exact text: any equivalent RegExp passes.
+  it.each(KEYS)('%s accepts and refuses what the brief pattern does', async (key) => {
     const { CODE_PATTERNS } = await loadFrameworks();
-    expect(CODE_PATTERNS[key]).toBeInstanceOf(RegExp);
-    expect(CODE_PATTERNS[key]!.source).toBe(PATTERNS[key]);
+    const pattern = CODE_PATTERNS[key]!;
+    const brief = new RegExp(PATTERNS[key]);
+    expect(pattern).toBeInstanceOf(RegExp);
+    const codes = [...SAMPLES.map(([, code]) => code), ...KEYS.flatMap((k) => PATTERN_EDGES[k]), ...REFUSED_EVERYWHERE];
+    for (const code of codes) {
+      // Twice each: a pattern with the g or y flag would answer differently the second time.
+      expect([pattern.test(code), pattern.test(code)], `${key} ${JSON.stringify(code)}`).toEqual([
+        brief.test(code),
+        brief.test(code),
+      ]);
+    }
   });
 
   it('has a pattern for exactly the four frameworks', async () => {
@@ -119,6 +137,24 @@ describe('criterion 2: isRequirementCode', () => {
     expect(isRequirementCode('nist_800_53', code)).toBe(false);
   });
 
+  // Codes kept exactly as published (D212 (1)): a look-alike character must not pass as the real
+  // one, or one requirement could appear twice under codes that look the same.
+  it.each([
+    ['nist_800_53', 'AC‐2'], // a Unicode hyphen
+    ['nist_800_53', 'AC−2'], // a minus sign
+    ['nist_800_53', 'AC-２'], // a full-width 2
+    ['nist_800_53', 'АС-2'], // Cyrillic A and S
+    ['nist_800_53', 'AC-2（1）'], // full-width brackets
+    ['nist_800_53', 'AC-٢'], // an Arabic-Indic 2
+    ['nist_csf_2', 'GV․OC-01'], // a one-dot leader
+    ['iso_27001', 'A.5.١'], // an Arabic-Indic 1
+    ['soc_2', 'CC6．1'], // a full-width full stop
+    ['nist_800_53', 'AC-2​'], // a zero-width space
+  ])('%s refuses the look-alike %j', async (key, code) => {
+    const { isRequirementCode } = await loadFrameworks();
+    expect(isRequirementCode(key, code)).toBe(false);
+  });
+
   it('gives the same answer every call (no stateful regex)', async () => {
     const { isRequirementCode } = await loadFrameworks();
     for (const [key, code] of SAMPLES) {
@@ -157,6 +193,72 @@ describe('criterion 3: parentCodeOf', () => {
     const { parentCodeOf } = await loadFrameworks();
     expect(parentCodeOf('nist_800_53', code)).toBe(parent);
   });
+});
+
+// Fail safe (D45.7): a code that isn't the framework's never gets a real answer. The risk is a
+// malformed or foreign code that starts like a real one (`GV.OC-1` starts like `GV.OC`, `AC2` like
+// `AC`, `A.5.100` like `A.5`) being filed under a real group or given a real parent. Throwing and
+// returning a non-answer both pass; the outcome helper records which happened.
+type Outcome = { threw: true } | { threw: false; value: unknown };
+
+function outcome(run: () => unknown): Outcome {
+  try {
+    return { threw: false, value: run() };
+  } catch {
+    return { threw: true };
+  }
+}
+
+const NOT_THE_FRAMEWORKS: [Key, string][] = [
+  ['nist_800_53', 'AC2'],
+  ['nist_800_53', 'ACX'],
+  ['nist_800_53', 'AC-2 '],
+  ['nist_800_53', 'AC-2(1'],
+  ['nist_800_53', 'AC-100'],
+  ['nist_800_53', 'GV.OC-01'],
+  ['nist_csf_2', 'GV.OC-1'],
+  ['nist_csf_2', 'GV.OC-001'],
+  ['nist_csf_2', 'PR.AA-05 '],
+  ['nist_csf_2', 'AC-2(1)'],
+  ['iso_27001', 'A.5.100'],
+  ['iso_27001', 'A.5.'],
+  ['iso_27001', 'A.9.1'],
+  ['iso_27001', 'AC-2'],
+  ['soc_2', 'CC6.100'],
+  ['soc_2', 'CC0.1'],
+  ['soc_2', 'CC10.1'],
+  ['soc_2', 'A.5.1'],
+  ['soc_2', ''],
+];
+
+describe('groupOf and parentCodeOf on a foreign or malformed code (fail safe)', () => {
+  it.each(NOT_THE_FRAMEWORKS)('%s: groupOf(%j) names no group of the framework', async (key, code) => {
+    const { groupOf, FRAMEWORKS } = await loadFrameworks();
+    const result = outcome(() => groupOf(key, code));
+    if (!result.threw) {
+      expect(Object.hasOwn(FRAMEWORKS[key]!.groupNames, String(result.value)), String(result.value)).toBe(false);
+    }
+  });
+
+  it.each(NOT_THE_FRAMEWORKS)('%s: parentCodeOf(%j) gives no parent code', async (key, code) => {
+    const { parentCodeOf } = await loadFrameworks();
+    const result = outcome(() => parentCodeOf(key, code));
+    if (!result.threw) expect(result.value).toBeNull();
+  });
+
+  it.each(['scf', 'NIST_800_53', '', 'toString', '__proto__'])(
+    'an unknown framework key %j gets no group and no parent',
+    async (key) => {
+      const { groupOf, parentCodeOf, FRAMEWORKS } = await loadFrameworks();
+      const group = outcome(() => groupOf(key, 'AC-2(1)'));
+      if (!group.threw) {
+        const named = Object.values(FRAMEWORKS).some((f) => Object.hasOwn(f.groupNames, String(group.value)));
+        expect(named, String(group.value)).toBe(false);
+      }
+      const parent = outcome(() => parentCodeOf(key, 'AC-2(1)'));
+      if (!parent.threw) expect(parent.value).toBeNull();
+    },
+  );
 });
 
 /** Natural order per framework, written out by hand. */
@@ -325,6 +427,47 @@ describe('criterion 4: CATALOG_NAMESPACE', () => {
   it('is a fixed UUID', async () => {
     const { CATALOG_NAMESPACE } = await loadFrameworks();
     expect(CATALOG_NAMESPACE).toMatch(ANY_UUID);
+  });
+});
+
+describe('criterion 4: the reference UUID v5 used by these tests', () => {
+  // RFC 9562's own UUIDv5 example (and RFC 4122's DNS namespace): "www.example.com" in the DNS
+  // namespace. It proves the helper above computes v5 correctly, so comparing against it means
+  // something.
+  it('matches the RFC example', () => {
+    expect(uuidV5('6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'www.example.com')).toBe(
+      '2ed6657d-e927-568b-95e1-2665a8aea6a2',
+    );
+  });
+});
+
+// "Stable ... the same in every org" (S2 shared notes): once S2-003 loads the catalogs, every org
+// graph holds these IDs, and a reload finds its nodes by them. A changed namespace would give every
+// framework and requirement a new ID and leave the loaded ones behind, so the values are pinned here.
+describe('criterion 4: the IDs never change between releases', () => {
+  it('CATALOG_NAMESPACE keeps its value', async () => {
+    const { CATALOG_NAMESPACE } = await loadFrameworks();
+    expect(CATALOG_NAMESPACE).toBe('d0844755-5c9f-4603-a5c6-9a94211bcc69');
+  });
+
+  it.each([
+    ['nist_800_53', '8fd34874-b52a-5341-bc4b-b21b31a70d42'],
+    ['nist_csf_2', 'e091f678-5586-5af5-a2cc-532e6f8798ac'],
+    ['iso_27001', 'aeb6a52d-eee1-5614-8d1f-21a605e2f6fa'],
+    ['soc_2', '298b78f1-5bdb-5e22-9053-486e243afa5f'],
+  ])('frameworkIdFor(%s) is %s', async (key, id) => {
+    const { frameworkIdFor } = await loadFrameworks();
+    expect(frameworkIdFor(key)).toBe(id);
+  });
+
+  it.each([
+    ['nist_800_53', 'AC-2(1)', '35d1ba9f-3411-5ce6-84c9-2a8addaee42b'],
+    ['nist_csf_2', 'GV.OC-01', '99da8f99-2d93-5e93-b582-791db5fdb1b9'],
+    ['iso_27001', 'A.5.1', '7f4397db-afb7-5641-9b82-59c3750acb00'],
+    ['soc_2', 'CC6.1', 'b4dfc692-7d36-5e9b-85a4-079e677165b4'],
+  ])('requirementIdFor(%s, %s) is %s', async (key, code, id) => {
+    const { requirementIdFor } = await loadFrameworks();
+    expect(requirementIdFor(key, code)).toBe(id);
   });
 });
 

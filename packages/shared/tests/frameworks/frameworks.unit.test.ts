@@ -7,7 +7,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GROUPS, KEYS, NAMED_GROUPS, TABLE } from './expected.js';
+import { GROUPS, KEYS, NAMED_GROUPS, PUBLISHED_GROUP_NAMES, TABLE } from './expected.js';
 import { EXPORTS, FRAMEWORKS_DIR, SHARED_DIR, loadFrameworks, loadShared } from './load.js';
 
 describe('criterion 1: FRAMEWORK_KEYS and isFrameworkKey', () => {
@@ -78,6 +78,15 @@ describe('criterion 1: FRAMEWORKS', () => {
   });
 
   it.each(NAMED_GROUPS)('%s group %s is named %s', async (key, code, name) => {
+    const { FRAMEWORKS } = await loadFrameworks();
+    expect(FRAMEWORKS[key]!.groupNames[code]).toBe(name);
+  });
+
+  it.each(
+    Object.entries(PUBLISHED_GROUP_NAMES).flatMap(([key, names]) =>
+      Object.entries(names).map(([code, name]) => [key, code, name] as const),
+    ),
+  )('%s group %s carries its published name, %s', async (key, code, name) => {
     const { FRAMEWORKS } = await loadFrameworks();
     expect(FRAMEWORKS[key]!.groupNames[code]).toBe(name);
   });

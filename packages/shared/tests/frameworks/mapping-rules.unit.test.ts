@@ -4,13 +4,14 @@
 // grants nothing: a Control Owner is false even on their own control (the Framework-mappings row
 // wins over D200's owner rule), and the Analyst's `approve` cell is not a mapping right in S2.
 //
-// Agrees with S1-005's `canLinkRecords` tests (packages/web/tests/record-links/) on the caller
-// shape `{ userId, role, clearance }`, the ownership reading (`owner === userId`) and fail safe on
-// anything unknown, and deliberately differs where D212 (3) says so: `canLinkRecords` lets a Control
-// Owner link their own control; `canMapControl` never does.
+// Agrees with S1-005's `canLinkRecords` tests (packages/api/tests/links/rules.unit.test.ts and
+// packages/web/tests/record-links/) on the caller shape `{ userId, role, clearance }`, the ownership
+// reading (`owner === userId`) and fail safe on anything unknown, and deliberately differs where
+// D212 (3) says so: `canLinkRecords` lets a Control Owner link their own control; `canMapControl`
+// never does.
 import { describe, expect, it } from 'vitest';
 import { LABELS, MAPPERS, ROLES, atOrBelow } from './expected.js';
-import { loadFrameworks } from './load.js';
+import { loadFrameworks, loadModule } from './load.js';
 
 const ME = 'user-me';
 const SOMEONE_ELSE = 'user-other';
@@ -28,6 +29,17 @@ const EVERY_CASE = ROLES.flatMap((role) =>
     ),
   ),
 );
+
+describe('criterion 7: the mappers are the editors in the D50 Framework-mappings row', () => {
+  // Ties this file's hand-written MAPPERS to the one role table every task reads
+  // (tests/access/role-table.unit.test.ts checks that table against D50), so the two can't drift.
+  it('MAPPERS is exactly the roles whose framework_mapping cell is edit', async () => {
+    const access = await loadModule('src/access/index.ts');
+    const table = access.ROLE_TABLE as Record<string, Record<string, string>>;
+    const editors = ROLES.filter((role) => table.framework_mapping![role] === 'edit');
+    expect(editors).toEqual([...MAPPERS]);
+  });
+});
 
 describe('criterion 7: canMapControl over every role x clearance x label x ownership', () => {
   it(`covers ${ROLES.length} roles x ${LABELS.length} clearances x ${LABELS.length} labels x 2 (${EVERY_CASE.length} cases)`, () => {

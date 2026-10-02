@@ -97,6 +97,11 @@ describe('criterion 5: parseCatalogNumber', () => {
     'REQ0001014 ',
     'REQ0001014\n',
     'REQ00O1014',
+    'REQ０００１０１４', // full-width digits
+    'REQ٠٠٠١٠١٤', // Arabic-Indic digits
+    'REQ0001014​', // a trailing zero-width space
+    'REQ+001014',
+    'REQ 001014',
     'REQ',
     'XYZ0001014',
     '',
