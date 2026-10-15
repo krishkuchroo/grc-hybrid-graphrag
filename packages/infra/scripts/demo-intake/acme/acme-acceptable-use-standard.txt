@@ -1,0 +1,30 @@
+Acme Corp - Acceptable Use Standard
+Version 2.1, effective 1 March 2026
+Owner: Compliance Manager
+
+1. Purpose
+This standard sets out how Acme staff and contractors may use company laptops, accounts,
+networks and data. It supports the Information Security Policy.
+
+2. Scope
+It applies to everyone with an Acme account, on any device that connects to Acme systems.
+
+3. Accounts and sign-in
+3.1 Every account belongs to one named person. Accounts are never shared.
+3.2 Remote access to Acme systems requires multi-factor sign-in.
+3.3 Passwords are at least 12 characters and are never reused on other sites.
+
+4. Devices
+4.1 Company laptops run endpoint detection and response at all times.
+4.2 Security updates are installed within the monthly patching window.
+4.3 A lost or stolen device is reported to the service desk within one hour.
+
+5. Data
+5.1 Confidential and restricted data stays on Acme systems and approved cloud storage.
+5.2 Customer data is never copied to personal devices or personal email.
+
+6. Monitoring
+Acme monitors the use of its systems to protect them. Monitoring follows applicable law.
+
+7. Breaches of this standard
+A breach of this standard may lead to disciplinary action.

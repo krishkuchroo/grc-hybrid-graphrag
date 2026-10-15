@@ -1,0 +1,29 @@
+Acme Corp - Incident Response Plan
+Version 3.0, effective 15 January 2026
+Owner: Compliance Manager
+
+1. Purpose
+This plan describes how Acme detects, contains and recovers from security incidents, and how it
+learns from them.
+
+2. Roles
+2.1 The on-call security analyst triages every alert within 30 minutes.
+2.2 The incident lead coordinates the response and keeps the incident record up to date.
+2.3 The Risk Manager decides whether an incident changes the rating of a risk.
+
+3. Severity
+Critical: customer data exposed, or production unavailable for more than one hour.
+High: a production system compromised, or ransomware detected on any device.
+Medium: a single account compromised, or malware contained on one device.
+Low: a policy breach with no impact on systems or data.
+
+4. Steps
+4.1 Detect: alerts come from endpoint detection and response, the web application firewall and
+    cloud configuration monitoring.
+4.2 Contain: isolate affected devices and disable affected accounts.
+4.3 Eradicate: remove the cause, patch the weakness, reset credentials.
+4.4 Recover: restore from encrypted backups when needed, and watch for recurrence.
+4.5 Learn: a review within 10 working days records what happened and which controls to improve.
+
+5. Records
+Every incident is recorded with its severity, the assets it affected and the risks it exposed.

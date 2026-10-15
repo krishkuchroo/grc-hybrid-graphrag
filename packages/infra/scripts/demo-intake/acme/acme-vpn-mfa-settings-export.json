@@ -1,0 +1,8 @@
+{
+  "exported": "2026-09-15",
+  "gateway": "vpn-eu-1",
+  "mfaRequired": true,
+  "allowedFactors": ["authenticator_app", "security_key"],
+  "rememberDeviceDays": 0,
+  "legacyProtocolsEnabled": false
+}

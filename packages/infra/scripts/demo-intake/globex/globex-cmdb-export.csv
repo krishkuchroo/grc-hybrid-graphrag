@@ -1,0 +1,9 @@
+sys_id,name,sys_class_name,u_criticality,data_classification,owner_email,hosted_on,runs_on
+CMDB-2001,Route planning service,Application,Critical,Confidential,admin@globex.example,CMDB-2003,CMDB-2005
+CMDB-2002,Proof of delivery service,Application,High,Internal,analyst@globex.example,CMDB-2004,CMDB-2005
+CMDB-2003,Depot server north,Server,High,Confidential,admin@globex.example,,
+CMDB-2004,Depot server south,Server,High,Internal,admin@globex.example,,
+CMDB-2005,Container platform,Cloud Service,Critical,Confidential,admin@globex.example,,
+CMDB-2006,Delivery photos store,Database,Medium,Internal,analyst@globex.example,CMDB-2004,
+CMDB-2007,Fleet telematics gateway,Network Device,High,Internal,admin@globex.example,,
+CMDB-2008,Yard check-in kiosks,Endpoint,Low,Public,admin@globex.example,,

@@ -1,0 +1,19 @@
+Acme Corp - Remote Working Policy
+Version 1.0, effective 1 October 2026
+Owner: Compliance Manager
+
+1. Purpose
+This policy sets out how Acme staff work safely away from the office.
+
+2. Rules
+2.1 Remote access to Acme systems uses the company VPN with multi-factor sign-in.
+2.2 Work is done on company laptops only; personal devices may reach email through the web only.
+2.3 Screens are locked whenever the laptop is left, even at home.
+2.4 Public Wi-Fi is used only with the VPN connected.
+
+3. Equipment
+3.1 Company laptops stay encrypted and run endpoint detection and response.
+3.2 Lost or stolen equipment is reported to the service desk within one hour.
+
+4. Review
+This policy is reviewed every year by the Compliance Manager.

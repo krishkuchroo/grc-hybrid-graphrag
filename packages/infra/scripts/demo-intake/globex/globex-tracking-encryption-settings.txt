@@ -1,0 +1,10 @@
+Globex Ltd - Tracking data encryption settings
+Captured: 22 September 2026
+
+Store: tracking events database (production)
+- Encryption at rest: on, AES-256
+- Key management: cloud key vault, customer-managed key
+- Key rotation: every 12 months, last rotated 2 September 2026
+- Backups: encrypted with the same key vault, separate key
+
+Reviewed by the Admin. No exceptions found.

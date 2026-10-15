@@ -1,0 +1,13 @@
+Acme Corp - Remote access MFA review, third quarter 2026
+Reviewed by: Control Owner
+Date: 30 September 2026
+
+Checked
+- Every VPN account belongs to a current member of staff or a named contractor.
+- Every VPN account has multi-factor sign-in enrolled.
+- No account signed in with a remembered device.
+
+Findings
+- Two contractor accounts had ended contracts; both were disabled on the day of the review.
+
+Outcome: the control operated as designed this quarter.

@@ -1,0 +1,11 @@
+Acme Corp - Backup restore test, third quarter 2026
+Date of test: 8 September 2026
+
+Scope: the orders database and the payroll database, restored from the offline copy.
+
+Results
+- Orders database: restored in 42 minutes; row counts match the source.
+- Payroll database: restored in 18 minutes; row counts match the source.
+- The backup files were encrypted at rest and the keys were held separately.
+
+Outcome: passed. Next test due in the fourth quarter of 2026.
