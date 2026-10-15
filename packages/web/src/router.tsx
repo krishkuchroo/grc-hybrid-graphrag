@@ -5,7 +5,9 @@
 //   the session ended while they were away, and sign-in says so.
 // - /risks is the Risk register (its filters in the search params), /risks/new the create form and
 //   /risks/$id a risk's page (S1-006). /controls, /policies, /assets and /incidents follow the same
-//   shape (S1-007). The other screens show their empty state until their slice.
+//   shape (S1-007). /frameworks lists the framework catalogs with their coverage, /frameworks/$id
+//   a framework's requirements (its filters in the search params) and /requirements/$id one
+//   requirement (S2-006). The other screens show their empty state until their slice.
 // Security is checked by the API (D7); these redirects only decide which screen to show.
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
@@ -27,6 +29,9 @@ import { IncidentPage, NewIncidentPage } from '@/features/records/incidents/Inci
 import { PolicyList, validatePolicySearch } from '@/features/records/policies/PolicyList';
 import { NewPolicyPage, PolicyPage } from '@/features/records/policies/PolicyPage';
 import { fetchMe, isUnauthorized, ME_KEY } from '@/features/auth/session';
+import { FrameworkList } from '@/features/frameworks/FrameworkList';
+import { FrameworkPage, validateRequirementSearch } from '@/features/frameworks/FrameworkPage';
+import { RequirementPage } from '@/features/frameworks/RequirementPage';
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -219,8 +224,40 @@ export function createAppRouter(queryClient: QueryClient) {
     },
   });
 
-  const RECORD_SCREENS = new Set(['/risks', '/controls', '/policies', '/assets', '/incidents']);
-  const screenRoutes = SCREENS.filter((screen) => !RECORD_SCREENS.has(screen.path)).map((screen) =>
+  const frameworksRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/frameworks',
+    component: FrameworkList,
+  });
+  const frameworkRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/frameworks/$id',
+    validateSearch: validateRequirementSearch,
+    component: function FrameworkRoute() {
+      const { id } = frameworkRoute.useParams();
+      const search = frameworkRoute.useSearch();
+      const navigate = frameworkRoute.useNavigate();
+      return (
+        <FrameworkPage
+          key={id}
+          id={id}
+          search={search}
+          onSearchChange={(next) => void navigate({ search: next, replace: true })}
+        />
+      );
+    },
+  });
+  const requirementRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/requirements/$id',
+    component: function RequirementRoute() {
+      const { id } = requirementRoute.useParams();
+      return <RequirementPage key={id} id={id} />;
+    },
+  });
+
+  const BUILT_SCREENS = new Set(['/risks', '/controls', '/policies', '/assets', '/incidents', '/frameworks']);
+  const screenRoutes = SCREENS.filter((screen) => !BUILT_SCREENS.has(screen.path)).map((screen) =>
     createRoute({
       getParentRoute: () => shellRoute,
       path: screen.path,
@@ -249,6 +286,9 @@ export function createAppRouter(queryClient: QueryClient) {
       incidentsRoute,
       newIncidentRoute,
       incidentRoute,
+      frameworksRoute,
+      frameworkRoute,
+      requirementRoute,
       ...screenRoutes,
     ]),
   ]);
