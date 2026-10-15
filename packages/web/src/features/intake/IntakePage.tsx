@@ -2,7 +2,8 @@
 // and the uploaded documents, with their status, filters and downloads. Who may upload which kind
 // comes from `canUpload` (D50); the documents list is the API's answer, so a role without the
 // uploads cell (the Control Owner, Auditor and Viewer) gets its 403 and the no-access screen here
-// (D7). A Control Owner is told where evidence goes instead: a control's own page.
+// (D7). A Control Owner is told where evidence goes instead: a control's own page. Admins also get
+// the "Sample data" part (S3-015, D213 (6)): what API keys sent and how to run the generators.
 import { Link } from '@tanstack/react-router';
 import { Lock } from 'lucide-react';
 import { useState } from 'react';
@@ -13,6 +14,7 @@ import { formatRole } from '@/features/auth/session';
 import { useMe } from '@/features/records/useRecords';
 import { DocumentsTable } from './DocumentsTable';
 import { listedKinds, uploadKinds } from './permissions';
+import { SampleDataPanel } from './SampleDataPanel';
 import { UploadPanel } from './UploadPanel';
 import { isForbidden, useDocumentRows, type IntakeSearch } from './useDocuments';
 
@@ -96,6 +98,7 @@ export function IntakePage({
             kinds.length > 0 ? 'No files have been uploaded yet. Upload one above to get started.' : SCREEN.empty
           }
         />
+        {role === 'admin' ? <SampleDataPanel /> : null}
       </div>
     </>
   );

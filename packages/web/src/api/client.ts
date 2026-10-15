@@ -1939,6 +1939,57 @@ export type PostPoliciesIdRetireBody = {
   version: number;
 };
 
+/** POST /api/v1/push/batches response. */
+export type PostPushBatchesResponse =
+  | {
+      batchId: string;
+      importId: unknown;
+      jobId: unknown;
+      duplicate: boolean;
+    }
+  | {
+      batchId: string;
+      importId: unknown;
+      jobId: unknown;
+      duplicate: boolean;
+    };
+
+/** POST /api/v1/push/batches request body. */
+export type PostPushBatchesBody = {
+  batchId: string;
+  source: string;
+  rows: Array<Record<string, never>>;
+};
+
+/** GET /api/v1/push/batches response. */
+export type GetPushBatchesResponse = {
+  items: Array<{
+    id: string;
+    batchId: string;
+    source: string;
+    rowCount: number;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    apiKeyId: string;
+    documentId: string;
+    importId: unknown;
+    jobId: unknown;
+    importStatus: 'reading' | 'needs_mapping' | 'queued' | 'importing' | 'done' | 'failed' | null;
+    counts: {
+      added: number;
+      updated: number;
+      unchanged: number;
+      failed: number;
+      linksAdded: number;
+    } | null;
+    errorCount: number | null;
+    duplicate: boolean;
+    createdAt: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
 /** GET /api/v1/requirements/{id} response. */
 export type GetRequirementsIdResponse = {
   id: string;
@@ -2489,6 +2540,12 @@ export const api = {
   /** Retire a policy; it is kept, never deleted */
   postPoliciesIdRetire: (path: { id: string }, body: PostPoliciesIdRetireBody): Promise<PostPoliciesIdRetireResponse> =>
     request<PostPoliciesIdRetireResponse>('POST', `/api/v1/policies/${encodeURIComponent(path.id)}/retire`, body),
+  /** Push a batch of asset rows (API keys only, at most 1 MB, 60 batches a minute per key; the key's role must be one that may import asset lists). The rows are stored as a JSON asset list and imported with the source's saved mapping (409 mapping_required without one): 202 with the batch, import and job IDs. The same source and batch ID again answers 200 with the first answer and duplicate: true, and nothing is stored or imported again; rows identical to an earlier batch's make no second document (200, duplicate: true). Audited as push.received */
+  postPushBatches: (body: PostPushBatchesBody): Promise<PostPushBatchesResponse> =>
+    request<PostPushBatchesResponse>('POST', '/api/v1/push/batches', body),
+  /** List the org's push batches the caller can see, newest first, paged, with source and batchId filters; each with its import's status and counts */
+  getPushBatches: (query?: ListQuery): Promise<GetPushBatchesResponse> =>
+    request<GetPushBatchesResponse>('GET', `/api/v1/push/batches${queryString(query)}`),
   /** One requirement, the controls that satisfy it, and its links to other frameworks in both directions */
   getRequirementsId: (path: { id: string }): Promise<GetRequirementsIdResponse> =>
     request<GetRequirementsIdResponse>('GET', `/api/v1/requirements/${encodeURIComponent(path.id)}`),
