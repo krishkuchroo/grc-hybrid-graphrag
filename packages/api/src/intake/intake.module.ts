@@ -13,6 +13,9 @@
 // Import runs (S3-007): the ImportRunService and POST /api/v1/imports/:id/run, and the asset import
 // job, which only the worker program registers; the reader starts a run by itself for a source with
 // a saved mapping that fits.
+// The push API (S3-008): the PushService and POST/GET /api/v1/push/batches; a batch is stored
+// through storeUpload and its import run queued in the same transaction. Its rate limit (60 batches
+// a minute per API key) is registered on Fastify by the API program (src/main.api.ts).
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -42,6 +45,8 @@ import { MappingsController } from './imports/mappings.controller.js';
 import { MappingsService } from './imports/mappings.service.js';
 import { ImportRunController } from './imports/run.controller.js';
 import { ImportRunService } from './imports/run.service.js';
+import { PushController } from './push/push.controller.js';
+import { PushService } from './push/push.service.js';
 import { UploadsController } from './uploads/uploads.controller.js';
 import { UploadsService } from './uploads/uploads.service.js';
 
@@ -58,6 +63,7 @@ Module({
     ImportsController,
     ImportRunController,
     MappingsController,
+    PushController,
     UploadsController,
   ],
   providers: [
@@ -87,6 +93,12 @@ Module({
       provide: UploadsService,
       useFactory: (db: Db, audit: AuditService, files: FileStore, jobs: JobsService) =>
         new UploadsService({ db, audit, files, jobs }),
+      inject: [DB, AuditService, FILE_STORE, JobsService],
+    },
+    {
+      provide: PushService,
+      useFactory: (db: Db, audit: AuditService, files: FileStore, jobs: JobsService) =>
+        new PushService({ db, audit, files, jobs }),
       inject: [DB, AuditService, FILE_STORE, JobsService],
     },
     {
@@ -120,6 +132,7 @@ Module({
     ImportsService,
     ImportRunService,
     MappingsService,
+    PushService,
     UploadsService,
   ],
 })(IntakeModule);
