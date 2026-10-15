@@ -49,6 +49,7 @@ const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const ALLOWED_ORIGINS = new Set([...ALLOWED_HOSTS].map((host) => `http://${host}`));
 
 const QUIET_MS = config.quietMinutes * 60_000;
+const DORMANT_MS = (config.dormantMinutes ?? 60) * 60_000;
 const MAX_NOTE = 2000;
 const MAX_BODY = 32 * 1024;
 const FINISHED_SHOWN = 20;
@@ -149,7 +150,8 @@ function where(cwd) {
 
 function describeAgent(a, t, notesByAgent) {
   const finish = readState(a.id, 'finish');
-  const status = a.stopped ? 'finished' : t - Date.parse(a.lastTs) > QUIET_MS ? 'quiet' : 'running';
+  const silent = t - Date.parse(a.lastTs);
+  const status = a.stopped ? 'finished' : silent > DORMANT_MS ? 'gone' : silent > QUIET_MS ? 'quiet' : 'running';
   const tok = tokenSummary?.byAgent.find((r) => r.agentId === a.id);
   return {
     id: a.id,
@@ -221,7 +223,8 @@ function buildState() {
     list.push({ id: note.id, ts: note.ts, text: note.text, deliveredAt: note.deliveredAt });
     notesByAgent.set(note.agentId, list);
   }
-  const all = [...agents.values()].map((a) => describeAgent(a, t, notesByAgent));
+  // Agents that died or were stopped without a stop event leave the page (dormantMinutes).
+  const all = [...agents.values()].map((a) => describeAgent(a, t, notesByAgent)).filter((a) => a.status !== 'gone');
   const active = all.filter((a) => a.status !== 'finished').sort((x, y) => x.startedAt.localeCompare(y.startedAt));
   const finished = all
     .filter((a) => a.status === 'finished')

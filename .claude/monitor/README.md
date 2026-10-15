@@ -54,6 +54,7 @@ Nothing in this folder imports from outside it.
 | `port` | `4800` | The page's port (`MONITOR_PORT` overrides it). |
 | `logsDir` | `"logs"` | Where the hook and the server keep their files. |
 | `quietMinutes` | `10` | After this long without a step, an agent shows as "quiet". |
+| `dormantMinutes` | `60` | After this long without a step and with no stop logged, an agent counts as gone (it died, or its run was stopped) and leaves the page. |
 | `board.file` | `"TASKS.md"` | The Markdown file holding the task board: the first table whose first header is "ID". |
 | `board.columns` | id, milestone, owner, status | Header text (lower case) → the field to show. `status: blocked` rows appear as open questions. `log` links a task to `logs/tasks/<ID>.md`. |
 | `milestones` | `[]` | The order of the milestones. Empty means the order they appear on the board. |
