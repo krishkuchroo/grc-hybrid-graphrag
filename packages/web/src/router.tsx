@@ -9,8 +9,9 @@
 //   a framework's requirements (its filters in the search params) and /requirements/$id one
 //   requirement (S2-006). /audit-findings/$id is an audit finding's page (S3-014), reached from the
 //   control and risk pages, with no menu item of its own. /intake is Data intake (S3-011): uploads
-//   and the uploaded documents, with the table's filters in the search params. The other screens
-//   show their empty state until their slice.
+//   and the uploaded documents, with the table's filters in the search params. /intake/imports/$id
+//   is an asset list's import (S3-012): its column mapping, run, progress and results. The other
+//   screens show their empty state until their slice.
 // Security is checked by the API (D7); these redirects only decide which screen to show.
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
@@ -36,6 +37,7 @@ import { FrameworkList } from '@/features/frameworks/FrameworkList';
 import { FrameworkPage, validateRequirementSearch } from '@/features/frameworks/FrameworkPage';
 import { RequirementPage } from '@/features/frameworks/RequirementPage';
 import { FindingPage } from '@/features/intake/audit-findings/FindingPage';
+import { ImportPage } from '@/features/intake/imports/ImportPage';
 import { IntakePage } from '@/features/intake/IntakePage';
 import { validateIntakeSearch } from '@/features/intake/useDocuments';
 
@@ -282,6 +284,15 @@ export function createAppRouter(queryClient: QueryClient) {
     },
   });
 
+  const importRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/intake/imports/$id',
+    component: function ImportRoute() {
+      const { id } = importRoute.useParams();
+      return <ImportPage key={id} id={id} />;
+    },
+  });
+
   const BUILT_SCREENS = new Set([
     '/risks',
     '/controls',
@@ -325,6 +336,7 @@ export function createAppRouter(queryClient: QueryClient) {
       requirementRoute,
       findingRoute,
       intakeRoute,
+      importRoute,
       ...screenRoutes,
     ]),
   ]);
