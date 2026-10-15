@@ -1,9 +1,10 @@
 // Evidence in the web app (S3-013, D202, D213 (2)-(4)), around the generated typed client (D30):
 // GET /api/v1/controls/:id/evidence (the section on a control page), POST /api/v1/evidence (the add
 // dialog, a multipart upload with progress), PATCH and retire on /api/v1/evidence/:id, GET
-// /api/v1/evidence/:id (a stale edit's reload) and GET /api/v1/evidence/:id/download. Every address
-// is relative (the M0-015 rule). The web only hides what the API would refuse, with S3-002's rules
-// (`canAddEvidence`) and the API's own `canEdit` per item; the API decides (D7).
+// /api/v1/evidence/:id (a stale edit's reload), GET /api/v1/evidence/:id/download and POST
+// /api/v1/evidence/:id/review (Accept and Reject, S3-022). Every address is relative (the M0-015
+// rule). The web only hides what the API would refuse, with S3-002's rules (`canAddEvidence`) and the
+// API's own `canEdit` and `canReview` per item; the API decides (D7, D220 (4)).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   can,
@@ -28,6 +29,7 @@ import {
   type GetControlsIdEvidenceResponse,
   type PatchEvidenceIdBody,
   type PostEvidenceBody,
+  type PostEvidenceIdReviewBody,
   type UploadProgress,
 } from '@/api/client';
 import type { Viewer } from '@/features/records/permissions';
@@ -35,8 +37,11 @@ import { extensionOf, formatBytes, FORMAT_TEXT, orList } from '../permissions';
 import { saveFile } from '../useDocuments';
 
 /** An evidence item as the API returns it: the record, its visible controls, `validity`, the
- * reviewer's name and `canEdit`. */
+ * reviewer's name, `canEdit` and `canReview`. */
 export type Evidence = GetControlsIdEvidenceResponse['items'][number];
+
+/** A review's outcome (D213 (2)): every review status but `pending`. */
+export type EvidenceDecision = PostEvidenceIdReviewBody['decision'];
 
 export const evidenceKeys = {
   all: ['evidence'] as const,
@@ -83,6 +88,12 @@ export function mayAddEvidence(viewer: Viewer | null, control: { label: string; 
  * and only while it's active. */
 export function mayChangeEvidence(item: Pick<Evidence, 'canEdit' | 'status'>): boolean {
   return item.canEdit === true && item.status === 'active';
+}
+
+/** Accept and Reject on an item: the API's `canReview` (an Admin or a Compliance Manager who sees it
+ * and didn't add it, D220 (4)), and only while it's active. The API checks again and decides (D7). */
+export function mayReviewEvidence(item: Pick<Evidence, 'canReview' | 'status'>): boolean {
+  return item.canReview === true && item.status === 'active';
 }
 
 /** The labels new evidence may get: none above the person's clearance (D198). */
@@ -291,6 +302,16 @@ export function useRetireEvidence(controlId: string, id: string) {
   });
 }
 
+/** Accepts or rejects an item with the version the row shows (409 `stale_version` when someone
+ * changed it since). The answer, with the reviewer and the review time, replaces the row. */
+export function useReviewEvidence(controlId: string, id: string) {
+  const settle = useSettle(controlId);
+  return useMutation<Evidence, unknown, PostEvidenceIdReviewBody>({
+    mutationFn: async (body) => (await api.postEvidenceIdReview({ id }, body)) as Evidence,
+    onSuccess: settle,
+  });
+}
+
 /** The latest copy of one item, for a stale edit's reload; it replaces the one in the control's list. */
 export function useReloadEvidence(controlId: string) {
   const queryClient = useQueryClient();
@@ -321,20 +342,27 @@ export function useDownloadEvidence() {
 
 // ---- Refusals in plain words ---------------------------------------------------------------
 
-export type EvidenceAction = 'add' | 'edit' | 'retire' | 'download';
+export type EvidenceAction = 'add' | 'edit' | 'retire' | 'download' | 'accept' | 'reject';
 
 const FAILED: Record<EvidenceAction, string> = {
   add: 'The evidence wasn’t added',
   edit: 'Your changes weren’t saved',
   retire: 'The evidence wasn’t retired',
   download: 'The file couldn’t be downloaded',
+  accept: 'The evidence wasn’t accepted',
+  reject: 'The evidence wasn’t rejected',
 };
+
+const REVIEW_FORBIDDEN_WHY =
+  'Only an Admin or a Compliance Manager may accept or reject evidence, and never evidence they added themselves.';
 
 const FORBIDDEN: Record<EvidenceAction, string> = {
   add: 'You can’t add evidence to this control',
   edit: 'You can’t change this evidence',
   retire: 'You can’t retire this evidence',
   download: 'You can’t download this file',
+  accept: 'You can’t accept this evidence',
+  reject: 'You can’t reject this evidence',
 };
 
 const FORBIDDEN_WHY: Record<EvidenceAction, string> = {
@@ -342,6 +370,8 @@ const FORBIDDEN_WHY: Record<EvidenceAction, string> = {
   edit: 'Only an Admin, or the Control Owner who added it, may change evidence.',
   retire: 'Only an Admin, or the Control Owner who added it, may retire evidence.',
   download: 'Your role or clearance doesn’t allow this download.',
+  accept: REVIEW_FORBIDDEN_WHY,
+  reject: REVIEW_FORBIDDEN_WHY,
 };
 
 /** What a refusal says: a title and plain lines. `lines: null` means "show the API's own message
@@ -367,11 +397,42 @@ const STALE_EDIT =
   'Someone else saved it while you were editing, so your changes weren’t saved. Your typed changes are still in the form below. Reload to get the latest version, then re-apply your changes and save again.';
 const STALE_RETIRE =
   'Someone else saved it in the meantime, so it wasn’t retired. The list now shows the latest version; check it, then retire it again if you still want to.';
+const STALE_REVIEW: Record<'accept' | 'reject', string> = {
+  accept:
+    'Someone else changed it in the meantime, so your decision wasn’t saved. The list now shows the latest version; check it, then accept it again if you still want to.',
+  reject:
+    'Someone else changed it in the meantime, so your decision wasn’t saved. The list now shows the latest version; check it, then reject it again if you still want to.',
+};
+
+function staleText(action: EvidenceAction): string {
+  if (action === 'retire') return STALE_RETIRE;
+  if (action === 'accept' || action === 'reject') return STALE_REVIEW[action];
+  return STALE_EDIT;
+}
+
+/** A refused Accept or Reject (S3-022): 403, 404 and a stale version in plain words; anything else
+ * as the API put it, with its reference ID (D47). */
+function reviewProblem(err: ApiError, action: 'accept' | 'reject'): EvidenceProblem {
+  if (isStaleVersion(err)) {
+    return { title: 'This record changed since you opened it', lines: [staleText(action)], stale: true };
+  }
+  if (err.status === 403) {
+    return {
+      title: FORBIDDEN[action],
+      lines: [err.message, FORBIDDEN_WHY[action]].filter((line, i, all) => line !== '' && all.indexOf(line) === i),
+    };
+  }
+  if (err.status === 404) {
+    return { title: FAILED[action], lines: ['This evidence doesn’t exist or you can’t see it.'], gone: true };
+  }
+  return { title: FAILED[action], lines: null };
+}
 
 /** The API's 409 `evidence_exists`, 415, 413, 429, 403 and 404 (and S1's stale save) in plain words;
  * anything else as the API put it, with its reference ID (D47). */
 export function evidenceProblem(err: unknown, action: EvidenceAction): EvidenceProblem {
   if (!(err instanceof ApiError)) return { title: FAILED[action], lines: null };
+  if (action === 'accept' || action === 'reject') return reviewProblem(err, action);
   if (err.status === 409 && err.code === 'evidence_exists') {
     return {
       title: 'This file is already evidence for this control',
@@ -381,7 +442,7 @@ export function evidenceProblem(err: unknown, action: EvidenceAction): EvidenceP
   if (isStaleVersion(err)) {
     return {
       title: 'This record changed since you opened it',
-      lines: [action === 'retire' ? STALE_RETIRE : STALE_EDIT],
+      lines: [staleText(action)],
       stale: true,
     };
   }
