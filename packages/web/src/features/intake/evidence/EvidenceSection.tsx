@@ -3,10 +3,12 @@
 // the number and name (with the file), the collected date, the valid-until date, a validity badge
 // (from the API's `validity`: Valid, Expiring soon, Expired), the review status in plain words with
 // the reviewer and date when there is one, the label, and Download. Edit and Retire show per row only
-// when the API's `canEdit` is true. "Add evidence" shows only when `canAddEvidence` holds for this
-// control. A role that never sees evidence (the Viewer) gets no section, and a control whose evidence
-// the API hides (404) shows none either: only what the API returns is shown (D51). The API decides
-// (D7). Evidence supports controls only (D67), so no other record page has this section.
+// when the API's `canEdit` is true; Accept and Reject (S3-022) only when the API's `canReview` is
+// true (D220 (4)). An edit that sends reviewed evidence back to pending shows "Pending review" with no
+// reviewer, as the API answers (D220 (5)). "Add evidence" shows only when `canAddEvidence` holds for
+// this control. A role that never sees evidence (the Viewer) gets no section, and a control whose
+// evidence the API hides (404) shows none either: only what the API returns is shown (D51). The API
+// decides (D7). Evidence supports controls only (D67), so no other record page has this section.
 import { Archive, CircleCheck, Download, LoaderCircle } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -30,11 +32,13 @@ import { cn } from '@/lib/utils';
 import { FORMAT_TEXT, formatBytes } from '../permissions';
 import { AddEvidenceDialog, EvidenceRefusal } from './AddEvidenceDialog';
 import { EditEvidenceDialog } from './EditEvidenceDialog';
+import { ReviewButtons } from './ReviewButtons';
 import {
   evidenceProblem,
   localToday,
   mayAddEvidence,
   mayChangeEvidence,
+  mayReviewEvidence,
   mayViewEvidence,
   reviewText,
   useControlEvidence,
@@ -162,7 +166,9 @@ export function EvidenceSection({ control }: { control: AnyRecord }) {
   const viewer = useViewer();
   const visible = mayViewEvidence(viewer);
   const query = useControlEvidence(control.id, visible);
-  const [added, setAdded] = useState<Evidence | null>(null);
+  /** The last change made here, in words after the item's number: added, accepted, rejected, or sent
+   * back to pending by an edit. */
+  const [notice, setNotice] = useState<{ number: string; text: string } | null>(null);
   const [downloadError, setDownloadError] = useState<unknown>(null);
 
   // The Viewer never sees evidence (D50); a control whose evidence is hidden shows nothing either.
@@ -173,6 +179,7 @@ export function EvidenceSection({ control }: { control: AnyRecord }) {
   const items = query.data ?? [];
   const mayAdd = mayAddEvidence(viewer, control);
   const anyChangeable = items.some(mayChangeEvidence);
+  const anyReviewable = items.some(mayReviewEvidence);
 
   return (
     <section aria-label={title} className="bg-card rounded-lg border shadow-xs">
@@ -186,12 +193,11 @@ export function EvidenceSection({ control }: { control: AnyRecord }) {
           ) : null}
         </h2>
         <p role="status" className="text-muted-foreground flex min-w-0 items-center text-xs">
-          {added ? (
+          {notice ? (
             <span className="inline-flex min-w-0 items-center gap-1.5">
               <CircleCheck className="size-3.5 shrink-0 text-emerald-600" aria-hidden />
               <span className="truncate">
-                <span className="text-foreground font-semibold tabular-nums">{added.number}</span> was added and is
-                pending review.
+                <span className="text-foreground font-semibold tabular-nums">{notice.number}</span> {notice.text}
               </span>
             </span>
           ) : null}
@@ -203,7 +209,7 @@ export function EvidenceSection({ control }: { control: AnyRecord }) {
               viewer={viewer}
               onAdded={(item) => {
                 setDownloadError(null);
-                setAdded(item);
+                setNotice({ number: item.number, text: 'was added and is pending review.' });
               }}
             />
           </div>
@@ -248,7 +254,7 @@ export function EvidenceSection({ control }: { control: AnyRecord }) {
               <TableHead className="w-28">Collected</TableHead>
               <TableHead className="w-32">Valid until</TableHead>
               <TableHead className="w-32">Validity</TableHead>
-              <TableHead className="w-40">Review status</TableHead>
+              <TableHead className={anyReviewable ? 'w-48' : 'w-40'}>Review status</TableHead>
               <TableHead className="w-28">Label</TableHead>
               <TableHead className={cn('pr-5 text-right', anyChangeable ? 'w-32' : 'w-16')}>
                 <span className="sr-only">Actions</span>
@@ -280,7 +286,21 @@ export function EvidenceSection({ control }: { control: AnyRecord }) {
                   <ValidityBadge validity={item.validity} />
                 </TableCell>
                 <TableCell>
-                  <ReviewStatus item={item} />
+                  <div className="grid justify-items-start gap-1.5">
+                    <ReviewStatus item={item} />
+                    {mayReviewEvidence(item) ? (
+                      <ReviewButtons
+                        item={item}
+                        controlId={control.id}
+                        onReviewed={(saved) =>
+                          setNotice({
+                            number: saved.number,
+                            text: `was ${reviewText(saved.reviewStatus).toLowerCase()}.`,
+                          })
+                        }
+                      />
+                    ) : null}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <LabelBadge label={item.label} />
@@ -290,7 +310,17 @@ export function EvidenceSection({ control }: { control: AnyRecord }) {
                     <DownloadButton item={item} onError={setDownloadError} />
                     {mayChangeEvidence(item) ? (
                       <>
-                        <EditEvidenceDialog item={item} controlId={control.id} viewer={viewer} />
+                        <EditEvidenceDialog
+                          item={item}
+                          controlId={control.id}
+                          viewer={viewer}
+                          onSaved={(saved) => {
+                            // D220 (5): the edit sent accepted or rejected evidence back to pending.
+                            if (item.reviewStatus !== 'pending' && saved.reviewStatus === 'pending') {
+                              setNotice({ number: saved.number, text: 'was changed, so it’s back to pending review.' });
+                            }
+                          }}
+                        />
                         <RetireEvidenceButton item={item} controlId={control.id} />
                       </>
                     ) : null}

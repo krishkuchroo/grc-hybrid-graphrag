@@ -870,6 +870,7 @@ export type GetControlsIdEvidenceResponse = {
       name: string;
     } | null;
     canEdit: boolean;
+    canReview: boolean;
   }>;
 };
 
@@ -1027,6 +1028,7 @@ export type GetEvidenceResponse = {
       name: string;
     } | null;
     canEdit: boolean;
+    canReview: boolean;
   }>;
   page: number;
   pageSize: number;
@@ -1073,6 +1075,7 @@ export type PostEvidenceResponse =
         name: string;
       } | null;
       canEdit: boolean;
+      canReview: boolean;
     }
   | {
       id: string;
@@ -1112,6 +1115,7 @@ export type PostEvidenceResponse =
         name: string;
       } | null;
       canEdit: boolean;
+      canReview: boolean;
     };
 
 /** POST /api/v1/evidence request body, sent as a multipart form. */
@@ -1164,6 +1168,7 @@ export type GetEvidenceIdResponse = {
     name: string;
   } | null;
   canEdit: boolean;
+  canReview: boolean;
 };
 
 /** PATCH /api/v1/evidence/{id} response. */
@@ -1205,6 +1210,7 @@ export type PatchEvidenceIdResponse = {
     name: string;
   } | null;
   canEdit: boolean;
+  canReview: boolean;
 };
 
 /** PATCH /api/v1/evidence/{id} request body. */
@@ -1259,10 +1265,59 @@ export type PostEvidenceIdRetireResponse = {
     name: string;
   } | null;
   canEdit: boolean;
+  canReview: boolean;
 };
 
 /** POST /api/v1/evidence/{id}/retire request body. */
 export type PostEvidenceIdRetireBody = {
+  version: number;
+};
+
+/** POST /api/v1/evidence/{id}/review response. */
+export type PostEvidenceIdReviewResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  collectedDate: string;
+  validUntil: string | null;
+  fileKey: string;
+  fileHash: string;
+  documentId: string;
+  fileName: string;
+  format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+  sizeBytes: number;
+  reviewStatus: 'pending' | 'accepted' | 'rejected';
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  controls: Array<{
+    id: string;
+    number: string;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: string;
+  }>;
+  validity: 'valid' | 'expiring' | 'expired';
+  reviewer: {
+    id: string;
+    name: string;
+  } | null;
+  canEdit: boolean;
+  canReview: boolean;
+};
+
+/** POST /api/v1/evidence/{id}/review request body. */
+export type PostEvidenceIdReviewBody = {
+  decision: 'accepted' | 'rejected';
   version: number;
 };
 
@@ -2441,7 +2496,7 @@ export const api = {
   /** Open one evidence item with the controls it supports, its validity, review status and canEdit; 404 when missing or hidden */
   getEvidenceId: (path: { id: string }): Promise<GetEvidenceIdResponse> =>
     request<GetEvidenceIdResponse>('GET', `/api/v1/evidence/${encodeURIComponent(path.id)}`),
-  /** Edit evidence (name, dates, label, owner); the review fields are refused (400), the date rules run on the merged evidence, and a stale version is refused (409 stale_version) */
+  /** Edit evidence (name, dates, label, owner); the review fields are refused (400), the date rules run on the merged evidence, and a stale version is refused (409 stale_version). An edit that changes accepted or rejected evidence sends it back to pending with no reviewer and no review time */
   patchEvidenceId: (path: { id: string }, body: PatchEvidenceIdBody): Promise<PatchEvidenceIdResponse> =>
     request<PatchEvidenceIdResponse>('PATCH', `/api/v1/evidence/${encodeURIComponent(path.id)}`, body),
   /** Download the evidence file as an attachment (Content-Type from its format); every download is audited as document.downloaded. 404 when missing or hidden */
@@ -2450,6 +2505,9 @@ export const api = {
   /** Retire evidence; it is kept with its link and file, never deleted */
   postEvidenceIdRetire: (path: { id: string }, body: PostEvidenceIdRetireBody): Promise<PostEvidenceIdRetireResponse> =>
     request<PostEvidenceIdRetireResponse>('POST', `/api/v1/evidence/${encodeURIComponent(path.id)}/retire`, body),
+  /** Accept or reject evidence: sets the review status, the caller as reviewer and the review time, versioned (409 stale_version) and audited as record.updated in one transaction. Only an Admin or a Compliance Manager who did not add the evidence (403 otherwise, and always for API keys); 404 when missing or hidden. Editing reviewed evidence later sends it back to pending */
+  postEvidenceIdReview: (path: { id: string }, body: PostEvidenceIdReviewBody): Promise<PostEvidenceIdReviewResponse> =>
+    request<PostEvidenceIdReviewResponse>('POST', `/api/v1/evidence/${encodeURIComponent(path.id)}/review`, body),
   /** The active frameworks, each with its requirement, covered and implemented counts for the caller */
   getFrameworks: (): Promise<GetFrameworksResponse> => request<GetFrameworksResponse>('GET', '/api/v1/frameworks'),
   /** One framework with its counts for the caller; 404 when missing or hidden */
