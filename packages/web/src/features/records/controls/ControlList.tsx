@@ -1,5 +1,8 @@
-// Controls (D27, screen 3): every control with its code, framework, status, owner and last test,
+// Controls (D27, screen 3): every control with its code, Source note, status, owner and last test,
 // paged, sorted and filtered by the API (D47). A Control Owner sees only their own (D50, D199).
+// The Source note is the stored free-text `framework` field (D212 (5)); its column, filter and URL
+// parameter keep the API's name, `framework`. The requirements a control satisfies are its
+// SATISFIES links, shown on the control's page, never this note.
 import { Link } from '@tanstack/react-router';
 import { CONTROL_STATUSES } from '@grc/shared';
 import { Plus } from 'lucide-react';
@@ -23,7 +26,7 @@ const SCREEN = SCREENS.find((s) => s.path === '/controls')!;
 
 export const CONTROL_FILTERS: readonly FilterDef[] = [
   { key: 'controlStatus', label: 'Control status', anyText: 'Any status', options: choices(CONTROL_STATUSES) },
-  { key: 'framework', label: 'Framework', anyText: 'Framework' },
+  { key: 'framework', label: 'Source note', anyText: 'Source note' },
 ];
 
 export function validateControlSearch(raw: Record<string, unknown>): ListSearch {
@@ -48,7 +51,7 @@ const COLUMNS: ColumnDef<Control>[] = [
   nameColumn<Control>(),
   {
     id: 'framework',
-    header: 'Framework',
+    header: 'Source note',
     cell: ({ record }) => <span className="whitespace-nowrap">{record.framework}</span>,
   },
   { id: 'controlStatus', header: 'Control status', cell: ({ record }) => <ValueBadge value={record.controlStatus} /> },

@@ -787,6 +787,35 @@ export type PostLinksRemoveBody = {
   toId: string;
 };
 
+/** POST /api/v1/mappings response. */
+export type PostMappingsResponse = {
+  type: 'SATISFIES';
+  fromId: string;
+  toId: string;
+  origin: 'manual';
+  createdAt: string;
+  createdBy: string;
+};
+
+/** POST /api/v1/mappings request body. */
+export type PostMappingsBody = {
+  controlId: string;
+  requirementId: string;
+};
+
+/** POST /api/v1/mappings/remove response. */
+export type PostMappingsRemoveResponse = {
+  type: 'SATISFIES';
+  fromId: string;
+  toId: string;
+};
+
+/** POST /api/v1/mappings/remove request body. */
+export type PostMappingsRemoveBody = {
+  controlId: string;
+  requirementId: string;
+};
+
 /** GET /api/v1/me response. */
 export type GetMeResponse = {
   user: {
@@ -1280,6 +1309,12 @@ export const api = {
   /** Remove a link added by mistake (D201: the same people who may add it). Answers 404 not_found, 403 forbidden, or 409 ai_link_review_only for a link found by the AI (D207) */
   postLinksRemove: (body: PostLinksRemoveBody): Promise<PostLinksRemoveResponse> =>
     request<PostLinksRemoveResponse>('POST', '/api/v1/links/remove', body),
+  /** Record that a control satisfies a requirement (D212 (3): Admins and Compliance Managers, for a control they can see). Answers 404 not_found, 403 forbidden, or 409 link_exists */
+  postMappings: (body: PostMappingsBody): Promise<PostMappingsResponse> =>
+    request<PostMappingsResponse>('POST', '/api/v1/mappings', body),
+  /** Take a mapping back (the same people who may add one). Answers 404 not_found, 403 forbidden, or 409 ai_link_review_only for a mapping suggested by the AI (D207) */
+  postMappingsRemove: (body: PostMappingsRemoveBody): Promise<PostMappingsRemoveResponse> =>
+    request<PostMappingsRemoveResponse>('POST', '/api/v1/mappings/remove', body),
   /** The signed-in user, their org, role and clearance, and whether MFA is set up */
   getMe: (): Promise<GetMeResponse> => request<GetMeResponse>('GET', '/api/v1/me'),
   /** The caller's org members for the owner picker, paged: id, name and role only */

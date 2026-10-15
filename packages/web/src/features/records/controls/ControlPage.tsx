@@ -1,9 +1,14 @@
 // A control's page and its create page, configuring the records kit: the control's own fields (code,
-// framework, status, last tested; D197). A Control Owner who hands their control to someone else
-// (D206) goes back to the Controls list with a message, since the control is no longer theirs.
+// Source note, status, last tested; D197). The Source note is the stored free-text `framework`
+// field, labelled for what it is (D212 (5)): a note of where the control comes from, not a mapping.
+// The requirements a control satisfies are its SATISFIES links, listed and changed under
+// "Requirements this control satisfies" (S2-007). A Control Owner who hands their control to
+// someone else (D206) goes back to the Controls list with a message, since the control is no
+// longer theirs.
 import { Link, useNavigate, type HistoryState } from '@tanstack/react-router';
 import { CONTROL_STATUSES } from '@grc/shared';
 import { ChevronLeft } from 'lucide-react';
+import { ControlRequirements } from '@/features/frameworks/mapping/ControlRequirements';
 import { choices, formatDate } from '../format';
 import type { FormFieldDef } from '../RecordForm';
 import { RelatedRecords } from '../links/RelatedRecords';
@@ -29,9 +34,10 @@ export const CONTROL_FORM_FIELDS: readonly FormFieldDef[] = [
   },
   {
     name: 'framework',
-    label: 'Framework',
+    label: 'Source note',
     control: 'text',
-    message: 'Enter the framework the code comes from.',
+    message: 'Enter where this control comes from, for example NIST 800-53.',
+    description: 'Free text for your own reference. The requirements this control satisfies are mapped separately.',
     placeholder: 'e.g. NIST 800-53',
   },
   {
@@ -66,10 +72,15 @@ export function ControlPage({ id }: { id: string }) {
       id={id}
       noun="control"
       back={<BackToControls />}
-      related={(control) => <RelatedRecords kind="control" noun="control" record={control} />}
+      related={(control) => (
+        <>
+          <RelatedRecords kind="control" noun="control" record={control} />
+          <ControlRequirements control={control} />
+        </>
+      )}
       details={(control) => [
         { label: 'Code', value: control.code },
-        { label: 'Framework', value: control.framework },
+        { label: 'Source note', value: control.framework },
         { label: 'Control status', value: <ValueBadge value={control.controlStatus} /> },
         { label: 'Last tested', value: formatDate(control.lastTestedDate) },
       ]}
