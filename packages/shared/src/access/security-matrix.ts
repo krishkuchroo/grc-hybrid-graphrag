@@ -149,6 +149,44 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Frameworks, the read side (S2-004). Every role views framework mappings (D50); the counts and
+    // the controls under a requirement hold only what the caller can see (D51). A control's
+    // requirements follow the control row, with a Control Owner limited to their own controls.
+    {
+      method: 'GET',
+      path: '/api/v1/frameworks',
+      access: { subject: 'framework_mapping', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/frameworks/:id',
+      access: { subject: 'framework_mapping', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/frameworks/:id/requirements',
+      access: { subject: 'framework_mapping', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/requirements/:id',
+      access: { subject: 'framework_mapping', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/controls/:id/requirements',
+      access: { subject: 'control', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
     // Framework mappings (S2-005, D212 (3)): adding and removing a control-to-requirement mapping
     // need the Framework-mappings `edit` cell (Admin and Compliance Manager); the service then
     // checks both records and `canMapControl`. An `ai` mapping is never removed here (D207).

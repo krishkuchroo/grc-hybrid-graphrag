@@ -21,6 +21,9 @@ export const DEFAULT_CONFIG = {
   port: 4800,
   logsDir: 'logs',
   quietMinutes: 10,
+  // After this long without a step and with no stop logged, an agent counts
+  // as gone (it died, or its run was stopped) and leaves the page.
+  dormantMinutes: 60,
   // The first Markdown table whose first header is "ID". `columns` maps the
   // header text (lower case) to the field the page shows.
   board: { file: 'TASKS.md', columns: { id: 'id', milestone: 'milestone', owner: 'owner', status: 'status' } },
