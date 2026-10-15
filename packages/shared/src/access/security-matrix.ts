@@ -247,5 +247,30 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Documents (S3-005, D53, D73): the `uploads` cell at the guard (the Control Owner, Auditor
+    // and Viewer get 403), then the role's view cell for the document's record type and the label,
+    // checked by the service and again by RLS (404 when hidden). Evidence documents are never
+    // listed or served here (S3-009). Every download is audited as `document.downloaded`.
+    {
+      method: 'GET',
+      path: '/api/v1/documents',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/documents/:id',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/documents/:id/download',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };
