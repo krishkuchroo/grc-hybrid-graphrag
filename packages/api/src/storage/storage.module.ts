@@ -18,8 +18,9 @@ export function fileStoreFromEnv(): FileStore {
   });
 }
 
-@Module({
+// Decorators are applied as plain calls, so the file loads without decorator syntax support.
+export class StorageModule {}
+Module({
   providers: [{ provide: FILE_STORE, useFactory: fileStoreFromEnv }],
   exports: [FILE_STORE],
-})
-export class StorageModule {}
+})(StorageModule);
