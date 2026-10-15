@@ -204,5 +204,48 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Audit findings (S3-010, D50, D213 (2), R11): the Auditor edits, Admin, Risk Manager,
+    // Compliance Manager, Control Owner and Analyst view, the Viewer sees none (403 on the list,
+    // 404 on every route naming a finding). CONCERNS links are added and removed with the
+    // finding's `edit` cell, and the service checks both records and `canLinkFinding`; an `ai`
+    // link is never removed here (D207), nor a finding's last one. The findings of a control
+    // follow the control row (a Control Owner only on their own controls), those of a risk the
+    // risk row; both list only findings the caller can see.
+    ...recordRoutes('audit_finding', 'audit-findings'),
+    {
+      method: 'GET',
+      path: '/api/v1/audit-findings/:id/concerns',
+      access: { subject: 'audit_finding', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/audit-findings/:id/concerns',
+      access: { subject: 'audit_finding', action: 'edit' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/audit-findings/:id/concerns/remove',
+      access: { subject: 'audit_finding', action: 'edit' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/controls/:id/audit-findings',
+      access: { subject: 'control', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/risks/:id/audit-findings',
+      access: { subject: 'risk', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };
