@@ -1,0 +1,44 @@
+{
+  "files": [
+    {
+      "output": "nist-800-53.json",
+      "file": "NIST_SP-800-53_rev5_catalog.json",
+      "publisher": "NIST",
+      "author": "NIST",
+      "documentTitle": "Electronic (OSCAL) Version of NIST SP 800-53 Rev 5.2.0 Controls and SP 800-53A Rev 5.2.0 Assessment Procedures",
+      "url": "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json",
+      "release": "5.2.0",
+      "downloadedOn": "2026-10-15"
+    },
+    {
+      "output": "nist-csf-2.json",
+      "file": "csf-2.0-cprt-export.json",
+      "publisher": "NIST",
+      "author": "NIST",
+      "documentTitle": "The NIST Cybersecurity Framework (CSF) 2.0 (NIST CSWP 29), JSON export of NIST's Cybersecurity and Privacy Reference Tool",
+      "url": "https://csrc.nist.gov/extensions/nudp/services/json/nudp/framework/version/csf_2_0_0/export/json?element=all",
+      "release": "2.0",
+      "downloadedOn": "2026-10-15"
+    },
+    {
+      "output": "map-csf-2-to-800-53.json",
+      "file": "Cybersecurity_Framework_v2-0_Concept_Crosswalk_800-53_5_2_0_draft.xlsx",
+      "publisher": "NIST",
+      "author": "NIST",
+      "documentTitle": "Cybersecurity Framework v2.0 to SP 800-53 Rev. 5.2.0, NIST's informative reference in the OLIR catalog (reference 186, developer: NIST)",
+      "url": "https://csrc.nist.gov/csrc/media/projects/olir/documents/submissions/Cybersecurity_Framework_v2-0_Concept_Crosswalk_800-53_5_2_0_draft.xlsx",
+      "release": "1.0.0",
+      "downloadedOn": "2026-10-15"
+    },
+    {
+      "output": "map-800-53-to-iso-27001.json",
+      "file": "sp800-53r5-to-iso-27001-mapping-2022-OLIR-2023-10-12-UPDATED.xlsx",
+      "publisher": "NIST",
+      "author": "NIST",
+      "documentTitle": "SP 800-53 Rev. 5 to ISO/IEC 27001:2022, NIST's mapping in the OLIR catalog (reference 155, developer: NIST)",
+      "url": "https://csrc.nist.gov/csrc/media/Projects/olir/documents/submissions/sp800-53r5-to-iso-27001-mapping-2022-OLIR-2023-10-12-UPDATED.xlsx",
+      "release": "1.0.0",
+      "downloadedOn": "2026-10-15"
+    }
+  ]
+}

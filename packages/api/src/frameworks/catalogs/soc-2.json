@@ -1,0 +1,381 @@
+{
+  "key": "soc_2",
+  "frameworkVersion": "2017 (revised points of focus 2022)",
+  "source": {
+    "publisher": "AICPA",
+    "author": "project",
+    "documentTitle": "2017 Trust Services Criteria for Security, Availability, Processing Integrity, Confidentiality, and Privacy (with revised points of focus, 2022) (criterion IDs only; titles and descriptions written by the project)",
+    "url": "https://www.aicpa-cima.com/resources/download/2017-trust-services-criteria-with-revised-points-of-focus-2022",
+    "release": "2017 (revised points of focus 2022)",
+    "downloadedOn": null,
+    "sha256": null
+  },
+  "requirements": [
+    {
+      "code": "CC1.1",
+      "title": "Integrity and ethical values",
+      "description": "Leadership sets the tone that honest and ethical behaviour is expected, and the organization holds people to it.",
+      "group": "CC1"
+    },
+    {
+      "code": "CC1.2",
+      "title": "Board oversight",
+      "description": "The board works independently of management and oversees how internal control is designed and run.",
+      "group": "CC1"
+    },
+    {
+      "code": "CC1.3",
+      "title": "Structure, authority and reporting lines",
+      "description": "Management sets up the organization's structure, reporting lines and the authority and duties each role has.",
+      "group": "CC1"
+    },
+    {
+      "code": "CC1.4",
+      "title": "Competent people",
+      "description": "The organization hires, develops and keeps people with the skills needed to meet its objectives.",
+      "group": "CC1"
+    },
+    {
+      "code": "CC1.5",
+      "title": "Accountability for internal control",
+      "description": "People are held accountable for their part in internal control as they pursue the organization's objectives.",
+      "group": "CC1"
+    },
+    {
+      "code": "CC2.1",
+      "title": "Quality information for control",
+      "description": "The organization gets or produces relevant, good-quality information that supports internal control.",
+      "group": "CC2"
+    },
+    {
+      "code": "CC2.2",
+      "title": "Internal communication",
+      "description": "Objectives and responsibilities for internal control are communicated inside the organization.",
+      "group": "CC2"
+    },
+    {
+      "code": "CC2.3",
+      "title": "External communication",
+      "description": "The organization communicates with outside parties about matters that affect how internal control works.",
+      "group": "CC2"
+    },
+    {
+      "code": "CC3.1",
+      "title": "Clear objectives",
+      "description": "Objectives are stated clearly enough that the risks to reaching them can be identified and assessed.",
+      "group": "CC3"
+    },
+    {
+      "code": "CC3.2",
+      "title": "Risk identification and analysis",
+      "description": "Risks to the objectives are identified across the organization and analysed to decide how to manage them.",
+      "group": "CC3"
+    },
+    {
+      "code": "CC3.3",
+      "title": "Fraud risk",
+      "description": "The chance of fraud is considered when the organization assesses risks to its objectives.",
+      "group": "CC3"
+    },
+    {
+      "code": "CC3.4",
+      "title": "Changes that affect control",
+      "description": "Significant changes that could affect internal control are identified and assessed.",
+      "group": "CC3"
+    },
+    {
+      "code": "CC4.1",
+      "title": "Ongoing and separate evaluations",
+      "description": "The organization checks, continuously or periodically, that the parts of internal control are present and working.",
+      "group": "CC4"
+    },
+    {
+      "code": "CC4.2",
+      "title": "Reporting control deficiencies",
+      "description": "Control weaknesses are reported in time to those who must fix them, including senior management and the board.",
+      "group": "CC4"
+    },
+    {
+      "code": "CC5.1",
+      "title": "Control activities that reduce risk",
+      "description": "The organization picks and builds control activities that bring risks to its objectives down to acceptable levels.",
+      "group": "CC5"
+    },
+    {
+      "code": "CC5.2",
+      "title": "General controls over technology",
+      "description": "The organization picks and builds general controls over its technology to support its objectives.",
+      "group": "CC5"
+    },
+    {
+      "code": "CC5.3",
+      "title": "Policies and procedures",
+      "description": "Control activities are put in place through policies stating what is expected and procedures that carry them out.",
+      "group": "CC5"
+    },
+    {
+      "code": "CC6.1",
+      "title": "Logical access security",
+      "description": "Software, infrastructure and architecture protect information assets from unauthorized logical access.",
+      "group": "CC6"
+    },
+    {
+      "code": "CC6.2",
+      "title": "User registration and authorization",
+      "description": "New users are registered and authorized before credentials are issued, and access is removed when no longer needed.",
+      "group": "CC6"
+    },
+    {
+      "code": "CC6.3",
+      "title": "Role-based access changes",
+      "description": "Access to data, software and systems is granted, changed and removed by role, following least privilege.",
+      "group": "CC6"
+    },
+    {
+      "code": "CC6.4",
+      "title": "Physical access restrictions",
+      "description": "Physical access to facilities and protected information assets is limited to authorized people.",
+      "group": "CC6"
+    },
+    {
+      "code": "CC6.5",
+      "title": "Secure disposal of assets",
+      "description": "Data and software are removed from physical assets before they are disposed of, so information cannot be recovered.",
+      "group": "CC6"
+    },
+    {
+      "code": "CC6.6",
+      "title": "Protection at the system boundary",
+      "description": "Measures protect the system against threats coming from outside its boundaries.",
+      "group": "CC6"
+    },
+    {
+      "code": "CC6.7",
+      "title": "Protecting data in movement",
+      "description": "Transmission, movement and removal of information are limited to authorized users and processes and protected.",
+      "group": "CC6"
+    },
+    {
+      "code": "CC6.8",
+      "title": "Preventing malicious software",
+      "description": "Measures prevent or detect unauthorized or malicious software being introduced into the system.",
+      "group": "CC6"
+    },
+    {
+      "code": "CC7.1",
+      "title": "Detecting vulnerabilities and configuration changes",
+      "description": "Detection and monitoring find configuration changes and newly found vulnerabilities that could cause harm.",
+      "group": "CC7"
+    },
+    {
+      "code": "CC7.2",
+      "title": "Monitoring for anomalies",
+      "description": "System components are monitored for unusual activity that may signal attacks, errors or natural disasters.",
+      "group": "CC7"
+    },
+    {
+      "code": "CC7.3",
+      "title": "Evaluating security events",
+      "description": "Security events are evaluated to decide whether they are incidents that could stop objectives being met.",
+      "group": "CC7"
+    },
+    {
+      "code": "CC7.4",
+      "title": "Incident response",
+      "description": "A defined response programme is used to understand, contain, fix and communicate about security incidents.",
+      "group": "CC7"
+    },
+    {
+      "code": "CC7.5",
+      "title": "Incident recovery",
+      "description": "Activities are identified and carried out to recover from security incidents that have happened.",
+      "group": "CC7"
+    },
+    {
+      "code": "CC8.1",
+      "title": "Change management",
+      "description": "Changes to infrastructure, data, software and procedures are authorized, designed, tested, approved and recorded.",
+      "group": "CC8"
+    },
+    {
+      "code": "CC9.1",
+      "title": "Business disruption risk",
+      "description": "Risks from possible business disruptions are identified, and mitigation activities are chosen and built.",
+      "group": "CC9"
+    },
+    {
+      "code": "CC9.2",
+      "title": "Vendor and business partner risk",
+      "description": "Risks linked to vendors and business partners are assessed and managed.",
+      "group": "CC9"
+    },
+    {
+      "code": "A1.1",
+      "title": "Capacity planning",
+      "description": "Current processing capacity and use are maintained and monitored so capacity can grow to meet demand.",
+      "group": "A1"
+    },
+    {
+      "code": "A1.2",
+      "title": "Environmental protection, backup and recovery infrastructure",
+      "description": "Environmental protections, software, data backups and recovery infrastructure are put in place and kept working.",
+      "group": "A1"
+    },
+    {
+      "code": "A1.3",
+      "title": "Recovery plan testing",
+      "description": "The procedures for recovering the system are tested to show they support its availability commitments.",
+      "group": "A1"
+    },
+    {
+      "code": "C1.1",
+      "title": "Identifying confidential information",
+      "description": "Confidential information is identified and kept in a way that protects its confidentiality.",
+      "group": "C1"
+    },
+    {
+      "code": "C1.2",
+      "title": "Disposing of confidential information",
+      "description": "Confidential information is disposed of in a way that meets the organization's confidentiality commitments.",
+      "group": "C1"
+    },
+    {
+      "code": "PI1.1",
+      "title": "Processing specifications",
+      "description": "Information about processing, including definitions of the data and what is processed, is obtained or produced and used.",
+      "group": "PI1"
+    },
+    {
+      "code": "PI1.2",
+      "title": "System input controls",
+      "description": "Inputs to the system are checked for completeness and accuracy so processing results are reliable.",
+      "group": "PI1"
+    },
+    {
+      "code": "PI1.3",
+      "title": "Processing controls",
+      "description": "System processing is controlled so products, services and reports meet their specifications.",
+      "group": "PI1"
+    },
+    {
+      "code": "PI1.4",
+      "title": "Output controls",
+      "description": "Outputs are produced completely and accurately and delivered only to the intended recipients on time.",
+      "group": "PI1"
+    },
+    {
+      "code": "PI1.5",
+      "title": "Storage of inputs and outputs",
+      "description": "Stored inputs, items in processing and outputs are kept complete, accurate and timely, in line with specifications.",
+      "group": "PI1"
+    },
+    {
+      "code": "P1.1",
+      "title": "Privacy notice",
+      "description": "Data subjects are told how their personal information is collected, used, kept, shared and disposed of.",
+      "group": "P1"
+    },
+    {
+      "code": "P2.1",
+      "title": "Choice and consent",
+      "description": "Data subjects are told their choices about their personal information, and consent is obtained and recorded where needed.",
+      "group": "P2"
+    },
+    {
+      "code": "P3.1",
+      "title": "Collection in line with objectives",
+      "description": "Personal information is collected only as needed for the organization's privacy objectives.",
+      "group": "P3"
+    },
+    {
+      "code": "P3.2",
+      "title": "Explicit consent for collection",
+      "description": "Explicit consent is obtained, and recorded, before collecting personal information that requires it.",
+      "group": "P3"
+    },
+    {
+      "code": "P4.1",
+      "title": "Limited use",
+      "description": "Personal information is used only for the purposes the organization's privacy objectives allow.",
+      "group": "P4"
+    },
+    {
+      "code": "P4.2",
+      "title": "Retention",
+      "description": "Personal information is kept only as long as needed to meet the organization's privacy objectives.",
+      "group": "P4"
+    },
+    {
+      "code": "P4.3",
+      "title": "Secure disposal",
+      "description": "Personal information is disposed of securely once it is no longer needed.",
+      "group": "P4"
+    },
+    {
+      "code": "P5.1",
+      "title": "Access by data subjects",
+      "description": "Data subjects who are identified and authenticated can see and get a copy of their stored personal information.",
+      "group": "P5"
+    },
+    {
+      "code": "P5.2",
+      "title": "Correction requests",
+      "description": "Data subjects can ask to correct personal information, and the change is made or the refusal explained.",
+      "group": "P5"
+    },
+    {
+      "code": "P6.1",
+      "title": "Disclosure to third parties",
+      "description": "Personal information is shared with third parties only for permitted purposes and with consent where needed.",
+      "group": "P6"
+    },
+    {
+      "code": "P6.2",
+      "title": "Record of authorized disclosures",
+      "description": "A full, accurate record is kept of authorized disclosures of personal information.",
+      "group": "P6"
+    },
+    {
+      "code": "P6.3",
+      "title": "Record of unauthorized disclosures",
+      "description": "A full, accurate record is kept of detected or reported unauthorized disclosures, including breaches.",
+      "group": "P6"
+    },
+    {
+      "code": "P6.4",
+      "title": "Third-party privacy commitments",
+      "description": "Vendors and other third parties given personal information are bound to privacy commitments and checked.",
+      "group": "P6"
+    },
+    {
+      "code": "P6.5",
+      "title": "Notification from third parties",
+      "description": "Third parties that hold personal information must report actual or suspected unauthorized disclosures.",
+      "group": "P6"
+    },
+    {
+      "code": "P6.6",
+      "title": "Breach notification",
+      "description": "Affected data subjects, regulators and others are notified of breaches and incidents as commitments require.",
+      "group": "P6"
+    },
+    {
+      "code": "P6.7",
+      "title": "Accounting of personal information held",
+      "description": "Data subjects can learn what personal information is held about them and to whom it has been disclosed.",
+      "group": "P6"
+    },
+    {
+      "code": "P7.1",
+      "title": "Data quality",
+      "description": "Personal information is kept accurate, complete and relevant for the purposes it is used for.",
+      "group": "P7"
+    },
+    {
+      "code": "P8.1",
+      "title": "Privacy inquiries, complaints and disputes",
+      "description": "Privacy inquiries, complaints and disputes are received, handled and resolved, and compliance is monitored.",
+      "group": "P8"
+    }
+  ]
+}

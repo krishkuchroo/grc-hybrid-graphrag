@@ -1,0 +1,2957 @@
+{
+  "source": {
+    "publisher": "NIST",
+    "author": "NIST",
+    "documentTitle": "Cybersecurity Framework v2.0 to SP 800-53 Rev. 5.2.0, NIST's informative reference in the OLIR catalog (reference 186, developer: NIST)",
+    "url": "https://csrc.nist.gov/csrc/media/projects/olir/documents/submissions/Cybersecurity_Framework_v2-0_Concept_Crosswalk_800-53_5_2_0_draft.xlsx",
+    "release": "1.0.0",
+    "downloadedOn": "2026-10-15",
+    "sha256": "5521fa73ace64d8a3014a7b1e971f0f20d32df5ff5e174632723bda09e7e908f"
+  },
+  "mappings": [
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "AT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "AU-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "MA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "MP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "PE-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "PL-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-28" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "PT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-04" },
+      "to": { "framework": "nist_800_53", "code": "CP-2(8)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-30(1)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-04" },
+      "to": { "framework": "nist_800_53", "code": "RA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-05" },
+      "to": { "framework": "nist_800_53", "code": "PM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-05" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-05" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-05" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OC-05" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-24" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-28" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-04" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-05" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-05" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-28" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-06" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-07" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-07" },
+      "to": { "framework": "nist_800_53", "code": "PM-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-07" },
+      "to": { "framework": "nist_800_53", "code": "PM-28" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-07" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RM-07" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-19" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-23" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-24" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-29" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-19" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-23" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-24" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-29" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-04" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-04" },
+      "to": { "framework": "nist_800_53", "code": "PS-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.RR-04" },
+      "to": { "framework": "nist_800_53", "code": "PS-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "AT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "AU-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "MA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "MP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "PE-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "PL-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "PT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "AT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "AU-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "MA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "MP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "PL-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "PT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "RA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "SA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.PO-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "AT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "AU-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "MA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "MP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PE-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PL-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-31" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "PT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-19" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-31" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-02" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.OV-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "AT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "AU-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "MA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "MP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PE-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PL-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-31" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "PT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-04" },
+      "to": { "framework": "nist_800_53", "code": "RA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-04" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-04" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-05" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-05" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-05" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-05" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-05" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-05" },
+      "to": { "framework": "nist_800_53", "code": "SR-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-06" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-06" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-07" },
+      "to": { "framework": "nist_800_53", "code": "RA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-07" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-07" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-07" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-07" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-08" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-08" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-08" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-08" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-08" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-08" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-08" },
+      "to": { "framework": "nist_800_53", "code": "SR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "PM-19" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "PM-28" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "PM-31" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-09" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "PM-31" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "RA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "GV.SC-10" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-02" },
+      "to": { "framework": "nist_800_53", "code": "AC-20" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-02" },
+      "to": { "framework": "nist_800_53", "code": "CM-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-02" },
+      "to": { "framework": "nist_800_53", "code": "SA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-02" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-03" },
+      "to": { "framework": "nist_800_53", "code": "AC-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-03" },
+      "to": { "framework": "nist_800_53", "code": "PL-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-03" },
+      "to": { "framework": "nist_800_53", "code": "PL-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-04" },
+      "to": { "framework": "nist_800_53", "code": "AC-20" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-04" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-04" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-05" },
+      "to": { "framework": "nist_800_53", "code": "RA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-05" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-05" },
+      "to": { "framework": "nist_800_53", "code": "RA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-07" },
+      "to": { "framework": "nist_800_53", "code": "CM-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-07" },
+      "to": { "framework": "nist_800_53", "code": "CM-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-07" },
+      "to": { "framework": "nist_800_53", "code": "SI-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "CM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "CM-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "MA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "MA-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "PL-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "PM-22" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "PM-23" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "SA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "SA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "SA-22" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "SI-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "SI-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.AM-08" },
+      "to": { "framework": "nist_800_53", "code": "SR-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-11(2)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-15(7)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-15(8)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-15" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-04" },
+      "to": { "framework": "nist_800_53", "code": "RA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-04" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-04" },
+      "to": { "framework": "nist_800_53", "code": "RA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-04" },
+      "to": { "framework": "nist_800_53", "code": "RA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-05" },
+      "to": { "framework": "nist_800_53", "code": "PM-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-05" },
+      "to": { "framework": "nist_800_53", "code": "RA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-05" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-05" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-06" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-07" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-07" },
+      "to": { "framework": "nist_800_53", "code": "CM-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-07" },
+      "to": { "framework": "nist_800_53", "code": "CM-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-08" },
+      "to": { "framework": "nist_800_53", "code": "RA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SA-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SA-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SA-15" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SA-17" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SI-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SR-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-09" },
+      "to": { "framework": "nist_800_53", "code": "SR-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.RA-10" },
+      "to": { "framework": "nist_800_53", "code": "SR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "AT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "AU-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "CP-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "MA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "MP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "PE-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "PL-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "PL-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "PM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "PT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SA-17(6)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "AT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "AU-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CP-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "CP-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "MA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "MP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "PL-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "PL-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "PM-31" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "PT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "RA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "RA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SA-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "AT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "AU-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "CP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "CP-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "MA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "MP-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "PE-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "PL-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "PL-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-31" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "PS-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "PT-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-04" },
+      "to": { "framework": "nist_800_53", "code": "CP-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-04" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-04" },
+      "to": { "framework": "nist_800_53", "code": "PL-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "ID.IM-04" },
+      "to": { "framework": "nist_800_53", "code": "SR-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-14" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-01" },
+      "to": { "framework": "nist_800_53", "code": "IA-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-02" },
+      "to": { "framework": "nist_800_53", "code": "IA-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "AC-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "AC-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-03" },
+      "to": { "framework": "nist_800_53", "code": "IA-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-04" },
+      "to": { "framework": "nist_800_53", "code": "IA-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-17" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-19" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "AC-24" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-05" },
+      "to": { "framework": "nist_800_53", "code": "IA-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-19" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AA-06" },
+      "to": { "framework": "nist_800_53", "code": "PE-20" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AT-01" },
+      "to": { "framework": "nist_800_53", "code": "AT-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AT-01" },
+      "to": { "framework": "nist_800_53", "code": "AT-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.AT-02" },
+      "to": { "framework": "nist_800_53", "code": "AT-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "CP-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "MP-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-28" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-32" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-39" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-43" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "AU-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-40" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SC-43" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "AC-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "AC-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "AC-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "AU-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "AU-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "CA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "CP-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-24" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-32" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-39" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-40" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SC-43" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SI-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SI-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SI-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-10" },
+      "to": { "framework": "nist_800_53", "code": "SI-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-11" },
+      "to": { "framework": "nist_800_53", "code": "CP-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.DS-11" },
+      "to": { "framework": "nist_800_53", "code": "CP-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-02" },
+      "to": { "framework": "nist_800_53", "code": "CM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-02" },
+      "to": { "framework": "nist_800_53", "code": "MA-3(6)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-02" },
+      "to": { "framework": "nist_800_53", "code": "SA-10(1)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-03" },
+      "to": { "framework": "nist_800_53", "code": "CM-7(9)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-10(3)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-3(1)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-39(1)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-49" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-51" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-04" },
+      "to": { "framework": "nist_800_53", "code": "AU-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-04" },
+      "to": { "framework": "nist_800_53", "code": "AU-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-04" },
+      "to": { "framework": "nist_800_53", "code": "AU-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-04" },
+      "to": { "framework": "nist_800_53", "code": "AU-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-04" },
+      "to": { "framework": "nist_800_53", "code": "AU-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-04" },
+      "to": { "framework": "nist_800_53", "code": "AU-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-04" },
+      "to": { "framework": "nist_800_53", "code": "SA-15(13)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-05" },
+      "to": { "framework": "nist_800_53", "code": "CM-7(2)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-05" },
+      "to": { "framework": "nist_800_53", "code": "CM-7(4)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-05" },
+      "to": { "framework": "nist_800_53", "code": "CM-7(5)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-05" },
+      "to": { "framework": "nist_800_53", "code": "SC-34" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-15" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-15(13)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-17" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.PS-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-24" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "CP-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-14" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-15" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-23" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-03" },
+      "to": { "framework": "nist_800_53", "code": "SA-24" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-24" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-36" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-03" },
+      "to": { "framework": "nist_800_53", "code": "SC-39" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-04" },
+      "to": { "framework": "nist_800_53", "code": "CP-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-04" },
+      "to": { "framework": "nist_800_53", "code": "CP-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-04" },
+      "to": { "framework": "nist_800_53", "code": "CP-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "PR.IR-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-01" },
+      "to": { "framework": "nist_800_53", "code": "AC-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-01" },
+      "to": { "framework": "nist_800_53", "code": "AU-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-01" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-01" },
+      "to": { "framework": "nist_800_53", "code": "CM-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-01" },
+      "to": { "framework": "nist_800_53", "code": "SC-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-01" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-02" },
+      "to": { "framework": "nist_800_53", "code": "PE-20" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-03" },
+      "to": { "framework": "nist_800_53", "code": "AC-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-03" },
+      "to": { "framework": "nist_800_53", "code": "AU-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-03" },
+      "to": { "framework": "nist_800_53", "code": "AU-13" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-03" },
+      "to": { "framework": "nist_800_53", "code": "CM-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-03" },
+      "to": { "framework": "nist_800_53", "code": "CM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-06" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-06" },
+      "to": { "framework": "nist_800_53", "code": "PS-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-06" },
+      "to": { "framework": "nist_800_53", "code": "SA-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-06" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "AC-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "AC-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "AU-12" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "CM-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "CM-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "CM-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "CM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "SC-34" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "SC-35" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.CM-09" },
+      "to": { "framework": "nist_800_53", "code": "SI-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-02" },
+      "to": { "framework": "nist_800_53", "code": "AU-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-02" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-02" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-03" },
+      "to": { "framework": "nist_800_53", "code": "AU-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-03" },
+      "to": { "framework": "nist_800_53", "code": "CA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-03" },
+      "to": { "framework": "nist_800_53", "code": "PM-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-18" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-28" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-30" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-06" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-15" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-06" },
+      "to": { "framework": "nist_800_53", "code": "PM-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-06" },
+      "to": { "framework": "nist_800_53", "code": "RA-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-07" },
+      "to": { "framework": "nist_800_53", "code": "PM-16" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-07" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-07" },
+      "to": { "framework": "nist_800_53", "code": "RA-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-08" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "DE.AE-08" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-01" },
+      "to": { "framework": "nist_800_53", "code": "SR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-04" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-04" },
+      "to": { "framework": "nist_800_53", "code": "IR-5" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-04" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-04" },
+      "to": { "framework": "nist_800_53", "code": "IR-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-05" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MA-05" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-03" },
+      "to": { "framework": "nist_800_53", "code": "AU-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-03" },
+      "to": { "framework": "nist_800_53", "code": "SI-2(7)" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-06" },
+      "to": { "framework": "nist_800_53", "code": "AU-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-06" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-06" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-07" },
+      "to": { "framework": "nist_800_53", "code": "AU-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-07" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-07" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-08" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-08" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-08" },
+      "to": { "framework": "nist_800_53", "code": "RA-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.AN-08" },
+      "to": { "framework": "nist_800_53", "code": "RA-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-02" },
+      "to": { "framework": "nist_800_53", "code": "SR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-7" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-3" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.CO-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MI-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RS.MI-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-01" },
+      "to": { "framework": "nist_800_53", "code": "CP-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-01" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-02" },
+      "to": { "framework": "nist_800_53", "code": "CP-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-02" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-03" },
+      "to": { "framework": "nist_800_53", "code": "CP-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-03" },
+      "to": { "framework": "nist_800_53", "code": "CP-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-03" },
+      "to": { "framework": "nist_800_53", "code": "CP-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-04" },
+      "to": { "framework": "nist_800_53", "code": "IR-1" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-04" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-9" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-04" },
+      "to": { "framework": "nist_800_53", "code": "PM-11" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-05" },
+      "to": { "framework": "nist_800_53", "code": "CP-10" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-06" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.RP-06" },
+      "to": { "framework": "nist_800_53", "code": "IR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.CO-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.CO-03" },
+      "to": { "framework": "nist_800_53", "code": "IR-6" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.CO-03" },
+      "to": { "framework": "nist_800_53", "code": "SR-8" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.CO-04" },
+      "to": { "framework": "nist_800_53", "code": "CP-2" }
+    },
+    {
+      "from": { "framework": "nist_csf_2", "code": "RC.CO-04" },
+      "to": { "framework": "nist_800_53", "code": "IR-4" }
+    }
+  ]
+}
