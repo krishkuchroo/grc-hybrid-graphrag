@@ -1,3 +1,4 @@
 // The synthetic data generators (D11, D18, D42).
 export * from './world/index.js';
 export * from './sources/index.js';
+export * from './connectors/index.js';

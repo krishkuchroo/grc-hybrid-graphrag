@@ -22,6 +22,7 @@
     "frameworks:load": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/frameworks-load.ts",
     "graph:leftovers": "node packages/infra/scripts/leftover-org-databases.ts",
     "seed:demo": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/seed-demo.ts",
+    "gen:data": "node --experimental-transform-types --disable-warning=ExperimentalWarning --use-system-ca packages/infra/scripts/gen-data.ts",
     "gen:api-client": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/web/scripts/gen-api-client.ts"
   },
   "devDependencies": {
