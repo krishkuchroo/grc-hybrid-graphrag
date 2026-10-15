@@ -3,6 +3,7 @@
 Moved out of CLAUDE.md on 2026-10-15 (D225), word for word, so CLAUDE.md stays short for every agent turn. The decisions behind it are in `memory.md`.
 
 ## Agent monitor (D100–D103, v2: D148–D158, D161)
+
 - Run `node .claude/monitor/server.mjs`, then open http://127.0.0.1:4800. How it works and how to reuse it: `.claude/monitor/README.md`.
 - Tabs: Overview (attention, open questions, health, tokens today, milestones), Agents, Launch, Tokens, Activity (log search), Board.
 - Notes reach an agent at its next step, to one agent or several. Answers to open questions reach the main session with the user's next message there (D155).
@@ -11,7 +12,9 @@ Moved out of CLAUDE.md on 2026-10-15 (D225), word for word, so CLAUDE.md stays s
 - Pause or stop a workflow in `/workflows`.
 
 ## Logs (D92, D107)
+
 Kept in `logs/`, which is git-ignored. Only the hooks and the monitor write there.
+
 - `guardrails.jsonl`: blocks, and errors from hooks that failed.
 - `activity.jsonl`: each agent's steps (the monitor's hook).
 - `edits.jsonl`: who edited which file, for the hand-in backstop (the guard rails' `record-checkout.mjs`, D157).
@@ -22,13 +25,16 @@ Kept in `logs/`, which is git-ignored. Only the hooks and the monitor write ther
 - `build-errors.md`: the errors log.
 
 ## Where the guard rails live
+
 - `.claude/hooks/`: one file per rule, with the shared code in `lib/`.
 - Tests: `node --test '.claude/hooks/__tests__/*.test.mjs'`, and for the monitor `node --test '.claude/monitor/__tests__/*.test.mjs'`.
 - Git's pre-commit secret scan is `.claude/githooks/pre-commit`. Switch it on at setup with `git config core.hooksPath .claude/githooks`.
 - **Fail safe (D119):** a command the guard rails can't read is blocked. That covers a program name or file name built at run time (`$X`, `$(…)`), git and gh aliases, and an agent setting `COMPOSE_*` or `GIT_CONFIG_*`.
 
 ## Testing rules in full (locked 2026-09-28; D167, D168, D170–D180)
+
 > **Paused by fast mode (D222, 2026-10-15):** no new tests and no test runs gate a task until the MVP demo works. D224 brings back one review-and-test round per slice. The rules below apply in full again when testing starts.
+
 - **Test kinds, named by what they need (D177):**
   - `*.unit.test.ts`: nothing. The default kind.
   - `*.db.test.ts`: Postgres, Neo4j or SeaweedFS, through throwaway databases.
