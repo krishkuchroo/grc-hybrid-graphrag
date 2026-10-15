@@ -1,0 +1,9 @@
+sys_id,name,sys_class_name,u_criticality,data_classification,owner_email,hosted_on,runs_on
+CMDB-1001,Order service,Application,Critical,Confidential,admin@acme.example,CMDB-1003,CMDB-1005
+CMDB-1002,Inventory service,Application,High,Internal,analyst@acme.example,CMDB-1004,CMDB-1005
+CMDB-1003,App server prod-01,Server,High,Confidential,admin@acme.example,,
+CMDB-1004,App server prod-02,Server,High,Internal,admin@acme.example,,
+CMDB-1005,Kubernetes platform,Cloud Service,Critical,Confidential,admin@acme.example,,
+CMDB-1006,Session cache,Database,Medium,Internal,analyst@acme.example,CMDB-1004,
+CMDB-1007,Monitoring dashboards,Application,Medium,Internal,analyst@acme.example,CMDB-1004,
+CMDB-1008,Meeting room displays,Endpoint,Low,Public,admin@acme.example,,

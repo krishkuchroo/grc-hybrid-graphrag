@@ -1,0 +1,24 @@
+Globex Ltd - Business Continuity Runbook
+Version 2.0, effective 1 February 2026
+Owner: Compliance Manager
+
+1. Purpose
+This runbook describes how Globex keeps deliveries moving when the warehouse management system or
+a depot is unavailable.
+
+2. Triggers
+2.1 The warehouse management system is unavailable for more than 30 minutes.
+2.2 A depot loses power or network for more than one hour.
+
+3. Steps
+3.1 The duty manager declares a continuity event and opens the event record.
+3.2 Operations switch to the warehouse failover site.
+3.3 Drivers keep scanning; scans queue on the device and upload when the system returns.
+3.4 Customers see a status note on the tracking page.
+
+4. Recovery
+4.1 Switch back to the main site once it has been stable for two hours.
+4.2 Reconcile queued scans with the billing service before the next billing run.
+
+5. Review
+Every continuity event is reviewed within 10 working days.

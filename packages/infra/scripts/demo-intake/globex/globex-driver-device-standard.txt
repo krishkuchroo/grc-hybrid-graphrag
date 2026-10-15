@@ -1,0 +1,22 @@
+Globex Ltd - Driver Device Standard
+Version 1.4, effective 1 April 2026
+Owner: Compliance Manager
+
+1. Purpose
+This standard covers the handheld scanners and phones Globex drivers carry, and the data on them.
+It supports the Mobile Device Policy.
+
+2. Enrolment
+2.1 Every scanner is enrolled in mobile device management before it leaves the depot.
+2.2 A scanner that is not enrolled cannot sign in to the warehouse management system.
+
+3. Use
+3.1 Scanners are used only for deliveries, collections and proof of delivery.
+3.2 Drivers sign in with their own account at the start of every shift.
+
+4. Loss and theft
+4.1 A lost or stolen scanner is reported to the depot supervisor straight away.
+4.2 The device team locks and wipes it remotely within one hour of the report.
+
+5. Data
+Delivery photos and signatures are uploaded at the end of each stop and are not kept on the device.

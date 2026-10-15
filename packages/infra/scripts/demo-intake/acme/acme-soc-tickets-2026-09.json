@@ -1,0 +1,26 @@
+[
+  {
+    "ticket": "SOC-4471",
+    "opened": "2026-09-03T08:14:00Z",
+    "severity": "high",
+    "summary": "Ransomware behaviour blocked by endpoint detection on the build server",
+    "assets": ["Build server"],
+    "status": "closed"
+  },
+  {
+    "ticket": "SOC-4502",
+    "opened": "2026-09-11T22:40:00Z",
+    "severity": "medium",
+    "summary": "Spike in failed sign-ins on the customer portal from one address range",
+    "assets": ["Customer portal"],
+    "status": "closed"
+  },
+  {
+    "ticket": "SOC-4538",
+    "opened": "2026-09-24T13:05:00Z",
+    "severity": "low",
+    "summary": "Staff member reported a phishing email impersonating the payroll team",
+    "assets": ["Finance laptops"],
+    "status": "closed"
+  }
+]

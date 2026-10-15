@@ -1,0 +1,18 @@
+[
+  {
+    "ticket": "GSOC-0912",
+    "opened": "2026-09-05T06:20:00Z",
+    "severity": "medium",
+    "summary": "VPN sign-ins for one driver account from two countries within an hour",
+    "assets": ["VPN gateway"],
+    "status": "closed"
+  },
+  {
+    "ticket": "GSOC-0931",
+    "opened": "2026-09-17T11:45:00Z",
+    "severity": "high",
+    "summary": "Malware quarantined on a dispatch office PC",
+    "assets": ["Dispatch office PCs"],
+    "status": "closed"
+  }
+]

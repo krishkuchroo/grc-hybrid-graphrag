@@ -1,0 +1,6 @@
+Asset Tag,Device Name,Kind,Tier,Classification,Managed By,Hosted On
+LS-201,Branch hypervisor (Leeds),Server,High,Internal,risk.manager@acme.example,
+LS-202,Branch file server (Leeds),Server,Medium,Internal,risk.manager@acme.example,LS-201
+LS-203,Print server (Leeds),Server,Medium,Internal,risk.manager@acme.example,LS-201
+LS-204,Branch router (Leeds),Network Device,High,Internal,risk.manager@acme.example,
+LS-205,Branch Wi-Fi controller (Leeds),Network Device,Medium,Public,risk.manager@acme.example,
