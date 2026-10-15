@@ -15,7 +15,12 @@
 // - Evidence document rows are written and read only under the intake system context (R12), after
 //   the evidence rules have passed and the evidence was found by the graph query.
 // - Stale saves are refused (D69), evidence is retired, never deleted, and numbers come from the
-//   per-org `evidence` counter (D68, D213 (1)). The review fields are set only at creation here.
+//   per-org `evidence` counter (D68, D213 (1)).
+// - Review (S3-021, D213 (2), D220 (4)): new evidence is `pending`; an Admin or a Compliance
+//   Manager who sees it and didn't add it accepts or rejects it (`canReviewEvidence`), which sets
+//   the reviewer and time, versioned and audited in one transaction. API keys never review (R16).
+//   An edit that changes accepted or rejected evidence sends it back to `pending` with no reviewer
+//   and no review time, in the edit's own transaction and audit entry (D220 (5)).
 // - Log lines about a failed write hold only the error's type and code and the IDs (D163, D164);
 //   audit entries hold fields and IDs, never file contents or file names.
 import { randomUUID } from 'node:crypto';
@@ -32,6 +37,7 @@ import {
   canAddEvidence,
   canChangeLabel,
   canEditEvidence,
+  canReviewEvidence,
   canSeeEvidence,
   defaultLabel,
   evidenceDateMessage,
@@ -98,12 +104,14 @@ export const evidenceControlSchema = z.object({
 });
 
 /** Evidence as the API returns it: the record, the controls it supports that the caller can see,
- * its validity today, the reviewer's name, and whether the caller may change it. */
+ * its validity today, the reviewer's name, whether the caller may change it, and whether the caller
+ * may accept or reject it. */
 export const evidenceOutSchema = evidenceRecordSchema.extend({
   controls: z.array(evidenceControlSchema),
   validity: z.enum(EVIDENCE_VALIDITIES),
   reviewer: z.object({ id: z.string(), name: z.string() }).nullable(),
   canEdit: z.boolean(),
+  canReview: z.boolean(),
 });
 
 export type EvidenceOut = z.infer<typeof evidenceOutSchema>;
@@ -130,6 +138,19 @@ export const evidenceFormFieldsSchema = z.object({
 
 /** The body of `POST /api/v1/evidence/:id/retire`. */
 export const retireEvidenceBodySchema = z.strictObject({ version: z.int().min(1) });
+
+/** The decisions a review can make (D213 (2)): every review status but `pending`. */
+export const EVIDENCE_REVIEW_DECISIONS = ['accepted', 'rejected'] as const;
+export type EvidenceReviewDecision = (typeof EVIDENCE_REVIEW_DECISIONS)[number];
+
+/** The body of `POST /api/v1/evidence/:id/review`. */
+export const reviewEvidenceBodySchema = z.strictObject({
+  decision: z.enum(EVIDENCE_REVIEW_DECISIONS),
+  version: z.int().min(1),
+});
+
+/** The stored review fields: a review's audit entry always holds all three (D213 (2)). */
+const REVIEW_PROPS = ['reviewStatus', 'reviewedBy', 'reviewedAt'] as const;
 
 /** What a download sends: the stored bytes and the headers that go with them. */
 export interface EvidenceFile {
@@ -260,6 +281,23 @@ function evidenceVisibleTo(caller: Caller, found: Found): boolean {
 function evidenceEditableBy(caller: Caller, found: Found): boolean {
   const evidence = { label: String(found.p['sensitivity']), createdBy: String(found.p['createdBy']) };
   return canEditEvidence(caller, evidence, visibleOwners(caller, found.controls));
+}
+
+/** Whether the caller may accept or reject an evidence item (D220 (4)); never an API key (R16). */
+function evidenceReviewableBy(caller: Caller, found: Found): boolean {
+  if (caller.apiKeyId !== undefined) return false;
+  const createdBy = found.p['createdBy'];
+  const evidence = {
+    label: String(found.p['sensitivity']),
+    createdBy: typeof createdBy === 'string' ? createdBy : '',
+  };
+  return canReviewEvidence(caller, evidence, visibleOwners(caller, found.controls));
+}
+
+/** Whether stored evidence has been accepted or rejected (a missing review status is `pending`). */
+function isReviewed(stored: Record<string, unknown>): boolean {
+  const status = stored['reviewStatus'];
+  return status === 'accepted' || status === 'rejected';
 }
 
 /** The API's name for a stored property (`sensitivity` is `label`). */
@@ -517,6 +555,14 @@ export class EvidenceService {
         const message = problems.map((p) => `${p.field}: ${evidenceDateMessage(p)}`).join('; ');
         throw new ApiError(400, 'validation_failed', message);
       }
+      // D220 (5): an edit that changes accepted or rejected evidence sends it back to pending, with
+      // no reviewer and no review time, in this same transaction and audit entry.
+      const changesSomething = Object.entries(changes).some(([prop, value]) => (stored[prop] ?? null) !== value);
+      if (changesSomething && isReviewed(stored)) {
+        changes['reviewStatus'] = 'pending';
+        changes['reviewedBy'] = null;
+        changes['reviewedAt'] = null;
+      }
       return { action: 'record.updated', changes };
     });
   }
@@ -529,6 +575,31 @@ export class EvidenceService {
       action: 'record.retired',
       changes: { status: 'retired' },
     }));
+  }
+
+  /**
+   * Accepts or rejects evidence (D213 (2), D220 (4)). The checks run in this order: the body (400),
+   * an API key (403, R16), the evidence visible (404, the same as a missing one),
+   * `canReviewEvidence` (403), the version (409 `stale_version`). One transaction then sets the
+   * review status, the caller as reviewer and now as review time, with `version` + 1, and writes
+   * one `record.updated` entry holding those three fields. The same decision again still records
+   * the new reviewer and time.
+   */
+  async review(caller: Caller, id: string, input: unknown): Promise<EvidenceOut> {
+    const { decision, version } = reviewEvidenceBodySchema.parse(input ?? {});
+    if (caller.apiKeyId !== undefined) throw FORBIDDEN();
+    return this.change(
+      caller,
+      id,
+      version,
+      'evidence review failed',
+      (_stored, now) => ({
+        action: 'record.updated',
+        changes: { reviewStatus: decision, reviewedBy: caller.userId, reviewedAt: now },
+        audited: REVIEW_PROPS,
+      }),
+      evidenceReviewableBy,
+    );
   }
 
   /** The file of a visible evidence item, after its `document.downloaded` entry is written. The
@@ -579,13 +650,19 @@ export class EvidenceService {
     };
   }
 
-  /** The shared path of update and retire: lock, check, compare the version, save, audit. */
+  /** The shared path of update, retire and review: lock, check (`may`: editing by default),
+   * compare the version, save, audit. `before`/`after` hold the changed fields, plus every field
+   * the plan lists in `audited` even when its value stays the same. */
   private async change(
     caller: Caller,
     id: string,
     version: number,
     failure: string,
-    plan: (stored: Record<string, unknown>) => { action: string; changes: Record<string, unknown> },
+    plan: (
+      stored: Record<string, unknown>,
+      now: string,
+    ) => { action: string; changes: Record<string, unknown>; audited?: readonly string[] },
+    may: (caller: Caller, found: Found) => boolean = evidenceEditableBy,
   ): Promise<EvidenceOut> {
     if (ROLE_TABLE.evidence[caller.role] === 'none' || !isRecordId(id)) throw NOT_FOUND();
     let saved: Found;
@@ -594,19 +671,19 @@ export class EvidenceService {
         await run(tx, lockEvidenceQuery(id));
         const [current] = await found(tx, evidenceForWriteQuery(id));
         if (!current || !evidenceVisibleTo(caller, current)) throw NOT_FOUND();
-        if (!evidenceEditableBy(caller, current)) throw FORBIDDEN();
+        if (!may(caller, current)) throw FORBIDDEN();
         if (Number(current.p['version']) !== version) throw new ApiError(409, 'stale_version', STALE_MESSAGE);
-        const { action, changes } = plan(current.p);
+        const now = new Date().toISOString();
+        const { action, changes, audited = [] } = plan(current.p, now);
 
         const before: Record<string, unknown> = {};
         const after: Record<string, unknown> = {};
         for (const [prop, value] of Object.entries(changes)) {
           const old = current.p[prop] ?? null;
-          if (old === value) continue;
+          if (old === value && !audited.includes(prop)) continue;
           before[apiName(prop)] = old;
           after[apiName(prop)] = value;
         }
-        const now = new Date().toISOString();
         const next = { ...changes, version: version + 1, updatedAt: now, updatedBy: caller.userId };
         const [p] = await props(tx, saveEvidenceQuery(id, toNeo(next)));
         if (!p) throw NOT_FOUND();
@@ -668,7 +745,7 @@ export class EvidenceService {
   }
 
   /** The API's answers for visible items: the controls the caller can see, `validity` today, the
-   * reviewer's name, and `canEdit`. */
+   * reviewer's name, `canEdit` and `canReview`. */
   private async present(caller: Caller, items: readonly Found[]): Promise<EvidenceOut[]> {
     const reviewers = [
       ...new Set(
@@ -692,6 +769,7 @@ export class EvidenceService {
             ? null
             : { id: record.reviewedBy, name: names.get(record.reviewedBy) ?? record.reviewedBy },
         canEdit: evidenceEditableBy(caller, item),
+        canReview: evidenceReviewableBy(caller, item),
       };
     });
   }

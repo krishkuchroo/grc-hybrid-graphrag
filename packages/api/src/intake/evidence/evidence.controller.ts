@@ -6,6 +6,9 @@
 //                                                           -> 201; 409 evidence_exists
 //   PATCH /evidence/:id               evidence edit (own)   update schema + version; 409 stale_version
 //   POST  /evidence/:id/retire        evidence edit (own)   { version } -> the evidence
+//   POST  /evidence/:id/review        evidence view (own)   { decision, version } -> the evidence;
+//                                                           403 for API keys and unless
+//                                                           canReviewEvidence (S3-021, D220 (4))
 //   GET   /evidence/:id/download      evidence view (own)   the file, audited document.downloaded
 //   GET   /controls/:id/evidence      control view (own)    the evidence supporting a control
 // "(own)": the Control Owner's `upload_own` cell passes the guard and the service applies the owner
@@ -54,6 +57,7 @@ import {
   evidenceOutSchema,
   pagedEvidenceSchema,
   retireEvidenceBodySchema,
+  reviewEvidenceBodySchema,
   type EvidenceOut,
 } from './evidence.service.js';
 
@@ -127,6 +131,10 @@ export class EvidenceController {
     return this.evidence.retire(callerOf(request), id, version);
   }
 
+  review(request: AuthedRequest, id: string, body: unknown): Promise<EvidenceOut> {
+    return this.evidence.review(callerOf(request), id, body ?? {});
+  }
+
   async download(request: AuthedRequest, id: string): Promise<StreamableFile> {
     const file = await this.evidence.download(callerOf(request), id);
     return new StreamableFile(file.body, {
@@ -172,6 +180,14 @@ export class EvidenceController {
   Req()(p, 'retire', 0);
   Param('id')(p, 'retire', 1);
   Body()(p, 'retire', 2);
+
+  Post(':id/review')(p, 'review', d('review'));
+  HttpCode(200)(p, 'review', d('review'));
+  Requires('evidence', 'view', { own: true })(p, 'review', d('review'));
+  UseGuards(EvidenceItemAccessGuard)(p, 'review', d('review'));
+  Req()(p, 'review', 0);
+  Param('id')(p, 'review', 1);
+  Body()(p, 'review', 2);
 
   Get(':id/download')(p, 'download', d('download'));
   Header('X-Content-Type-Options', 'nosniff')(p, 'download', d('download'));
@@ -237,7 +253,7 @@ documentRoute({
   method: 'patch',
   path: '/evidence/{id}',
   summary:
-    'Edit evidence (name, dates, label, owner); the review fields are refused (400), the date rules run on the merged evidence, and a stale version is refused (409 stale_version)',
+    'Edit evidence (name, dates, label, owner); the review fields are refused (400), the date rules run on the merged evidence, and a stale version is refused (409 stale_version). An edit that changes accepted or rejected evidence sends it back to pending with no reviewer and no review time',
   body: intakeUpdateSchemas.evidence,
   response: evidenceOutSchema,
 });
@@ -246,6 +262,14 @@ documentRoute({
   path: '/evidence/{id}/retire',
   summary: 'Retire evidence; it is kept with its link and file, never deleted',
   body: retireEvidenceBodySchema,
+  response: evidenceOutSchema,
+});
+documentRoute({
+  method: 'post',
+  path: '/evidence/{id}/review',
+  summary:
+    'Accept or reject evidence: sets the review status, the caller as reviewer and the review time, versioned (409 stale_version) and audited as record.updated in one transaction. Only an Admin or a Compliance Manager who did not add the evidence (403 otherwise, and always for API keys); 404 when missing or hidden. Editing reviewed evidence later sends it back to pending',
+  body: reviewEvidenceBodySchema,
   response: evidenceOutSchema,
 });
 documentRoute({

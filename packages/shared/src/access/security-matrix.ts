@@ -265,6 +265,19 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Evidence review (S3-021, D213 (2), D220 (4)): the evidence `view` cell at the guard (the
+    // Viewer gets 404, the Control Owner passes with the owner rule), then in the service: API keys
+    // get 403 (a review is a person's judgement, R16), hidden or missing evidence 404, and
+    // `canReviewEvidence` 403 unless the caller is an Admin or a Compliance Manager who didn't add
+    // it. The decision, reviewer and time are versioned (409 stale_version) and audited as
+    // `record.updated` in the same transaction. Editing reviewed evidence sends it back to pending.
+    {
+      method: 'POST',
+      path: '/api/v1/evidence/:id/review',
+      access: { subject: 'evidence', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
     {
       method: 'GET',
       path: '/api/v1/controls/:id/evidence',
