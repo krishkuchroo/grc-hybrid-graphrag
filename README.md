@@ -40,4 +40,4 @@ Start it from the project folder with `node .claude/monitor/server.mjs`. It only
 
 ## Status
 
-Work in progress. The foundation (database setup, the wall between companies, roles, sign-in) is being built now, followed by 8 feature slices ending with the dashboard and the benchmark.
+Work in progress. The foundation (database setup, the wall between companies, roles, sign-in) and the risk register are done. The MVP is being built now, slice by slice: frameworks, uploads, processing, Analyst review, search and chat, then the dashboard and the benchmark.

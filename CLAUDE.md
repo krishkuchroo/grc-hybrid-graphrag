@@ -18,24 +18,18 @@ It's a portfolio project and research prototype. It **must look like a finished 
 5. **Skills:** use only skills from the plugin marketplaces, and **ask the user before invoking any skill** (D80). `skills.md` lists the approved ones.
 
 ## Roadmap (do the phases in this order)
-1. **Shape the project / decide the architecture.** ✅ Locked 2026-09-24 (D1–D27).
-2. **Architecture and tech stack.** ✅ Locked 2026-09-24 (D28–D35).
-3. **System design.** ✅ Locked 2026-09-24 (D36–D48).
-4. **Security.** ✅ Locked 2026-09-24 (D49–D59).
-5. **Networking.** ✅ Locked 2026-09-25 (D60–D65).
-6. **Data structures.** ✅ Locked 2026-09-25 (D66–D73).
-7. **Stress test and benchmark.** Run against datasets. Targets: consistent, concurrent, scalable, durable. ⏸ **Deferred by the user on 2026-09-25.** Resume later from the Q73 proposal in memory.md ("Deferred phases").
-8. **Orchestration layer.** A multi-agent setup that is configured from the finished plan. ✅ Decisions locked 2026-09-26 (D74–D107). ✅ Done 2026-09-27: 9 agents, the hooks, the monitor and the board, verified by smoke tests, with the review's findings fixed (D119).
-9. **Workflow generation.** Build workflows that support the orchestration layer and build out the solid project layer. Decided 2026-09-27 (D109–D121). The milestone workflow is written, and gets a real test after setup.
-10. **Build the MVP (fast mode, D222).** Builder → integrator per task until the demo works end to end; then test. ← *current phase*
+1–6. **Plan locked** (2026-09-24/25): shape and architecture (D1–D27), tech stack (D28–D35), system design (D36–D48), security (D49–D59), networking (D60–D65), data structures (D66–D73). ✅
+7. **Stress test and benchmark.** ⏸ Deferred by the user on 2026-09-25. Resume from the Q73 proposal in memory.md ("Deferred phases").
+8–9. **Orchestration layer and workflow** (D74–D121). ✅ Done 2026-09-27: 9 agents, the hooks, the monitor, the board and `milestone.js`.
+10. **Build the MVP (fast mode, D222–D224).** Builder → integrator per task, one review-and-test round per slice, until the demo works end to end; then full testing. ← *current phase*
 
 ## Current state (updated 2026-10-15; resume from here)
-- **FAST MODE (D222, D223, 2026-10-15): build a working MVP demo first, test after.** Each task goes builder → integrator, up to 4 builders at once. No new tests, no test writer, no reviewers, no 3× runs, no full suite. The finish check is lint + type checks only (`FAST_MODE` in `.claude/hooks/lib/checks.mjs`). **Per task** the integrator merges into local `main` and runs lint and type checks: no Docker rebuild and no push. **Per slice**, once every task is merged, one integrator commits the board, rebuilds the stack once, checks the app starts, and pushes `main` to GitHub once. Existing tests stay in the repo. The other guard rails and the security decisions (D49–D59) still apply. An agent that dies or hands in nothing runs once more on Opus 5.5 before it counts as blocked.
+- **FAST MODE (D222, D223, 2026-10-15): build a working MVP demo first, test after.** Each task goes builder → integrator, up to 4 builders at once. Per task: no new tests, no test writer, no reviewers, no 3× runs, no full suite (the test writer and both reviewers run once per slice instead, D224). The finish check is lint + type checks only (`FAST_MODE` in `.claude/hooks/lib/checks.mjs`). **Per task** the integrator merges into local `main` and runs lint and type checks: no Docker rebuild and no push. **Per slice**, once every task is merged, one integrator commits the board, rebuilds the stack once, checks the app starts, and pushes `main` to GitHub once. Existing tests stay in the repo. The other guard rails and the security decisions (D49–D59) still apply. An agent that dies or hands in nothing runs once more on Opus 5.5 before it counts as blocked.
 - **Each slice (D224):** plan if needed → build (builder → integrator per task) → review and test the whole slice once (test writer ║ code reviewer ║ security reviewer; fixes to a builder; at most 3 rounds) → slice tests on `main`, rebuild, push. Pushes need no user OK (`.claude/settings.local.json` allows `git push origin main`; only the integrator pushes). S2 runs alone first: `{milestone: "s2", step: "build"}`.
 - **How to run it:** one run for the whole MVP, `{milestone: ["s2", "s3", "s4", "s5", "s6", "s8"], step: "build"}`. The run takes the slices in order, plans a slice itself when the board has no tasks for it (no user OK between slices during the MVP, D223), builds it, pushes it, and moves on. A blocked task stops the run after its slice, with nothing pushed for that slice; fix it (`notes` or `from`) and run again with the same list, finished slices are skipped from the board. `fast: false` brings back the full chain (D219).
 - **MVP order:** S2 frameworks → S3 uploads + generators → S4 processing → S5 Analyst review → S6 search + chat → S8 dashboard + benchmark. **S7 waits until after the MVP.** S4, S5, S6 and S8 get planned on the way (fast-mode briefs: behaviour only, no tests). Then testing and the checkpoints (D114) on the finished MVP.
 - **M0 and S1 are done, approved and tagged** `m0` (D193) and `s1` (D218). Reports: `docs/checkpoints/m0.md`, `docs/checkpoints/s1.md`. The D160 history rewrite is done: old task branches carry the pre-rewrite history, so never merge them as they are.
-- **S2:** S2-001 is merged into local `main` (5440bf9) and marked done on the board; it goes to GitHub with the S2 slice-end push. S2-002 to S2-008 are to do. The Neo4j test-database fault (`logs/build-errors.md` item 37) only hits test runs, so it waits with the tests (D222); S7-027 is not run first. The failed database `org-e60975e8…` is still in Neo4j; deleting it needs the user's OK.
+- **S2:** in progress; `TASKS.md` has each task's status. Merged tasks go to GitHub with the S2 slice-end push. The Neo4j test-database fault (`logs/build-errors.md` item 37) only hits test runs, so it waits with the tests (D222); S7-027 is not run first. The failed database `org-e60975e8…` is still in Neo4j; deleting it needs the user's OK.
 - **Save point (2026-10-06):** branch `save/2026-10-06-restart` and local tag `checkpoint-2026-10-06`. `RoughWork.md` is the user's and never committed. If `TASKS.md` loses the S2/S3/S7 briefs, restore it with `git checkout save/2026-10-06-restart -- TASKS.md`.
 - **Cleanup (2026-10-09):** 88 old worktrees (Sep 27–29) removed; each one's last commit is kept as a local ref `refs/archive/worktrees/<name>`. The Mac hadn't restarted in weeks and swap was nearly full, which is what made builds crawl: restart it when it slows down.
 - **Starting up:** start Docker Desktop (the `grc-*` containers come back on their own); start the GRC DBMS **from Neo4j Desktop**; `pnpm test:env` should be all OK; the monitor is `node .claude/monitor/server.mjs`.
@@ -259,7 +253,7 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
     6. Search and chat.
     7. Admin, grants, break-glass and the audit viewer.
     8. The dashboard and the benchmark.
-  - **One slice at a time (D221):** S1 → S2 → S3 → S7 → S4 → S5 → S6 → S8, each built in its own run. (D181's parallel groups were dropped on 2026-10-02.)
+  - **One slice at a time (D221, D222):** S2 → S3 → S4 → S5 → S6 → S8 for the MVP, then S7. (D181's parallel groups were dropped on 2026-10-02.)
   - The user approves at the end of each milestone, with one checkpoint per slice (D114, D221). Each checkpoint has a demo and test results.
 - **Done means** (paused by fast mode, D222: until the MVP works, done = lint + type checks pass and the integrator merged it):
   - The test writer's tests pass.
@@ -287,26 +281,8 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
   1. Step `plan`: the planner splits the milestone. The user OKs the task list and skills (D111).
   2. Step `build`: each task goes builder → test writer → both reviewers → integrator, on branch `task/<ID>` (D219). Up to 4 agents run at once. A blocked task holds only the tasks that wait on it. Real-Gemma steps run one at a time at the end.
   3. The checkpoint (D114), including a whole-codebase `/insecure-defaults:audit` run (D128). Then step `tag`, after the user approves.
-- **Agent monitor (D100–D103, v2: D148–D158, D161):**
-  - Run `node .claude/monitor/server.mjs`, then open http://127.0.0.1:4800. How it works and how to reuse it: `.claude/monitor/README.md`.
-  - Tabs: Overview (attention, open questions, health, tokens today, milestones), Agents, Launch, Tokens, Activity (log search), Board.
-  - Notes reach an agent at its next step, to one agent or several. Answers to open questions reach the main session with the user's next message there (D155).
-  - Launched runs (D151–D154, D161): only `.claude/agents/`, auto mode plus edits in their own worktree, 2 at a time, reply anytime, Stop button. They count as agents in every guard rail (D158).
-  - Everything project-specific is in `.claude/monitor/monitor.config.json` (D149). The folder imports nothing from outside it.
-  - Pause or stop a workflow in `/workflows`.
-- **Logs (D92, D107):** kept in `logs/`, which is git-ignored. Only the hooks and the monitor write there.
-  - `guardrails.jsonl`: blocks, and errors from hooks that failed.
-  - `activity.jsonl`: each agent's steps (the monitor's hook).
-  - `edits.jsonl`: who edited which file, for the hand-in backstop (the guard rails' `record-checkout.mjs`, D157).
-  - `notes.jsonl`, `answers.jsonl` and `inbox/`: notes to agents and answers to the main session.
-  - `launches/<session>/`: runs launched from the monitor.
-  - `state/`: what the hooks track about each agent.
-  - `tasks/<ID>.md`: each task's log.
-- **Where the guard rails live:**
-  - `.claude/hooks/`: one file per rule, with the shared code in `lib/`.
-  - Tests: `node --test '.claude/hooks/__tests__/*.test.mjs'`, and for the monitor `node --test '.claude/monitor/__tests__/*.test.mjs'`.
-  - Git's pre-commit secret scan is `.claude/githooks/pre-commit`. Switch it on at setup with `git config core.hooksPath .claude/githooks`.
-  - **Fail safe (D119):** a command the guard rails can't read is blocked. That covers a program name or file name built at run time (`$X`, `$(…)`), git and gh aliases, and an agent setting `COMPOSE_*` or `GIT_CONFIG_*`.
+- **Monitor, logs and guard-rail files:** see `docs/workflow.md`. The monitor runs with `node .claude/monitor/server.mjs` at http://127.0.0.1:4800. Logs live in git-ignored `logs/`, and only the hooks and the monitor write there. The guard rails live in `.claude/hooks/`.
+- **Fail safe (D119):** a command the guard rails can't read is blocked. That covers a program name or file name built at run time (`$X`, `$(…)`), git and gh aliases, and an agent setting `COMPOSE_*` or `GIT_CONFIG_*`.
 
 ### Hand-off
 Every agent ends its report with one hand-off block (D91). The hooks read it at hand-in (guard rails 4, 5 and 7).
@@ -324,22 +300,8 @@ Every agent ends its report with one hand-off block (D91). The hooks read it at 
 - **Workflows:** a workflow that runs our agents gives them this object as their output schema.
 
 ## Testing (locked 2026-09-28; details in memory.md D167, D168, D170–D180)
-> **Paused by fast mode (D222, 2026-10-15):** no new tests and no test runs gate a task until the MVP demo works. The rules below apply again when testing starts.
-- **Test kinds, named by what they need (D177):**
-  - `*.unit.test.ts`: nothing. The default kind.
-  - `*.db.test.ts`: Postgres, Neo4j or SeaweedFS, through throwaway databases.
-  - `*.stack.test.ts`: the running stack (containers, Caddy, the API).
-  - `e2e/*.e2e.ts`: Playwright through `https://grc.localhost`.
-  - Commands: `pnpm test:unit`, `test:db`, `test:stack`, `test:e2e`. `pnpm test` runs unit + db + stack.
-- **Environment check (D180):** `pnpm test:env` checks the stack, migrations, Neo4j DENYs, `.env` keys (names only), Caddy's cert and the hosts line. It changes nothing, and db/stack runs call it first. Missing items go to the main session or the user.
-- **Mac scripts (D170):** host-side scripts swap the container host for 127.0.0.1:5433 themselves. `.env` keeps one set of addresses.
-- **Guard rail 4:**
-  - The test writer's tests come after the code, so it hands in through the fix path (`fixReason`): the tests must pass, and only test files may change after the builder's code (D167, D219). New tests handed in without a fix reason must be red.
-  - The check runs only in the task's own worktree, at the tip of `task/<ID>` (D168).
-  - Builders' tests run 3 times (D171), until the user sets `BUILDER_RUNS` to 1 (D219).
-  - A skipped test fails unless it's listed in `skips` (D173).
-- **Flaky tests (D171):** no retries anywhere. A test that fails and then passes is a bug for the test writer. The integrator runs the full suite once before each push. The checkpoint runs it 3 times, plus every browser test.
-- **Browser tests (D172):** the integrator runs `pnpm test:e2e` when a task touched the web app, the API or Caddy.
-- **Agreement (D174):** a test writer names the earlier tests and decisions its tests agree with, and the code reviewer checks.
-- **Security matrix (D175):** `packages/shared/src/access/security-matrix.ts` lists every record type and route. A test fails when the code has one the matrix lacks. The security reviewer checks it on every task.
+> **Paused by fast mode (D222, 2026-10-15):** no new tests and no test runs gate a task until the MVP demo works. D224 keeps one review-and-test round per slice. The full rules (guard rail 4, flaky tests, browser tests, agreement) are in `docs/workflow.md` and apply again when testing starts.
+- **Test kinds (D177):** `*.unit.test.ts` (needs nothing, the default), `*.db.test.ts` (throwaway databases), `*.stack.test.ts` (the running stack), `e2e/*.e2e.ts` (Playwright through `https://grc.localhost`). Commands: `pnpm test:unit`, `test:db`, `test:stack`, `test:e2e`; `pnpm test` runs unit + db + stack.
+- **Environment check (D180):** `pnpm test:env` checks the stack and changes nothing; db and stack runs call it first.
+- **Security matrix (D175):** `packages/shared/src/access/security-matrix.ts` lists every record type and route. A test fails when the code has one the matrix lacks.
 - **Never** weaken live privileges, secrets, the certificate or the running stack to prove a test (D176).
