@@ -272,6 +272,222 @@ export type PostAssetsIdRetireBody = {
   version: number;
 };
 
+/** GET /api/v1/audit-findings response. */
+export type GetAuditFindingsResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    findingStatus: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+    sourceReference: string;
+    rootCause: string;
+    remediationPlan: string;
+    identifiedDate: string;
+    dueDate: string;
+    closedDate: string | null;
+    description: unknown;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/audit-findings response. */
+export type PostAuditFindingsResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  findingStatus: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+  sourceReference: string;
+  rootCause: string;
+  remediationPlan: string;
+  identifiedDate: string;
+  dueDate: string;
+  closedDate: string | null;
+  description: unknown;
+};
+
+/** POST /api/v1/audit-findings request body. */
+export type PostAuditFindingsBody = {
+  name: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  findingStatus: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+  owner?: string;
+  sourceReference: string;
+  rootCause: string;
+  remediationPlan: string;
+  identifiedDate: string;
+  dueDate: string;
+  closedDate?: string | null;
+  description?: string | null;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  concernsId: string;
+};
+
+/** GET /api/v1/audit-findings/{id} response. */
+export type GetAuditFindingsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  findingStatus: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+  sourceReference: string;
+  rootCause: string;
+  remediationPlan: string;
+  identifiedDate: string;
+  dueDate: string;
+  closedDate: string | null;
+  description: unknown;
+};
+
+/** PATCH /api/v1/audit-findings/{id} response. */
+export type PatchAuditFindingsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  findingStatus: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+  sourceReference: string;
+  rootCause: string;
+  remediationPlan: string;
+  identifiedDate: string;
+  dueDate: string;
+  closedDate: string | null;
+  description: unknown;
+};
+
+/** PATCH /api/v1/audit-findings/{id} request body. */
+export type PatchAuditFindingsIdBody = {
+  name?: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  findingStatus?: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+  owner?: string;
+  sourceReference?: string;
+  rootCause?: string;
+  remediationPlan?: string;
+  identifiedDate?: string;
+  dueDate?: string;
+  closedDate?: string | null;
+  description?: string | null;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  version: number;
+};
+
+/** GET /api/v1/audit-findings/{id}/concerns response. */
+export type GetAuditFindingsIdConcernsResponse = {
+  items: Array<{
+    kind: 'control' | 'risk';
+    id: string;
+    number: string;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: string;
+    origin: 'manual' | 'import' | 'ai';
+    createdAt: string;
+    createdBy: string;
+  }>;
+};
+
+/** POST /api/v1/audit-findings/{id}/concerns response. */
+export type PostAuditFindingsIdConcernsResponse = {
+  type: 'CONCERNS';
+  fromId: string;
+  toId: string;
+  origin: 'manual';
+  createdAt: string;
+  createdBy: string;
+};
+
+/** POST /api/v1/audit-findings/{id}/concerns request body. */
+export type PostAuditFindingsIdConcernsBody = {
+  toId: string;
+};
+
+/** POST /api/v1/audit-findings/{id}/concerns/remove response. */
+export type PostAuditFindingsIdConcernsRemoveResponse = {
+  type: 'CONCERNS';
+  fromId: string;
+  toId: string;
+};
+
+/** POST /api/v1/audit-findings/{id}/concerns/remove request body. */
+export type PostAuditFindingsIdConcernsRemoveBody = {
+  toId: string;
+};
+
+/** POST /api/v1/audit-findings/{id}/retire response. */
+export type PostAuditFindingsIdRetireResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  findingStatus: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+  sourceReference: string;
+  rootCause: string;
+  remediationPlan: string;
+  identifiedDate: string;
+  dueDate: string;
+  closedDate: string | null;
+  description: unknown;
+};
+
+/** POST /api/v1/audit-findings/{id}/retire request body. */
+export type PostAuditFindingsIdRetireBody = {
+  version: number;
+};
+
 /** POST /api/v1/auth/sign-in/email response. */
 export type PostAuthSignInEmailResponse =
   | {
@@ -454,6 +670,39 @@ export type PatchControlsIdBody = {
   controlStatus?: 'not_implemented' | 'planned' | 'implemented';
   lastTestedDate?: string;
   version: number;
+};
+
+/** GET /api/v1/controls/{id}/audit-findings response. */
+export type GetControlsIdAuditFindingsResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    findingStatus: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+    sourceReference: string;
+    rootCause: string;
+    remediationPlan: string;
+    identifiedDate: string;
+    dueDate: string;
+    closedDate: string | null;
+    description: unknown;
+  }>;
+};
+
+/** GET /api/v1/controls/{id}/audit-findings query parameters. */
+export type GetControlsIdAuditFindingsQuery = {
+  status: 'active' | 'retired' | 'all';
 };
 
 /** GET /api/v1/controls/{id}/links response. */
@@ -1153,6 +1402,39 @@ export type PatchRisksIdBody = {
   version: number;
 };
 
+/** GET /api/v1/risks/{id}/audit-findings response. */
+export type GetRisksIdAuditFindingsResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    findingStatus: 'open' | 'in_progress' | 'remediated' | 'risk_accepted' | 'closed';
+    sourceReference: string;
+    rootCause: string;
+    remediationPlan: string;
+    identifiedDate: string;
+    dueDate: string;
+    closedDate: string | null;
+    description: unknown;
+  }>;
+};
+
+/** GET /api/v1/risks/{id}/audit-findings query parameters. */
+export type GetRisksIdAuditFindingsQuery = {
+  status: 'active' | 'retired' | 'all';
+};
+
 /** GET /api/v1/risks/{id}/links response. */
 export type GetRisksIdLinksResponse = {
   items: Array<{
@@ -1228,6 +1510,54 @@ export const api = {
   /** Retire a asset; it is kept, never deleted */
   postAssetsIdRetire: (path: { id: string }, body: PostAssetsIdRetireBody): Promise<PostAssetsIdRetireResponse> =>
     request<PostAssetsIdRetireResponse>('POST', `/api/v1/assets/${encodeURIComponent(path.id)}/retire`, body),
+  /** List audit findings, paged, with severity, status, owner, label, due (overdue, next_30_days) and search */
+  getAuditFindings: (query?: ListQuery): Promise<GetAuditFindingsResponse> =>
+    request<GetAuditFindingsResponse>('GET', `/api/v1/audit-findings${queryString(query)}`),
+  /** Record an audit finding with the control or risk it concerns (concernsId); the finding and its CONCERNS link are saved together */
+  postAuditFindings: (body: PostAuditFindingsBody): Promise<PostAuditFindingsResponse> =>
+    request<PostAuditFindingsResponse>('POST', '/api/v1/audit-findings', body),
+  /** Open one audit finding; 404 when missing or hidden */
+  getAuditFindingsId: (path: { id: string }): Promise<GetAuditFindingsIdResponse> =>
+    request<GetAuditFindingsIdResponse>('GET', `/api/v1/audit-findings/${encodeURIComponent(path.id)}`),
+  /** Edit an audit finding; the date rules run on the merged finding, and a stale version is refused (409 stale_version) */
+  patchAuditFindingsId: (path: { id: string }, body: PatchAuditFindingsIdBody): Promise<PatchAuditFindingsIdResponse> =>
+    request<PatchAuditFindingsIdResponse>('PATCH', `/api/v1/audit-findings/${encodeURIComponent(path.id)}`, body),
+  /** The controls and risks an audit finding concerns that the caller can see, with each link */
+  getAuditFindingsIdConcerns: (path: { id: string }): Promise<GetAuditFindingsIdConcernsResponse> =>
+    request<GetAuditFindingsIdConcernsResponse>(
+      'GET',
+      `/api/v1/audit-findings/${encodeURIComponent(path.id)}/concerns`,
+    ),
+  /** Link an audit finding to another control or risk it concerns. Answers 404 not_found, 403 forbidden, or 409 link_exists */
+  postAuditFindingsIdConcerns: (
+    path: { id: string },
+    body: PostAuditFindingsIdConcernsBody,
+  ): Promise<PostAuditFindingsIdConcernsResponse> =>
+    request<PostAuditFindingsIdConcernsResponse>(
+      'POST',
+      `/api/v1/audit-findings/${encodeURIComponent(path.id)}/concerns`,
+      body,
+    ),
+  /** Remove a CONCERNS link added by mistake. Answers 404 not_found, 403 forbidden, 409 ai_link_review_only for a link found by the AI (D207), or 409 last_concern for the finding's only link */
+  postAuditFindingsIdConcernsRemove: (
+    path: { id: string },
+    body: PostAuditFindingsIdConcernsRemoveBody,
+  ): Promise<PostAuditFindingsIdConcernsRemoveResponse> =>
+    request<PostAuditFindingsIdConcernsRemoveResponse>(
+      'POST',
+      `/api/v1/audit-findings/${encodeURIComponent(path.id)}/concerns/remove`,
+      body,
+    ),
+  /** Retire an audit finding; it is kept, never deleted */
+  postAuditFindingsIdRetire: (
+    path: { id: string },
+    body: PostAuditFindingsIdRetireBody,
+  ): Promise<PostAuditFindingsIdRetireResponse> =>
+    request<PostAuditFindingsIdRetireResponse>(
+      'POST',
+      `/api/v1/audit-findings/${encodeURIComponent(path.id)}/retire`,
+      body,
+    ),
   /** Sign in with email and password; with MFA set up, the second factor comes next */
   postAuthSignInEmail: (body: PostAuthSignInEmailBody): Promise<PostAuthSignInEmailResponse> =>
     request<PostAuthSignInEmailResponse>('POST', '/api/v1/auth/sign-in/email', body),
@@ -1257,6 +1587,15 @@ export const api = {
   /** Edit a control; a stale version is refused (409 stale_version) */
   patchControlsId: (path: { id: string }, body: PatchControlsIdBody): Promise<PatchControlsIdResponse> =>
     request<PatchControlsIdResponse>('PATCH', `/api/v1/controls/${encodeURIComponent(path.id)}`, body),
+  /** The audit findings concerning a control that the caller can see (active by default) */
+  getControlsIdAuditFindings: (
+    path: { id: string },
+    query?: GetControlsIdAuditFindingsQuery,
+  ): Promise<GetControlsIdAuditFindingsResponse> =>
+    request<GetControlsIdAuditFindingsResponse>(
+      'GET',
+      `/api/v1/controls/${encodeURIComponent(path.id)}/audit-findings${queryString(query)}`,
+    ),
   /** The control's links whose other end the caller can see */
   getControlsIdLinks: (path: { id: string }): Promise<GetControlsIdLinksResponse> =>
     request<GetControlsIdLinksResponse>('GET', `/api/v1/controls/${encodeURIComponent(path.id)}/links`),
@@ -1353,6 +1692,15 @@ export const api = {
   /** Edit a risk; a stale version is refused (409 stale_version) */
   patchRisksId: (path: { id: string }, body: PatchRisksIdBody): Promise<PatchRisksIdResponse> =>
     request<PatchRisksIdResponse>('PATCH', `/api/v1/risks/${encodeURIComponent(path.id)}`, body),
+  /** The audit findings concerning a risk that the caller can see (active by default) */
+  getRisksIdAuditFindings: (
+    path: { id: string },
+    query?: GetRisksIdAuditFindingsQuery,
+  ): Promise<GetRisksIdAuditFindingsResponse> =>
+    request<GetRisksIdAuditFindingsResponse>(
+      'GET',
+      `/api/v1/risks/${encodeURIComponent(path.id)}/audit-findings${queryString(query)}`,
+    ),
   /** The risk's links whose other end the caller can see */
   getRisksIdLinks: (path: { id: string }): Promise<GetRisksIdLinksResponse> =>
     request<GetRisksIdLinksResponse>('GET', `/api/v1/risks/${encodeURIComponent(path.id)}/links`),

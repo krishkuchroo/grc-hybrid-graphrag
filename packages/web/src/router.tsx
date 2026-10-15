@@ -7,7 +7,9 @@
 //   /risks/$id a risk's page (S1-006). /controls, /policies, /assets and /incidents follow the same
 //   shape (S1-007). /frameworks lists the framework catalogs with their coverage, /frameworks/$id
 //   a framework's requirements (its filters in the search params) and /requirements/$id one
-//   requirement (S2-006). The other screens show their empty state until their slice.
+//   requirement (S2-006). /audit-findings/$id is an audit finding's page (S3-014), reached from the
+//   control and risk pages, with no menu item of its own. The other screens show their empty
+//   state until their slice.
 // Security is checked by the API (D7); these redirects only decide which screen to show.
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
@@ -32,6 +34,7 @@ import { fetchMe, isUnauthorized, ME_KEY } from '@/features/auth/session';
 import { FrameworkList } from '@/features/frameworks/FrameworkList';
 import { FrameworkPage, validateRequirementSearch } from '@/features/frameworks/FrameworkPage';
 import { RequirementPage } from '@/features/frameworks/RequirementPage';
+import { FindingPage } from '@/features/intake/audit-findings/FindingPage';
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -256,6 +259,15 @@ export function createAppRouter(queryClient: QueryClient) {
     },
   });
 
+  const findingRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/audit-findings/$id',
+    component: function FindingRoute() {
+      const { id } = findingRoute.useParams();
+      return <FindingPage key={id} id={id} />;
+    },
+  });
+
   const BUILT_SCREENS = new Set(['/risks', '/controls', '/policies', '/assets', '/incidents', '/frameworks']);
   const screenRoutes = SCREENS.filter((screen) => !BUILT_SCREENS.has(screen.path)).map((screen) =>
     createRoute({
@@ -289,6 +301,7 @@ export function createAppRouter(queryClient: QueryClient) {
       frameworksRoute,
       frameworkRoute,
       requirementRoute,
+      findingRoute,
       ...screenRoutes,
     ]),
   ]);

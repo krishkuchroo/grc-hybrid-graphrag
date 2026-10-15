@@ -3,6 +3,7 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { RISK_SCALE } from '@grc/shared';
 import { ChevronLeft } from 'lucide-react';
+import { FindingsSection } from '@/features/intake/audit-findings/FindingsSection';
 import { formatDollars } from '../format';
 import type { FormFieldDef } from '../RecordForm';
 import { RelatedRecords } from '../links/RelatedRecords';
@@ -80,6 +81,7 @@ export function RiskPage({ id }: { id: string }) {
       back={<BackToRegister />}
       summary={(risk) => <RatingPanel risk={risk} />}
       related={(risk) => <RelatedRecords kind="risk" noun="risk" record={risk} />}
+      sections={(risk) => <FindingsSection kind="risk" record={risk} noun="risk" />}
       details={(risk) => [
         { label: 'Impact', value: risk.impact },
         { label: 'Likelihood', value: risk.likelihood },
