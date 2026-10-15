@@ -1207,6 +1207,30 @@ export type GetImportsIdResponse = {
   updatedAt: string;
 };
 
+/** POST /api/v1/imports/{id}/run response. */
+export type PostImportsIdRunResponse =
+  | {
+      jobId: string;
+    }
+  | {
+      jobId: string;
+    };
+
+/** POST /api/v1/imports/{id}/run request body. */
+export type PostImportsIdRunBody = {
+  mapping: {
+    sourceId: string;
+    name: string;
+    assetType?: string;
+    criticality?: string;
+    dataClassification?: string;
+    owner?: string;
+    hostedOn?: string;
+    runsOn?: string;
+  };
+  saveForSource: boolean;
+};
+
 /** GET /api/v1/incidents response. */
 export type GetIncidentsResponse = {
   items: Array<{
@@ -2052,6 +2076,9 @@ export const api = {
   /** Open one asset-list import: its columns, 5 sample rows, row count, status, counts and errors, plus the source's saved mapping when it fits the columns, else the suggested one (mappingFrom); 404 when missing or hidden */
   getImportsId: (path: { id: string }): Promise<GetImportsIdResponse> =>
     request<GetImportsIdResponse>('GET', `/api/v1/imports/${encodeURIComponent(path.id)}`),
+  /** Run an asset-list import with a mapping (our field -> the file's column), optionally saving it as the source's mapping: 202 with the job ID. The worker creates and updates the assets (origin import, matched by source ID) and draws their HOSTS and RUNS links, audited. Needs status needs_mapping or done (a re-run); 409 import_busy while queued or importing; 400 when the mapping names a column the file lacks; 404 when missing or hidden */
+  postImportsIdRun: (path: { id: string }, body: PostImportsIdRunBody): Promise<PostImportsIdRunResponse> =>
+    request<PostImportsIdRunResponse>('POST', `/api/v1/imports/${encodeURIComponent(path.id)}/run`, body),
   /** List incidents, paged */
   getIncidents: (query?: ListQuery): Promise<GetIncidentsResponse> =>
     request<GetIncidentsResponse>('GET', `/api/v1/incidents${queryString(query)}`),
