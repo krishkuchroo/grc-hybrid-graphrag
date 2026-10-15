@@ -1,6 +1,7 @@
 // The audit trail service (D37, D56, D73). Appends events to an org's hash chain and checks the
 // chain. It runs as grc_app (the database it is given) and sets the org context for each call
-// itself, so the org wall applies to every read and write.
+// itself, so the org wall applies to every read and write. `appendInTx` appends inside the
+// caller's own org-context transaction instead (D29), so the entry commits with the caller's rows.
 //
 // Appends for one org are serialised with a transaction-scoped advisory lock on the org, so
 // concurrent appends get seq 1, 2, 3 … with no gaps and no forks. `sourceId` is unique per org:
@@ -75,40 +76,56 @@ export class AuditService {
   constructor(private readonly db: Db) {}
 
   async append(e: AuditEventInput): Promise<{ seq: number; hash: string }> {
-    return this.inOrg(e.orgId, async (tx) => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'audit:' + e.orgId}, 0))`);
-      if (e.sourceId !== undefined) {
-        const [seen] = await tx
-          .select({ seq: auditEvents.seq, hash: auditEvents.hash })
-          .from(auditEvents)
-          .where(and(eq(auditEvents.orgId, e.orgId), eq(auditEvents.sourceId, e.sourceId)));
-        if (seen) return { seq: Number(seen.seq), hash: seen.hash };
-      }
-      const [last] = await tx
+    return this.inOrg(e.orgId, (tx) => this.appendInTx(tx, e));
+  }
+
+  /**
+   * The same append inside a transaction the caller opened with `withOrgContext` for the same org,
+   * so a row, its audit entry (and its job, `JobsService.sendInTx`) commit together or not at all
+   * (D29, D45.4). The org's advisory lock is held until that transaction ends, so a rolled-back
+   * entry leaves no gap in `seq`. Refused when the transaction's org context is another org or none.
+   */
+  async appendInTx(tx: Tx, e: AuditEventInput): Promise<{ seq: number; hash: string }> {
+    checkOrgId(e.orgId);
+    const locked = await tx.execute<{ org: string | null }>(
+      sql`SELECT current_setting('app.org_id', true) AS org,
+                 pg_advisory_xact_lock(hashtextextended(${'audit:' + e.orgId}, 0))`,
+    );
+    const contextOrg = locked.rows[0]?.org;
+    if (typeof contextOrg !== 'string' || contextOrg.toLowerCase() !== e.orgId.toLowerCase()) {
+      throw new Error('audit: appendInTx needs a transaction in the same org context');
+    }
+    if (e.sourceId !== undefined) {
+      const [seen] = await tx
         .select({ seq: auditEvents.seq, hash: auditEvents.hash })
         .from(auditEvents)
-        .where(eq(auditEvents.orgId, e.orgId))
-        .orderBy(desc(auditEvents.seq))
-        .limit(1);
-      const prevHash = last?.hash ?? GENESIS_HASH;
-      const row: Row = {
-        orgId: e.orgId,
-        seq: last ? Number(last.seq) + 1 : 1,
-        actorType: e.actorType,
-        actorId: e.actorId,
-        action: e.action,
-        targetType: e.targetType ?? null,
-        targetId: e.targetId ?? null,
-        before: json(e.before),
-        after: json(e.after),
-        meta: json(e.meta),
-        sourceId: e.sourceId ?? null,
-        createdAt: new Date(),
-      };
-      const hash = hashEntry(prevHash, hashed(row));
-      await tx.insert(auditEvents).values({ ...row, prevHash, hash });
-      return { seq: row.seq, hash };
-    });
+        .where(and(eq(auditEvents.orgId, e.orgId), eq(auditEvents.sourceId, e.sourceId)));
+      if (seen) return { seq: Number(seen.seq), hash: seen.hash };
+    }
+    const [last] = await tx
+      .select({ seq: auditEvents.seq, hash: auditEvents.hash })
+      .from(auditEvents)
+      .where(eq(auditEvents.orgId, e.orgId))
+      .orderBy(desc(auditEvents.seq))
+      .limit(1);
+    const prevHash = last?.hash ?? GENESIS_HASH;
+    const row: Row = {
+      orgId: e.orgId,
+      seq: last ? Number(last.seq) + 1 : 1,
+      actorType: e.actorType,
+      actorId: e.actorId,
+      action: e.action,
+      targetType: e.targetType ?? null,
+      targetId: e.targetId ?? null,
+      before: json(e.before),
+      after: json(e.after),
+      meta: json(e.meta),
+      sourceId: e.sourceId ?? null,
+      createdAt: new Date(),
+    };
+    const hash = hashEntry(prevHash, hashed(row));
+    await tx.insert(auditEvents).values({ ...row, prevHash, hash });
+    return { seq: row.seq, hash };
   }
 
   async verifyChain(orgId: string): Promise<VerifyResult> {
