@@ -7,7 +7,8 @@ export const meta = {
     { title: 'Plan', detail: 'the planner splits a milestone into tasks and briefs' },
     { title: 'Build', detail: 'fast mode: builder → integrator (local merge, lint and type checks) per task; full chain: builder → test writer → reviewers → integrator (D219)' },
     { title: 'Real Gemma', detail: 'the real-Gemma steps, one at a time (D113)' },
-    { title: 'Push', detail: 'fast mode: one stack rebuild, a start check and one push per finished slice (D223)' },
+    { title: 'Review and test', detail: 'fast mode: the test writer and both reviewers check the whole slice; fixes go to a builder; at most 3 rounds (D224)' },
+    { title: 'Push', detail: 'fast mode: the slice tests, one stack rebuild, a start check and one push per finished slice (D223, D224)' },
     { title: 'Tag', detail: 'the integrator tags the approved milestone' },
   ],
 }
@@ -233,8 +234,8 @@ async function planSlice(m, slices) {
       othersOf.length ? `Plan only ${M}. The other slices of this run (${othersOf.join(', ')}) are planned separately; read their tasks on the board if they are there already.` : '',
       ...(FAST
         ? [
-            'FAST MODE (D222, D223): we are building a working MVP demo first and testing after. Each task is builder → integrator: no test writer and no reviewers. Each brief describes the behaviour and the pass criteria the builder must meet, in plain words, not the shape of the code. Leave out the "Tests to write" part and test commands; the tests come after the MVP.',
-            'Each task has one builder as its owner. The integrator merges each finished task into `main` locally (lint and type checks only); the slice is rebuilt and pushed once at its end.',
+            'FAST MODE (D222–D224): each task is builder → integrator. After every task of the slice is merged, the test writer tests the whole slice and both reviewers review it, then it is pushed. Each brief describes the behaviour and the pass criteria the builder must meet, in plain words, not the shape of the code; the pass criteria are what the test writer tests. Leave out the "Tests to write" part and test commands.',
+            'Each task has one builder as its owner. The integrator merges each finished task into `main` locally (lint and type checks only); the slice is reviewed, tested, rebuilt and pushed once at its end.',
             'Keep waiting chains short so many tasks can run at once (D210): give each task only the `dependsOn` it truly needs, and where a feature has a backend part and a screen, make them separate tasks so the screen waits only on what it calls.',
             'Every task costs a builder, a merge and a board update, so fold a very small change (one file, or a few lines) into the neighbouring task that needs it rather than giving it its own task (D215).',
           ]
@@ -394,13 +395,14 @@ async function pumpMerges() {
 
 // Fast mode (D223): when every task of a slice is merged, one integrator
 // rebuilds the stack once, checks the app starts, and pushes `main` once.
-async function pushSlice(m) {
+async function pushSlice(m, testCommand = '') {
   const M = m.toUpperCase()
   return handIn(
     M,
     'integrator',
     [
-      `Slice ${M} is built: every task of it is merged into \`main\`. Finish the slice (D223): rebuild the running stack once, check the app starts, and push \`main\` to GitHub. Merge nothing.`,
+      `Slice ${M} is built, reviewed and tested: every task of it and its tests are merged into \`main\`. Finish the slice (D223, D224): rebuild the running stack once, check the app starts, and push \`main\` to GitHub. Merge nothing. The push is allowed without asking the user.`,
+      testCommand ? `Before the push, run the slice's tests once on \`main\`: \`${testCommand}\` (send the output to a file outside the repository and read the summary). If they fail, hand in "blocked" with the failures and push nothing.` : '',
       MERGE_LOCK,
       '1. In the main checkout, on `main`: `git status` must show a clean tree apart from `TASKS.md`, `RoughWork.md` and git-ignored files. If `TASKS.md` has changes (the board), commit them on `main` with the message `' + M + ': board`. Never commit `RoughWork.md` or `.env` (D81).',
       '2. Run `pnpm lint` and `pnpm typecheck`. If only formatting fails, fix it with `prettier --write` and commit; otherwise hand in "blocked" with the output and push nothing.',
@@ -411,6 +413,87 @@ async function pushSlice(m) {
     ],
     { label: `push:${M}`, phase: 'Push' },
   )
+}
+
+// Fast mode, review and test (D224): once every task of a slice is merged,
+// the test writer tests the whole slice and both reviewers review it, side by
+// side. Fixes go to one builder, get merged, and the round repeats, at most
+// SLICE_ROUNDS times. The test writer's branch is merged last. Returns
+// { status, findings, testCommand }.
+const SLICE_ROUNDS = 3
+const RT = 'Review and test'
+async function reviewAndTestSlice(m, built) {
+  const M = m.toUpperCase()
+  const ids = built.tasks.map((t) => t.id).join(', ')
+  const testBranch = `task/${M}-TEST`
+  const issueSchema = { fixOwner: { type: 'string', enum: BUILDERS, description: 'the builder who should fix the problems you found, if any' } }
+  let testCommand = ''
+  let lastFixes = ''
+  for (let round = 1; round <= SLICE_ROUNDS; round++) {
+    const tw = await handIn(
+      `${M}-TEST`,
+      'test-writer',
+      [
+        `Slice ${M} is built and merged into \`main\` (tasks ${ids}). Test the whole slice (D224): round ${round} of at most ${SLICE_ROUNDS}.`,
+        `You work in a fresh worktree. Start with \`git switch ${testBranch}\` if the branch exists, then \`git merge main\`; otherwise \`git switch -c ${testBranch} main\`.`,
+        `Read each task's brief with \`node .claude/scripts/brief.mjs <ID>\` for ${ids}. Write behaviour tests for their pass criteria through public interfaces (the API routes, the shared functions, the screens' journeys only where they matter most), then probe the code: bad input, the org wall, roles and labels (D50, D51), errors and repeats. Favour a few strong tests over many thin ones.`,
+        round > 1 ? `Last round's problems were fixed on \`main\`: ${lastFixes}\nRe-check them and add any tests still missing.` : '',
+        'Run the tests you wrote (and the existing tests of the packages the slice changed) once. `pnpm test:env` first for db or stack tests.',
+        'If a test fails because the code is wrong, keep the test, set `codeProblem` to true, name each failing test and what the code gets wrong in your findings, and set `fixOwner` to the builder for that code. If a failure is the environment (for example Neo4j failing to start a throwaway database, D217), say so and do not count it as a code problem.',
+        `Commit your tests on \`${testBranch}\` with a message starting "${M}:". Then run \`git switch --detach\`.`,
+        'In `tests.run`, put the one pnpm command that runs the tests you wrote. Put the output of `pwd` in `worktree`.',
+      ],
+      { phase: RT, label: `test:${M}:${round}`, isolation: 'worktree', schema: handoffSchema({ ...WORKTREE, codeProblem: { type: 'boolean' }, ...issueSchema }) },
+    )
+    if (tw.tests?.run) testCommand = tw.tests.run
+    const review = (who) =>
+      handIn(
+        `${M}-REVIEW`,
+        who,
+        [
+          `Slice ${M} is built and merged into \`main\` (tasks ${ids}). Review the whole slice (D224): round ${round} of at most ${SLICE_ROUNDS}.`,
+          'You work in a fresh worktree. Start with `git switch --detach main`. The slice is the diff `origin/main..HEAD`; read each task\'s brief with `node .claude/scripts/brief.mjs <ID>`.',
+          who === 'code-reviewer'
+            ? 'Check that the code does what the briefs say, end to end (API, worker and screens wired together, no stubs or TODOs), against the plan and the code standards. Report only real problems: bugs, missing behaviour, broken wiring, clear design faults. Not style.'
+            : 'Check the slice against the security decisions D49–D59: the org wall, the role × record-type table, sensitivity labels, audit entries written in the same step as the change, input limits, and that every new route and record type is in the security matrix (D175). Run the isolation and access tests the slice touches.',
+          round > 1 ? `Last round's problems were fixed: ${lastFixes}\nCheck the fixes.` : '',
+          'Hand off "approved", or "sent-back" with what must change in `builderFixes` (file:line where you can) and the builder for it in `fixOwner`.',
+        ],
+        { phase: RT, label: `${who === 'code-reviewer' ? 'review' : 'security'}:${M}:${round}`, isolation: 'worktree', schema: handoffSchema({ ...REVIEW_FIXES, ...issueSchema }) },
+      )
+    const [code, security] = await Promise.all([review('code-reviewer'), review('security-reviewer')])
+    const dead = [['test-writer', tw], ['code-reviewer', code], ['security-reviewer', security]].filter(([, h]) => h.status === 'blocked' && !(h === tw && h.codeProblem))
+    if (dead.length) return { status: 'blocked', findings: dead.map(([w, h]) => `${w}: ${h.findings}`).join('\n\n'), testCommand }
+    const issues = []
+    if (tw.codeProblem) issues.push({ owner: tw.fixOwner, text: `Failing tests (on \`${testBranch}\`):\n${tw.findings}` })
+    for (const h of [code, security]) if (h.status === 'sent-back') issues.push({ owner: h.fixOwner, text: h.builderFixes || h.findings })
+    if (!issues.length) {
+      const merged = await queueMerge({ id: `${M}-TEST`, branch: testBranch, worktrees: tw.worktree ? [tw.worktree] : [], note: `This branch holds only the ${M} tests (D224); the reviewers approved the slice.` })
+      if (merged.status !== 'done') return { status: 'blocked', findings: `merging the tests: ${merged.findings}`, testCommand }
+      return { status: 'done', findings: `round ${round}: tests pass and both reviewers approved`, testCommand }
+    }
+    lastFixes = issues.map((x) => x.text).join('\n\n')
+    if (round === SLICE_ROUNDS) return { status: 'blocked', findings: `still open after ${SLICE_ROUNDS} rounds:\n${lastFixes}`, testCommand }
+    const owner = issues.map((x) => x.owner).find((o) => BUILDERS.includes(o)) ?? 'builder-backend'
+    const fixBranch = `task/${M}-FIX${round}`
+    const fix = await handIn(
+      `${M}-FIX${round}`,
+      owner,
+      [
+        `Fix these problems the review and the tests found in slice ${M} (D224):\n${lastFixes}`,
+        `You work in a fresh worktree. Start with \`git switch -c ${fixBranch} main\`.`,
+        `The tests are on \`${testBranch}\`. Read a failing test with \`git show ${testBranch}:<path>\`. Never edit or commit test files (guard rail 7).`,
+        ...FAST_RULES,
+        'Fix the code, not the tests. If you think a problem report is wrong, say why in your findings and leave that part.',
+        `Commit with a message starting "${M}:". Then run \`git switch --detach\`. Put the output of \`pwd\` in \`worktree\`.`,
+      ],
+      { phase: RT, label: `fix:${M}:${round}`, isolation: 'worktree', schema: handoffSchema(WORKTREE) },
+    )
+    if (fix.status !== 'done') return { status: 'blocked', findings: `${owner} fixing: ${fix.findings}`, testCommand }
+    const merged = await queueMerge({ id: `${M}-FIX${round}`, branch: fixBranch, worktrees: fix.worktree ? [fix.worktree] : [], note: '' })
+    if (merged.status !== 'done') return { status: 'blocked', findings: `merging the fixes: ${merged.findings}`, testCommand }
+  }
+  return { status: 'blocked', findings: 'review and test did not finish', testCommand }
 }
 
 // Builds one slice (fast mode) or a group of slices (full chain): lists the
@@ -720,8 +803,16 @@ for (const m of group) {
     log(`${M}: every task was already done, so no rebuild and no push`)
     continue
   }
+  phase(RT)
+  const rt = await reviewAndTestSlice(m, built)
+  slices[m].reviewAndTest = rt
+  if (rt.status !== 'done') {
+    slices[m].pushed = false
+    slices[m].stoppedBecause = `review and test of ${M} did not pass, so ${M} was not pushed and the run stops here: ${rt.findings}`
+    break
+  }
   phase('Push')
-  const h = await pushSlice(m)
+  const h = await pushSlice(m, rt.testCommand)
   slices[m].pushed = h.status === 'done'
   slices[m].push = h.findings
   if (h.status !== 'done') {
