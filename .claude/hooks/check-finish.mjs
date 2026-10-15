@@ -10,7 +10,7 @@
 // StructuredOutput tool) and again, as a backup, when the agent stops.
 // A hand-off with status "blocked" and findings can always finish; after 3
 // failed checks it's the only way to finish (D86).
-import { evaluate, fixProblems, placeProblem, tail } from './lib/checks.mjs';
+import { evaluate, evaluateFast, FAST_MODE, fixProblems, placeProblem, tail } from './lib/checks.mjs';
 import { isHandInEvent, parseHandoff } from './lib/handoff.mjs';
 import { appendTaskLog, now, safeTaskId } from './lib/logging.mjs';
 import { gitTopLevel } from './lib/paths.mjs';
@@ -35,7 +35,7 @@ export function placeChecks(input, handoff, repo, role) {
 }
 
 // null to let the agent finish, or { reason, subject } to send it back.
-export function decideFinish(input, evaluateChecks = evaluate, checkPlace = placeChecks) {
+export function decideFinish(input, evaluateChecks = FAST_MODE ? evaluateFast : evaluate, checkPlace = placeChecks) {
   if (!input.agentId) return null;
   const role = roleOf(input.agentType);
   if (!role) return null;

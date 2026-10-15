@@ -28,22 +28,79 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | TEST-006 | TEST | builder-platform | done | The three size-cap tests in `front-door/body-size.stack.test.ts` (25 MB + 1 byte → 413 at the door, 40 MB → 413 at the door, JSON just over 1 MB → the API's 413 in the D47 format) give the same answer every time (D187, D171). The test writer finds each cause from the code, never by changing shared state (D176), and says whether a real person could get 502 instead of 413. Test-only cause: fix the existing tests with `fixReason`, same checks, no retries, sleeps, longer timeouts or `cutShortOk` on status checks (D185). Real cause: a reliably red test, then the smallest Caddy or API change so the answer is always 413 in the D47 format; limits stay 25 MB at the door and 1 MB at the API (D188, D53, D64). Tests: `pnpm --filter infra test -- body-size` (3 runs green) and `pnpm --filter infra test:stack`, none skipped; integrator pushes main (with TEST-004's d56f2f9 and 7c8199b) only after one clean full `pnpm test` | Tests 7470dcc (`expectContinue` in the door helpers, new `body-size-502.stack.test.ts`); API fix cf5cca1 by builder-backend (onError hook in `packages/api/src/common/errors.ts` drops `Connection: close` for FST_ERR_CTP_BODY_TOO_LARGE, so over-limit JSON always gets the API's 413, not Caddy's 502). Code and security reviewers approved. Merged 257da61, pushed (origin/main 21ad9c5..257da61); integrator: lint and typecheck clean, `pnpm test` 2,456/2,456, e2e 4/4. The finish check's rerun of `pnpm test` then failed one unrelated test, now TEST-007. Reviewer notes, none blocking: grc-worker was recreated with grc-api (shared image); the cast at errors.ts:67 may not be needed; security, phase 7: the API has no requestTimeout (Fastify default 0), so the 25 MB drain bound holds only behind Caddy. | `logs/tasks/TEST-006.md` |
 | TEST-007 | TEST | test-writer | done | Flaky (D171): `packages/api/tests/graph-accounts/accounts.db.test.ts`, "grc_ro_auditor_restricted holds read-only privileges (criterion 1) > logs in through GraphService.readAs" failed once with `Neo4jError: Connection was closed by server` during Bolt login. The test writer finds the cause from the code, never by changing live Neo4j privileges, passwords or settings (D176). Test-only cause: fix the existing test with `fixReason`, same checks (D167, D185). Real cause: a reliably red test, then the smallest builder fix. No retries or longer timeouts to hide it. Tests: `pnpm --filter api test -- graph-accounts` (3 runs green), none skipped | Cause: a Neo4j Bolt server race when a pooled connection is logged in again as another account (NullPointerException in AuthenticationTimeoutConnectionListener, seen in debug.log); a real user could hit it through chat Path B. Red test 6f7e707 (`one-account-per-connection.db.test.ts`); fix 39d46a2 by builder-platform: one driver per query account, cached by account name, maxConnectionPoolSize 5 (QUERY_POOL_SIZE), all closed in close(). Code and security reviewers approved. Merged af08458, pushed with TEST-008 (origin/main 257da61..af08458); integrator: grc-api and grc-worker recreated from the main checkout, lint and typecheck clean, `pnpm test` 2,457/2,457 in one run with none skipped, e2e 4/4. Reviewer notes, none blocking, for phase 7: worst case 280 query connections across the API and worker (check against Neo4j's Bolt limits); a 6th concurrent query for the same account waits for a free connection (load-test it); a readAs after close() creates a new driver (shutdown only); each driver keeps its account's password in memory, acceptable under D57. | `logs/tasks/TEST-007.md` |
 | TEST-008 | TEST | test-writer | done | `packages/infra/tests/front-door/headers.stack.test.ts:96` ("the door's own 413 for an upload over 25 MB") uses the `expectContinue` option, so the client's EPIPE can't race the door's 413 (same race TEST-006 fixed in `body-size.stack.test.ts`). Test-only fix with `fixReason`; still checks status 413 and the D64 headers, nothing loosened (D171, D185). Tests: `pnpm --filter infra test -- headers` (3 runs green) and `pnpm --filter infra test:stack`, none skipped | Test-only fix 6114c28 by the test writer, with `fixReason`: `expectContinue` added to the 25 MB + 1 byte test in `headers.stack.test.ts`. Code and security reviewers approved. Merged cd7aa0f, pushed with TEST-007 (origin/main 257da61..af08458); integrator: grc-api and grc-worker recreated from the main checkout, lint and typecheck clean, `pnpm test` 2,457/2,457 in one run with none skipped, e2e 4/4. Security note, not blocking: this test doesn't prove the 413 came from the door; `body-size.stack.test.ts` covers that. | `logs/tasks/TEST-008.md` |
-| S1-001 | S1 | builder-backend | in review | Shared record and link model in `@grc/shared`: Zod schemas for Asset, Risk, Control, Policy and Incident (common D73 fields plus each type's own), the D197 value lists, record numbers RSK/AST/CTL/POL/INC + 7 digits (D196), the 5×5 risk rating with Low/Medium/High/Critical bands (D197), and the ontology table of allowed links (the spec's six). Tests (unit): `pnpm --filter shared test -- records` | builder-backend (d952c47 on task/S1-001): 562/563 pass. Back to the test writer: in `purity.unit.test.ts`, the `specifiers()` regex `/\bimport\s*['"]([^'"]+)['"]/g` treats the string value `'import'` in `RECORD_ORIGINS` (`src/records/types.ts`) as a side-effect import. Suggested fix: match `import '...'` only at a statement start, or strip string literals before scanning. | `logs/tasks/S1-001.md` |
-| S1-002 | S1 | builder-platform | blocked | Every org's Neo4j database gets the D73 schema: unique ID and number per type, lookups on type, framework, status, label and owner, a full-text index on names and source IDs, a 1024-dim cosine vector index on name embeddings, and a source-document index on every link type. Made by org provisioning and by `pnpm graph:schema` for existing orgs; safe to re-run. Tests (unit + db): `pnpm --filter api test -- org-schema` | builder-platform (ab3fb27 on task/S1-002): blocked on a privilege decision for the user (D78, D176), not a test problem. Neither Neo4j service account may create indexes or constraints: setup:neo4j gives grc_admin only `CREATE DATABASE ON DBMS` (D57), and grc_writer has no INDEX MANAGEMENT or CONSTRAINT MANAGEMENT. The live run fails with `Neo.ClientError.Security.Forbidden` ("Schema operation 'create_constraint' ... not allowed for user 'grc_writer'"). Unit 75/75 pass; db tests (`ensure.db.test.ts`) and the infra `graph-schema` script test (4) fail on that error alone, and the existing provision db tests will too, because provisionOrg now applies the schema. Typecheck and lint clean. Question: which account creates the per-org schema? (a) grant INDEX MANAGEMENT and CONSTRAINT MANAGEMENT on `DATABASE *` to grc_writer in `setup-neo4j.ts` and rerun `pnpm setup:neo4j` (smallest; widens D144); (b) the same grants to grc_admin, plus a GraphService admin schema-write method (widens D57); (c) a third schema-only account. The 28 query accounts stay untouched either way. No code change expected unless (b). | `logs/tasks/S1-002.md` |
-| S1-003 | S1 | builder-backend | to do | Records service for the five types: create (number from 0001001 per org and type, default label, owner), read and list (paged, filtered, sorted) through the role x clearance read-only accounts, update with a version check (stale save refused), label rules (no label above the saver's clearance, D198), retire; Control Owners edit only their own controls, every field including the owner, and can't create (D199, D206); every change and its audit entry in one Neo4j transaction. Tests (db): `pnpm --filter api test -- records-service` | | `logs/tasks/S1-003.md` |
-| S1-004 | S1 | builder-backend | to do | REST routes for the five types (`/api/v1/assets`, `/risks`, `/controls`, `/policies`, `/incidents`: list, get, create, update, retire) plus `GET /api/v1/people`; "own" cells pass the guard and are checked in the service; security-matrix rows; every role cell, org pair and clearance x label pair tested (D59); error log carries no record or audit values (D164, SF-006). Tests (db + unit): `pnpm --filter api test -- records-api` | | `logs/tasks/S1-004.md` |
-| S1-005 | S1 | builder-backend | to do | Links: `POST /api/v1/links` (ontology check, both ends visible, the D200 rule: can edit either end and see both, audited in the same transaction), `GET /api/v1/<type>/:id/links` (only links whose both ends are visible), and `GET /api/v1/assets/:id/map` (HOSTS/RUNS around one asset, depth 1–3, default 2, cap 200 assets with `truncated`, D204); security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- links` | | `logs/tasks/S1-005.md` |
-| S1-006 | S1 | builder-frontend | to do | Web records kit (paged, sortable, filterable table; detail; create and edit forms from the shared schemas; stale-save message; retire; label and owner pickers; buttons follow the role table) and the Risk register at `/risks` with its rating. Tests (unit): `pnpm --filter web test -- records` | | `logs/tasks/S1-006.md` |
-| S1-007 | S1 | builder-frontend | to do | Controls, Policies, Assets and Incidents screens built on the kit (lists with each type's columns and filters, detail, create and edit); a Control Owner sees only their own controls; Incidents hidden from roles with no access. Tests (unit): `pnpm --filter web test -- record-screens` | | `logs/tasks/S1-007.md` |
-| S1-008 | S1 | builder-frontend | to do | Related records on every detail page (for example "Controls that treat this risk"), and an "Add link" dialog that offers only the link types the ontology allows and only to people allowed to add them. Tests (unit): `pnpm --filter web test -- record-links` | | `logs/tasks/S1-008.md` |
-| S1-009 | S1 | builder-frontend | to do | Asset dependency map (React Flow) on the asset page: HOSTS and RUNS around the asset, depth picker 1–3 (default 2), click-through, a notice when the map is cut short at 200 assets (D204). Tests (unit): `pnpm --filter web test -- asset-map` | | `logs/tasks/S1-009.md` |
-| S1-010 | S1 | builder-platform | to do | `seed:demo` adds a fixed, re-runnable set of records and links to each demo org (audited, mixed labels, controls owned by the demo Control Owner); `docs/demo/s1.md` click-through; Playwright journeys through `https://grc.localhost` (risk register, adding and removing a link, stale save, own controls, other org and low clearance see nothing). Tests (db + unit + e2e): `pnpm --filter api test -- seed-records`, `pnpm --filter infra test -- demo-doc`, `pnpm test:e2e` | | `logs/tasks/S1-010.md` |
-| S1-011 | S1 | builder-backend | to do | Removing a link added by mistake (D201): `POST /api/v1/links/remove` with `{ type, fromId, toId }`; the D200 rule (can edit either end and see both); the link is deleted from Neo4j and a `link.removed` audit entry holding a copy of it is written in the same transaction; hidden or missing link 404; only `manual` and `import` links are removed, an `ai` link is 409 `ai_link_review_only` and stays (D207); re-adding afterwards works; security-matrix row and D59 tests. Tests (unit + db): `pnpm --filter api test -- link-removal` | | `logs/tasks/S1-011.md` |
-| S1-012 | S1 | builder-frontend | to do | "Remove" on each row of the related-records groups (D201), shown only to people the D200 rule allows and never on AI links (D207), with a confirmation that says the removal is recorded; 404 and 403 answers give clear messages; the group refreshes after a removal. Tests (unit): `pnpm --filter web test -- link-removal` | | `logs/tasks/S1-012.md` |
+| S1-001 | S1 | builder-backend | done | Shared record and link model in `@grc/shared`: Zod schemas for Asset, Risk, Control, Policy and Incident (common D73 fields plus each type's own), the D197 value lists, record numbers RSK/AST/CTL/POL/INC + 7 digits (D196), the 5×5 risk rating with Low/Medium/High/Critical bands (D197), and the ontology table of allowed links (the spec's six). Tests (unit): `pnpm --filter shared test -- records` | builder-backend (d952c47 on task/S1-001): 562/563 pass. Back to the test writer: in `purity.unit.test.ts`, the `specifiers()` regex `/\bimport\s*['"]([^'"]+)['"]/g` treats the string value `'import'` in `RECORD_ORIGINS` (`src/records/types.ts`) as a side-effect import. Suggested fix: match `import '...'` only at a statement start, or strip string literals before scanning. | `logs/tasks/S1-001.md` |
+| S1-002 | S1 | builder-platform | done | Every org's Neo4j database gets the D73 schema: unique ID and number per type, lookups on type, framework, status, label and owner, a full-text index on names and source IDs, a 1024-dim cosine vector index on name embeddings, and a source-document index on every link type. Made by org provisioning and by `pnpm graph:schema` for existing orgs; safe to re-run. Tests (unit + db): `pnpm --filter api test -- org-schema` | builder-platform (ab3fb27 on task/S1-002): blocked on a privilege decision for the user (D78, D176), not a test problem. Neither Neo4j service account may create indexes or constraints: setup:neo4j gives grc_admin only `CREATE DATABASE ON DBMS` (D57), and grc_writer has no INDEX MANAGEMENT or CONSTRAINT MANAGEMENT. The live run fails with `Neo.ClientError.Security.Forbidden` ("Schema operation 'create_constraint' ... not allowed for user 'grc_writer'"). Unit 75/75 pass; db tests (`ensure.db.test.ts`) and the infra `graph-schema` script test (4) fail on that error alone, and the existing provision db tests will too, because provisionOrg now applies the schema. Typecheck and lint clean. Question: which account creates the per-org schema? (a) grant INDEX MANAGEMENT and CONSTRAINT MANAGEMENT on `DATABASE *` to grc_writer in `setup-neo4j.ts` and rerun `pnpm setup:neo4j` (smallest; widens D144); (b) the same grants to grc_admin, plus a GraphService admin schema-write method (widens D57); (c) a third schema-only account. The 28 query accounts stay untouched either way. No code change expected unless (b). | `logs/tasks/S1-002.md` |
+| S1-003 | S1 | builder-backend | done | Records service for the five types: create (number from 0001001 per org and type, default label, owner), read and list (paged, filtered, sorted) through the role x clearance read-only accounts, update with a version check (stale save refused), label rules (no label above the saver's clearance, D198), retire; Control Owners edit only their own controls, every field including the owner, and can't create (D199, D206); every change and its audit entry in one Neo4j transaction. Tests (db): `pnpm --filter api test -- records-service` | | `logs/tasks/S1-003.md` |
+| S1-004 | S1 | builder-backend | done | REST routes for the five types (`/api/v1/assets`, `/risks`, `/controls`, `/policies`, `/incidents`: list, get, create, update, retire) plus `GET /api/v1/people`; "own" cells pass the guard and are checked in the service; security-matrix rows; every role cell, org pair and clearance x label pair tested (D59); error log carries no record or audit values (D164, SF-006). Tests (db + unit): `pnpm --filter api test -- records-api` | Done: code 05e90e2 by builder-backend; test-only fix 95fbcd5 by the test writer with `fixReason` (the platform error-log test expects the error type, never the message, D164, SF-006). Merged 3d9c42a by the integrator. Earlier history: builder-backend (05e90e2 on task/S1-004): blocked on a test conflict, not the code; back to the test writer. The merged M0-007 test `packages/api/tests/platform/errors.db.test.ts:96` ("writes the reference ID into the pino log line for the error") expects the unexpected error's message (`SECRET_DETAIL`) in the log, but the brief, D164 and SF-006 say errors.ts logs only the type, code and reference ID. The builder followed the brief: the global `ErrorFilter` now logs `{referenceId, status, method, url, errorType, errorCode}` for a 5xx and no longer logs `err` (message and stack), so that one assertion fails. `records-api`: unit 160/160 and db 840/840 on 2 runs, none skipped; criterion 9 suites: unit 60/60, db 1,410/1,411 (only that assertion); typecheck and lint clean. Suggested test-only fix with `fixReason` (D167, code already on the branch): line 96 expects the error type (for example `"errorType":"Error"`) instead of `SECRET_DETAIL`, or asserts `SECRET_DETAIL` is not in the log. The builder did not scope the change to record routes only, since the brief and D164 say otherwise. | `logs/tasks/S1-004.md` |
+| S1-005 | S1 | builder-backend | done | Links: `POST /api/v1/links` (ontology check, both ends visible, the D200 rule: can edit either end and see both, audited in the same transaction), `GET /api/v1/<type>/:id/links` (only links whose both ends are visible), and `GET /api/v1/assets/:id/map` (HOSTS/RUNS around one asset, depth 1–3, default 2, cap 200 assets with `truncated`, D204); security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- links` | Done (finished outside run wf_2cf6c9f5-960, which had marked it blocked): test-only fix f9e8756 by the test writer; formatting fix 080e553 and review fix cead0bf by builder-backend. Code and security reviewers approved in round 2 (1 send-back). Merged 85b26dc by the integrator and pushed. Earlier history: builder-backend (7ab3b75 on task/S1-005): blocked on the test setup, not the code; back to the test writer. The in-process API started by `setUpLinks()` (tests/links/helpers.ts → `startApi` → `prepareEnv` in tests/platform/helpers.ts) never gets `NEO4J_QUERY_SECRET`: `prepareEnv` copies only the Neo4j admin and writer passwords and the two S3 keys from `.env`, so every `GraphService.readAs` throws "NEO4J_QUERY_SECRET is not set" and list and map answer 500 (db 305 failed, 45 passed; unit 283/283 pass). Suggested test-only fix: copy `NEO4J_QUERY_SECRET` from `.env` into process.env in `setUpLinks()` or `prepareEnv`, like the passwords; with it set, unit 283/283 and db 350/350 passed 3 runs in a row. Code already on the branch, so the fix may be green with `fixReason` (D167). Reviewer notes: the builder added S1-004's "own" pass-through in access.guard.ts and requires.decorator.ts (expect a merge conflict with S1-004); link audit targetId is `${type}:${fromId}:${toId}` (`linkTargetId`) for S1-011 to reuse. test-writer (f9e8756 on task/S1-005): blocked; back to the builder. The test fix is done and committed: `setUpLinks()` in packages/api/tests/links/helpers.ts now sets `process.env.NEO4J_QUERY_SECRET ||= setting('NEO4J_QUERY_SECRET')` before `startApi` (stops with a clear error if the key is missing; shared `prepareEnv` left alone; no assertion changed). `pnpm --filter api test -- links`: unit 283/283, db 350/350. The finish check's lint step (`eslint . && prettier --check .`) fails on formatting in three builder files: packages/api/src/records/asset-map.ts, packages/api/src/records/links.controller.ts, packages/api/src/records/links.service.ts. Under D167 the test writer may change test files only, so the builder must run `pnpm exec prettier --write` on those three files and commit; the test fix then hands in green unchanged. | `logs/tasks/S1-005.md` |
+| S1-006 | S1 | builder-frontend | done | Web records kit (paged, sortable, filterable table; detail; create and edit forms from the shared schemas; stale-save message; retire; label and owner pickers; buttons follow the role table) and the Risk register at `/risks` with its rating. Tests (unit): `pnpm --filter web test -- records` | | `logs/tasks/S1-006.md` |
+| S1-007 | S1 | builder-frontend | done | Controls, Policies, Assets and Incidents screens built on the kit (lists with each type's columns and filters, detail, create and edit); a Control Owner sees only their own controls; Incidents hidden from roles with no access. Tests (unit): `pnpm --filter web test -- record-screens` | | `logs/tasks/S1-007.md` |
+| S1-008 | S1 | builder-frontend | done | Related records on every detail page (for example "Controls that treat this risk"), and an "Add link" dialog that offers only the link types the ontology allows and only to people allowed to add them. Tests (unit): `pnpm --filter web test -- record-links` | Done: code fe9b771 by builder-frontend; test-only fix 309c34f by the test writer with `fixReason` (the refusal tests look up the group behind the modal Add link dialog with `hidden: true`); builder hand-in fb5566a with the code unchanged. Merged 34373ef by the integrator. Earlier history: builder-frontend (fe9b771 on task/S1-008, worktree detached): blocked on the tests, not the code; back to the test writer. The 4 refusal cases in `packages/web/tests/record-links/errors.unit.test.tsx` (400 link_not_allowed, 409 link_exists, 403, 404) pass the refusal-message step, then fail in `expectGroupUnchanged()`: Unable to find role="region" and name /^controls that treat this risk$/i. "Add link" is a modal shadcn Dialog (Radix), which sets `aria-hidden="true"` on everything behind it while open, and `getByRole` skips aria-hidden content; the same step also requires the dialog to stay open after a refusal, so the step can only pass with a non-modal dialog, which the brief and helpers.tsx don't ask for. With a one-off `modal={false}` all 5 tests in that file passed; the builder put the modal back. Suggested test-only fix (D167, code already on the branch, `fixReason`): query the group with `{ hidden: true }` in `expectGroupUnchanged()`, or check the group after closing the dialog, or check that `api.links` is unchanged and no second GET of …/links happened. A non-modal "Add link" would be a question for the user. Built: regenerated `client.ts`, `RelatedRecords.tsx`, `AddLinkDialog.tsx`, `linkGroups.ts`, `useLinks.ts`, `components/ui/dialog.tsx`, a `related` slot and exported `StatusBadge` in RecordPage, five record pages wired. Typecheck and lint clean; web unit 378 pass, only these 4 fail. | `logs/tasks/S1-008.md` |
+| S1-009 | S1 | builder-frontend | done | Asset dependency map (React Flow) on the asset page: HOSTS and RUNS around the asset, depth picker 1–3 (default 2), click-through, a notice when the map is cut short at 200 assets (D204). Tests (unit): `pnpm --filter web test -- asset-map` | Done: merged bcbfd3e by the integrator (after a843451 merged main's S1-008 and S1-012 in and regenerated `client.ts`, D211). Earlier history: builder-frontend handed in done; code reviewer approved (after D211); security reviewer approved; ready for the integrator. The user answered the question below with (a): S1-009 keeps its client and generator changes (D211). Earlier history: code-reviewer (tests bc4a2d9, code 45f7091 on task/S1-009, merge-base 5c5ab38): blocked on a decision for the user (D78), not a fix. All six pass criteria met; `asset-map` 32/32, web unit 339/339, API unit 880/880, lint and typecheck clean, no test files in the builder's commit, no skips, no retries or timed waits. But to send the depth to the API the builder changed files the brief doesn't list: `packages/web/src/api/client.ts` (regenerated, +173 lines; a hot file listed by S1-008 and S1-012, not S1-009, and the regeneration also brought in S1-008's `/links` operations and S1-012's `links/remove`); `packages/web/scripts/gen-api-client.ts` (typed `query` argument for routes that aren't paged lists); `packages/api/src/common/openapi.ts` (optional `query` on `RouteDoc`, turned into OpenAPI query parameters); `packages/api/src/records/asset-map.ts` (exports `mapQuerySchema`) and `links.controller.ts` (documents it on the map route; OpenAPI document only, no behaviour change); `packages/web/src/features/records/RecordPage.tsx` (optional `sections` slot for the map). The reviewer judges them needed: main's client has no map route, the generator sent query parameters only for paged lists, and the M0-015 test forbids any other network call. Question for the user: may S1-009 keep these changes, taking `client.ts` as its hot file and adding query-parameter support to the OpenAPI helper and client generator? If yes, merge as is and have S1-008 and S1-012 regenerate `client.ts` after this merge. If no, where should the change go instead (a small separate task, or S1-008), with S1-009 waiting on it? Non-blocking notes: `DependencyMap.tsx:72` hex colour `text-[#0e5c63]` equals `--primary`; `DependencyMap.tsx:172` `hideAttribution: false` is React Flow's default. | `logs/tasks/S1-009.md` |
+| S1-010 | S1 | builder-platform | done | `seed:demo` adds a fixed, re-runnable set of records and links to each demo org (audited, mixed labels, controls owned by the demo Control Owner); `docs/demo/s1.md` click-through; Playwright journeys through `https://grc.localhost` (risk register, adding and removing a link, stale save, own controls, other org and low clearance see nothing). Tests (db + unit + e2e): `pnpm --filter api test -- seed-records`, `pnpm --filter infra test -- demo-doc`, `pnpm test:e2e` | | `logs/tasks/S1-010.md` |
+| S1-011 | S1 | builder-backend | done | Removing a link added by mistake (D201): `POST /api/v1/links/remove` with `{ type, fromId, toId }`; the D200 rule (can edit either end and see both); the link is deleted from Neo4j and a `link.removed` audit entry holding a copy of it is written in the same transaction; hidden or missing link 404; only `manual` and `import` links are removed, an `ai` link is 409 `ai_link_review_only` and stays (D207); re-adding afterwards works; security-matrix row and D59 tests. Tests (unit + db): `pnpm --filter api test -- link-removal` | Done (run by hand alongside run wf_2cf6c9f5-960): tests bea9600 by the test writer; code 3f03f5a by builder-backend. Code and security reviewers approved in round 1. Merged 5c5ab38 by the integrator and pushed. | `logs/tasks/S1-011.md` |
+| S1-012 | S1 | builder-frontend | done | "Remove" on each row of the related-records groups (D201), shown only to people the D200 rule allows and never on AI links (D207), with a confirmation that says the removal is recorded; 404 and 403 answers give clear messages; the group refreshes after a removal. Tests (unit): `pnpm --filter web test -- link-removal` | | `logs/tasks/S1-012.md` |
+| S2-001 | S2 | builder-backend | blocked | Shared framework model in `@grc/shared`: the four frameworks and their keys, Framework and Requirement schemas, code patterns per framework, FWK/REQ numbers from 0001001 per org (D212 (2)), natural code order, the SATISFIES and MAPS_TO link rows, and `canMapControl`: only Admin and Compliance Manager, for controls they can see; owning a control grants nothing (D212 (3)). Tests (unit): `pnpm --filter shared test -- frameworks` | Merged into local main as 5440bf9 (both round-2 approvals after fix be5d87d; one conflict in packages/shared/src/index.ts, both export lines kept), not pushed. The one full `pnpm test` run failed: packages/api tests/records-service/visibility.db.test.ts setup threw `OrgDatabaseNotOnline` for org-e60975e8-7e16-44af-a5ee-f390178eaea1 (graph.service.ts:182 waitOnline), so its 176 tests were skipped; the runner stopped there. This is the D217 Neo4j start failure, which the user needs to look at; no rerun (D171). That database may still exist in Neo4j (`pnpm graph:leftovers` waits on Q-S1-014b). Lint and typecheck passed; e2e not needed (D172). To finish: after Neo4j is looked at, run `pnpm test` once on main and push if clean. Local main is 8 ahead of origin, so the next push includes 5440bf9. Worktrees wf_e4b0298a-bbf-2/-3/-6 and branch task/S2-001 kept. | `logs/tasks/S2-001.md` |
+| S2-002 | S2 | builder-backend | to do | The four catalogs and NIST's mappings as trimmed JSON in the repo (D212 (1)): the builder downloads NIST 800-53 Rev 5 OSCAL, CSF 2.0 and the NIST-authored crosswalks once and commits a trimmed copy; each file carries its source URL, release version and SHA-256 beside its data; NIST IDs exactly as published; only NIST-authored mappings (no third-party OLIR submissions); 800-53 (no withdrawn items) and CSF 2.0 in full, ISO 27001:2022 Annex A (93) and SOC 2 TSC (61) as IDs, titles and our own one-line descriptions; CSF→800-53 and 800-53→ISO mappings only, no SOC 2 links (D212 (4)); a tested converter; nothing downloads at run time. Tests (unit): `pnpm --filter api test -- framework-catalogs`, `pnpm --filter infra test -- framework-catalogs` | | |
+| S2-003 | S2 | builder-backend | to do | Catalog loader: every org's graph gets the Framework and Requirement records and the NIST MAPS_TO links (origin `import`), with stable IDs and numbers, safe to re-run, updates pushed and removed items retired (never deleted), one `framework.loaded` audit entry per changed framework in the same transaction; run by org provisioning and by `pnpm frameworks:load` for existing orgs. Tests (unit + db): `pnpm --filter api test -- framework-load` | | |
+| S2-004 | S2 | builder-backend | to do | Read API: `GET /api/v1/frameworks` (with coverage counts), `/frameworks/:id`, `/frameworks/:id/requirements` (paged, filters, search), `/requirements/:id` (satisfying controls, cross-framework links both ways) and `/controls/:id/requirements`; only what the caller can see, counts included; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- frameworks-api` | | |
+| S2-005 | S2 | builder-backend | to do | Mapping writes: `POST /api/v1/mappings` (control SATISFIES requirement, audited `link.created` in the same transaction, 409 `link_exists`) and `POST /api/v1/mappings/remove` (manual and import only, AI mappings 409 `ai_link_review_only`, audited `link.removed`); 404 for anything hidden, 403 per `canMapControl` (only Admin and Compliance Manager; a Control Owner is refused even on their own control, D212 (3)); `POST /api/v1/links` and `/links/remove` still refuse SATISFIES and MAPS_TO; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- framework-mappings` | | |
+| S2-006 | S2 | builder-frontend | to do | Frameworks screen (7): `/frameworks` with each framework's coverage, `/frameworks/$id` with the requirements table (groups, coverage filter, search, paging, natural code order), `/requirements/$id` with its controls and its links to other frameworks. Tests (unit): `pnpm --filter web test -- frameworks-screen` | | |
+| S2-007 | S2 | builder-frontend | to do | Mapping in the web app: "Map a control" on a requirement page and "Requirements this control satisfies" on a control page (add and remove, with confirmation), shown only when `canMapControl` holds (Admin and Compliance Manager, D212 (3)) and never "Remove" on AI mappings; refusals with clear messages and reference IDs. The control's free-text `framework` field is shown as "Source note" (D212 (5)) on the control list (column and filter) and the control page (field, detail row, hint saying the requirements it satisfies are mapped separately); the stored field, API name and URL parameter stay `framework`; S1 record-screens tests updated to the new label. Tests (unit): `pnpm --filter web test -- control-mapping source-note record-screens` | | |
+| S2-008 | S2 | builder-platform | to do | S2 demo: `seed:demo` loads the catalogs into the demo orgs and adds a fixed, re-runnable set of mappings; `docs/demo/s2.md` click-through; Playwright journeys through `https://grc.localhost` (coverage, mapping and unmapping a control, Control Owner and Viewer read-only, other org sees none of it). Tests (db + unit + e2e): `pnpm --filter api test -- seed-frameworks`, `pnpm --filter infra test -- s2-demo-doc`, `pnpm test:e2e` | | |
+| S1-013 | S1 | builder-backend | done | One shared test set-up for the app's settings (D210 (4)): `packages/api/src/config/app-settings.ts` lists every setting the API and worker read (`APP_SETTINGS`, the same names the code reads, checked both ways by a scan of `packages/api/src`) and `loadAppSettings` fills them from overrides, the environment, the nearest `.env` and Mac defaults; a missing required one fails with its name, never a value; nothing is printed. The test writer moves `prepareEnv` and the links, link-removal, records-api, records-service and graph-accounts helpers onto it, and no test helper copies app settings by hand any more. Tests (unit): `pnpm --filter api test -- app-settings` | | `logs/tasks/S1-013.md` |
+| S1-014 | S1 | builder-platform | done | Flaky-test fix (D171) for the S1 checkpoint's run 3 (`records-service/visibility.db.test.ts`: a throwaway Neo4j org database "did not come online in time"). Cause found (builder, 4fe11ba): Neo4j failed to start one new database (`database_lock`, once in about 2,181 creates), not leftovers. Per D217, `GraphService.createOrgDatabase` reads the `CREATE DATABASE … WAIT` result (or `currentStatus`) and throws at once, naming the database and its state, when it isn't online; no retries, no longer waits (D171). Every test that makes a Neo4j database registers it with one shared tracker whose `dropAll` fails loudly, naming each database it couldn't drop (no more `.catch(() => undefined)` on drops); a scan fails when a test file makes a database outside the tracker or swallows a drop error; `pnpm graph:leftovers` stays fail-safe: it refuses to run and exits 1 while row security hides the org list, and never counts a hidden org as a leftover (which account reads the list: Q-S1-014b, with S7-Q9); no privilege or policy changes (D176). Tests (unit + db): `pnpm --filter api test -- throwaway-databases create-org-database`, `pnpm --filter infra test -- leftover-org-databases` | Done (builder-platform: 54 tests passed across 3 runs on fc09898; all criterion 7 suites green; no leftovers; graph:leftovers exits 1 due to Q-S1-014b). Code follows D217: throws OrgDatabaseNotOnline on start failure. No privileges changed (D176). Code and security reviewers approved in round 1. Ready for integrator to merge. | `logs/tasks/S1-014.md` |
+| S3-001 | S3 | builder-backend | done | Shared intake model in `@grc/shared`: upload kinds and their record types and formats, the 25 MB limit, `detectFileFormat` (type checked by content; zip refused), document and import statuses, the asset import fields, `suggestMapping` from column names, the mapping and push-batch schemas, and `canUpload`. Tests (unit): `pnpm --filter shared test -- intake` | | `logs/tasks/S3-001.md` |
+| S3-002 | S3 | builder-backend | to do | Shared Evidence and Audit finding model in `@grc/shared` (D213 (1)–(3)): numbers EVD0001001 and AUD0001001; the finding's fields (title, severity, status with `risk_accepted`, owner, the control or risk it concerns, source reference, root cause, remediation plan, identified, due and closed dates, optional description) and date rules; evidence fields with review status (pending, accepted, rejected) and reviewer; the SUPPORTS and CONCERNS link rows; the evidence rules (a Control Owner adds only to controls they own, sees all evidence on them, changes only evidence they added; Admins add to any control) and the finding rules. Tests (unit): `pnpm --filter shared test -- evidence-findings` | | |
+| S3-003 | S3 | builder-platform | to do | Intake tables (a new migration): documents (content hash unique per org), import mappings, imports, push batches; org-wall RLS with FORCE on all four, plus role × record type and label checks on documents and imports (D73); `AuditService.appendInTx` and `JobsService.sendInTx` so a row, its audit entry and its job commit together (D29); the intake queue names. Tests (db + unit): `pnpm --filter api test -- intake-tables` | | |
+| S3-004 | S3 | builder-backend | to do | `POST /api/v1/uploads`: multipart, 25 MB, 20 uploads/min per person, type checked by content, zip and other types refused, content-addressed storage in the org's bucket, a repeat upload ignored, label up to the uploader's clearance, the document row + `document.uploaded` entry + job in one transaction; security-matrix row and D59 tests. Tests (unit + db): `pnpm --filter api test -- uploads` | | |
+| S3-005 | S3 | builder-backend | to do | `GET /api/v1/documents` (paged, filtered), `GET /api/v1/documents/:id` and `GET /api/v1/documents/:id/download` (through the API only, audited `document.downloaded`), hidden by role × record type and label in the API and in Postgres; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- documents-api` | | |
+| S3-006 | S3 | builder-backend | to do | Reading asset lists: the worker reads an uploaded CSV or flat JSON in a time- and memory-limited sandbox (our own CSV parser), stores its columns, row count and 5 sample rows, and sets the import to `needs_mapping`; `GET /api/v1/imports`, `GET /api/v1/imports/:id` (with the suggested or saved mapping), and saved mappings per source (`GET`/`POST /api/v1/import-mappings`, audited); security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- import-read` | | |
+| S3-007 | S3 | builder-backend | to do | Running an asset import: `POST /api/v1/imports/:id/run` queues the job; the worker writes assets to Neo4j (origin `import`, matched by source ID, only changed fields updated), HOSTS and RUNS links from the mapped columns, one audit entry per change in the same transaction, row errors by row and field; 2,000 rows in under 1 minute; safe to re-run; a repeat upload from a source with a saved mapping imports by itself; `canImportAssets`: Admin, Risk Manager, Compliance Manager and Analyst, people and API keys (D213 (5)); every change audited, marked origin `import` and carrying the import's ID (and the push batch ID when pushed). Tests (unit + db): `pnpm --filter api test -- import-run` | | |
+| S3-008 | S3 | builder-backend | to do | Push API for machines: `POST /api/v1/push/batches` (API keys only, 1 MB, 60 batches/min per key) stores the rows as a JSON asset list and imports them with the source's saved mapping; a repeat batch ID is ignored and gets the first answer; `GET /api/v1/push/batches`; only keys whose role passes `canImportAssets` (D213 (5)); security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- push-api` | | |
+| S3-009 | S3 | builder-backend | to do | Evidence: `POST /api/v1/evidence` (file + control, stored like any upload, an Evidence node (EVD number, review status `pending`) and its SUPPORTS link in one audited transaction), list, get, edit, retire, download, and `GET /api/v1/controls/:id/evidence`, with D213 (3): a Control Owner adds only to controls they own, sees all evidence on them and changes only evidence they added; Admins add to any control; RM, CM, Auditor and Analyst view; Viewer none; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- evidence-api` | | |
+| S3-010 | S3 | builder-backend | to do | Audit findings: `/api/v1/audit-findings` (list, get, create, edit, retire) with D213 (2)'s fields and date rules (AUD numbers; a finding is created with the control or risk it concerns), CONCERNS links to controls and risks (add, list, remove; AI links refused as in D207; the last one can't be removed), overdue and next-30-days filters, and the findings of a control or a risk; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- finding-records` | | |
+| S3-011 | S3 | builder-frontend | to do | Data intake screen (10) at `/intake`: upload panel (kinds the person may upload, source name for asset lists, label up to their clearance, size and type checked before sending), the documents table with status, filters and download, the repeat-upload notice; roles with no upload access get the no-access screen. Tests (unit): `pnpm --filter web test -- intake-screen` | | |
+| S3-012 | S3 | builder-frontend | to do | Column-mapping screen at `/intake/imports/$id` (D44): the file's columns and sample rows, each of our fields picked from the columns (pre-filled from the saved or suggested mapping), save per source, run, progress, and the results with row errors. Tests (unit): `pnpm --filter web test -- import-screen` | | |
+| S3-013 | S3 | builder-frontend | to do | Evidence in the web app: an "Evidence" section on the control page (D213 (4), no new menu item): add evidence (file, dates, label), list it with its validity ("Expiring soon" within 30 days) and its review status and reviewer, download, edit and retire, shown only to people D213 (3) allows. Tests (unit): `pnpm --filter web test -- evidence-ui` | | |
+| S3-014 | S3 | builder-frontend | to do | Audit findings in the web app (D213 (2), (4)): an "Audit findings" section on the control and risk pages and a page per finding at `/audit-findings/$id`, no new menu item; add (with every D213 field), list, edit and retire findings, and link them to the controls and risks they concern, shown only to people the rules allow. Tests (unit): `pnpm --filter web test -- findings-ui` | | |
+| S3-015 | S3 | builder-frontend | to do | The "Sample data" part of the Data intake screen (D27 #10, D213 (6)): for Admins, what the generators pushed and uploaded (from the API) and the `pnpm gen:data` commands to run them on the Mac; it never starts a generator. Tests (unit): `pnpm --filter web test -- generator-panel` | | |
+| S3-016 | S3 | builder-data | done | Generator world and answer key (D18): from a seed and a size dial (`tiny`, `accuracy`, `stress` from D48, or custom), a hidden answer-key graph per org of assets, risks, controls, policies, incidents and their links, all valid against the shared schemas and ontology; the same seed always gives the same answer key. Tests (unit): `pnpm --filter generators test -- world` | | `logs/tasks/S3-016.md` |
+| S3-017 | S3 | builder-data | to do | Generator sources with realistic mess: CMDB exports from different source systems (CSV and flat JSON), policy documents, SOC tickets and audit reports as text, with duplicates, typos, planted false positives and planted prompt injections (D52.6), each plant recorded in the answer key; same seed, same files. Tests (unit): `pnpm --filter generators test -- sources` | | |
+| S3-018 | S3 | builder-data | to do | Full-pipeline mode (D42): `pnpm gen:data --mode full` makes its orgs and short-lived API keys like `seed:demo`, then acts as dummy connectors through the real API (saved mappings, push batches, document uploads), writes the answer key to a git-ignored folder, prints only counts and IDs, and adds nothing on a re-run. Tests (unit + db): `pnpm --filter generators test -- connector` and `pnpm --filter infra test -- gen-data` | | |
+| S3-019 | S3 | builder-data | to do | Fast-load mode (D42, D213 (7)): `pnpm gen:data --mode fast` writes the answer key's records, links and documents straight into Neo4j, Postgres and storage for the D48 stress sizes, with one hash-chained audit entry per batch that lists every record ID (and document ID) it created; no processing jobs; chunking and embedding come with S4. Tests (unit + db): `pnpm --filter infra test -- fast-load` | | |
+| S3-020 | S3 | builder-platform | to do | S3 demo: `seed:demo` adds a fixed, re-runnable set of uploads, an asset import, evidence and audit findings to each demo org; `docs/demo/s3.md` click-through; Playwright journeys through `https://grc.localhost` (upload and repeat upload, asset list mapping and import, evidence on a control, an audit finding, download, roles with no upload access, the other org sees none of it). Tests (db + unit + e2e): `pnpm --filter api test -- seed-intake`, `pnpm --filter infra test -- s3-demo-doc`, `pnpm test:e2e` | | |
+| S3-021 | S3 | builder-backend | to do | Evidence review (D213 (2)): `POST /api/v1/evidence/:id/review` sets the review status to accepted or rejected and records the reviewer and time, versioned and audited in the same transaction, per `canReviewEvidence` (Admins and Compliance Managers, never on evidence they added themselves, D220 (4)); editing accepted or rejected evidence sends it back to pending (D220 (5)); security-matrix row and D59 tests. Tests (unit + db): `pnpm --filter api test -- evidence-review` | | |
+| S3-022 | S3 | builder-frontend | to do | Evidence review in the web app: "Accept" and "Reject" on each evidence row of the control page, shown only when `canReviewEvidence` holds, with the reviewer and time shown after. Tests (unit): `pnpm --filter web test -- evidence-review-ui` | | |
+| S7-001 | S7 | builder-backend | in review | Shared admin model in `@grc/shared`: the add-person and change-person schemas (new people start at Internal, D51), the set-up link limits (24 h, single use, 256-bit token, TOTP within 10 min, D214 (1)), the cross-org kinds and limits (auditor grants by email up to 90 days, default clearance Internal, parent links to a named group with an end date, break-glass 1 h with a second operator's confirmation and a review, D55, D214 (2)–(4)), the audit-entry view and `maskAuditEntry` (contents hidden above the reader's clearance; who, when, record number and action kept, D186), the notification kinds (including the expiry reminders) and the S7 audit action names. Tests (unit): `pnpm --filter shared test -- admin` | | `logs/tasks/S7-001.md` |
+| S7-002 | S7 | builder-platform | to do | In-app alerts for Admins (D55, D56, D214 (2)): a `notifications` table (a new migration; org wall with FORCE, Admins only), `NotificationsService.notifyAdminsInTx`, `GET /api/v1/notifications` and `POST /api/v1/notifications/:id/read`, and the nightly chain check alerting the org's Admins once per break; the table also takes S7-005's "access ending soon" reminders; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- notifications` | | `logs/tasks/S7-002.md` |
+| S7-003 | S7 | builder-platform | to do | Cross-org tables (a new migration, D214 (2)–(4)): auditor grants made by email and claimed by the auditor's existing account, with their clearance (default Internal); parent links with a clearance, an end date and a named group of the parent org's people; break-glass sessions with who ended, confirmed and reviewed them; the parent side's request and end and the auditor's claim through checked database functions; `app_visible_org` updated (claimed grants only; parent links only for the named people and until their end date); the session's "viewing org"; each account's home org; org wall kept, every org pair tested. Tests (db): `pnpm --filter api test -- cross-org-tables` | | `logs/tasks/S7-003.md` |
+| S7-004 | S7 | builder-backend | to do | People API for Admins: `GET`/`POST /api/v1/admin/people`, `PATCH /api/v1/admin/people/:userId` (role, clearance), `POST /api/v1/admin/people/:userId/remove`; a new account gets its one-time set-up link from S7-024's service (D214 (1)); new people start at Internal; the last Admin can't be removed or demoted; a change takes effect on the person's next request; every change audited; people only (no API keys); security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- admin-people` | | |
+| S7-005 | S7 | builder-backend | to do | Auditor grants and parent links (D55, D214 (2), (3)): `/api/v1/admin/auditor-grants` (list, grant by email for 1–90 days at a chosen clearance, default Internal, never making an account and never saying whether one exists; revoke) and `/api/v1/admin/parent-links` (list both sides; the parent asks by the subsidiary's short name for a named group of its people; the subsidiary approves with a clearance and a number of days, or declines; end from either side); read-only, ending by themselves, audited in both orgs; a daily reminder to the Admins before a grant or link ends; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- cross-org-grants` | | |
+| S7-006 | S7 | builder-platform | to do | Reading another org (D55, D214 (2), (3), (5)): `GET`/`POST /api/v1/views` to switch into one org at a time that the person holds a claimed auditor grant, a parent link naming them, or a break-glass session for, and back; pending auditor grants for the person's email are claimed here, once they've signed in; while viewing, reads only as the Auditor role at the lower clearance (403 `read_only_access` on any change, refused by the API and by Postgres), access re-checked on every request, every switch and every request logged in both orgs, and `/api/v1/me` says which org for the banner; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- cross-org-view` | | |
+| S7-007 | S7 | builder-platform | to do | Break-glass (D55, D214 (4)): `pnpm break-glass:open` (org, operator email, typed reason; read-only for 1 h at Restricted), `pnpm break-glass:confirm` (a second operator) and `pnpm break-glass:end`; the session, the org Admins' alert and the audit entry in one transaction, and the opening logged in both orgs; refused attempts logged; a session never confirmed shows "unapproved"; `GET /api/v1/admin/break-glass` (the log), `POST /api/v1/admin/break-glass/:id/end` and `POST /api/v1/admin/break-glass/:id/review` (the review afterwards); security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- break-glass` and `pnpm --filter infra test -- break-glass-script` | | |
+| S7-008 | S7 | builder-backend | to do | Audit trail API (D56, D186): `GET /api/v1/audit/entries` (paged, newest first, filters) and `GET /api/v1/audit/entries/:seq`, for Admins and Auditors; before/after contents hidden for entries above the reader's clearance while who, when, record number and action stay visible; hashes shown so the chain stays checkable; every route guarded by the audit_trail, uploads, review_queue and chat rows carries `labels: true`; security-matrix rows and D59 tests for every clearance × label pair. Tests (unit + db): `pnpm --filter api test -- audit-viewer` | | |
+| S7-009 | S7 | builder-platform | to do | SSO with OIDC per org (D49, D54, D134, D214 (6)): Better Auth's SSO plugin (exact version pinned), its table (a new migration), `GET`/`PUT /api/v1/admin/sso` and `POST /api/v1/admin/sso/enable` / `disable`; once on, the org's people sign in through their provider and then still enter our TOTP code, and password sign-in is refused; only people the Admin added; a lost-authenticator link skips the password step in an SSO org; the client secret never shown again; audited; tested against a small local stand-in provider. Tests (unit + db): `pnpm --filter api test -- sso-oidc` | | |
+| S7-010 | S7 | builder-platform | to do | SSO with SAML per org (D214 (6)): the same Admin routes take a SAML set-up (sign-in address, the provider's certificate, email domain); only signed answers for our org are accepted (wrong signature, audience, expired or replayed answers refused); our TOTP code still follows; tested against a local stand-in provider. Tests (unit + db): `pnpm --filter api test -- sso-saml` | | |
+| S7-011 | S7 | builder-backend | in review | Failed jobs for Admins (D72): `GET /api/v1/admin/failed-jobs` (this org's jobs that used up their 3 retries: queue, when, attempts, error type only) and `POST /api/v1/admin/failed-jobs/:id/retry` (queued again once, audited `job.retried`); other orgs' and platform jobs never shown; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- failed-jobs` | | `logs/tasks/S7-011.md` |
+| S7-012 | S7 | builder-platform | to do | Nightly backups (D58, D135, D214 (7)): `pnpm backup:run`, started at 03:00 by a launchd job the user switches on once, saves every Neo4j database with `neo4j-admin database backup "*"` (system included, how it takes `system` with the default metadata setting checked by the builder, D220 (2); backup port on 127.0.0.1 only; each backup checked with `neo4j-admin database check`) and each org's files into the git-ignored `backups/` folder (a stored file whose key isn't `sha256/<hex>` is skipped, logged and listed as a warning in the manifest while the rest completes, D220 (2)); a SHA-256 manifest each night; each archive encrypted with `age` (key outside `backups/` and the repo); 7 days kept; a second copy of the encrypted archives in the user's Google Drive for desktop folder (a path in `.env`; no Google API); marks a failed run and keeps the older ones. Postgres joins in S7-025. Tests (unit + db): `pnpm --filter infra test -- backups` | | `logs/tasks/S7-012.md` |
+| S7-013 | S7 | builder-platform | to do | Monthly restore test (D58, D214 (7), (8)): `pnpm backup:restore-test` checks the manifest first, then restores each org's Neo4j backup over the one fixed `restore-test` database (made once by `setup:neo4j`, with a restore-test account that may only stop and start it; no DROP DATABASE for anyone; no other account may open it), checks it with `neo4j-admin database check` and starts it, and re-hashes the files; records pass or fail; never touches the live databases. Postgres joins in S7-025. Tests (unit + db): `pnpm --filter infra test -- restore-test` | | |
+| S7-014 | S7 | builder-frontend | in review | Admin screen (11) frame at `/admin`: tabs, Admins only (others get the no-access state), the menu showing Admin to Admins and Audit trail to Admins and Auditors, and the first tab, API keys (make one with its role and expiry, shown once, list, revoke with confirmation) on the M0-011 routes. Tests (unit): `pnpm --filter web test -- admin-screen` | | `logs/tasks/S7-014.md` |
+| S7-015 | S7 | builder-frontend | to do | People tab: the org's people with role, clearance, MFA and set-up status; add a person (the one-time set-up link shown once, D214 (1)), a new set-up link, a lost-authenticator reset and cancelling an open link, change role and clearance, remove with confirmation, the last-Admin refusal; a read-only table of what each role may do; and the new person's set-up page (password, then TOTP within 10 minutes). Tests (unit): `pnpm --filter web test -- admin-people` | | |
+| S7-016 | S7 | builder-frontend | to do | Cross-org access tab (D214 (2), (3)): auditor grants (grant by email with days and clearance, default Internal; "waiting for the auditor to sign in" until claimed; list with expiry, revoke) and parent links (ask for a named group of our people; approve with clearance and days, or decline; end; the end date and re-approval), with confirmations and refusals with reference IDs. Tests (unit): `pnpm --filter web test -- admin-access` | | |
+| S7-017 | S7 | builder-frontend | to do | Break-glass log tab (D214 (4)): every session with who, the reason, start, end, how it ended, the second operator's confirmation or "Unapproved", and its review; an open one highlighted with "End now" (confirmation); "Review" on an ended one; a link to the session's entries in the audit trail. Plus the Failed jobs tab (D72; folded in from S7-019, D215 (E)): this org's failed jobs (queue, when, attempts, error type) with "Run again" and its result. Tests (unit): `pnpm --filter web test -- admin-break-glass admin-jobs` | | |
+| S7-018 | S7 | builder-frontend | to do | SSO in the web app: the Admin's Sign-in tab (OIDC or SAML set-up, turn on and off, the secret never shown back) and "Sign in with your organisation" on the sign-in page, followed by our TOTP code (D214 (6)). Tests (unit): `pnpm --filter web test -- sso-ui` | | |
+| S7-020 | S7 | builder-frontend | to do | Audit trail screen (12) at `/audit`: paged newest-first table with filters (action, person, record number, dates), an entry's detail with before and after, "Contents hidden: above your clearance" on masked entries, hashes shown; Admins and Auditors only. Tests (unit): `pnpm --filter web test -- audit-screen` | | |
+| S7-021 | S7 | builder-frontend | to do | Viewing another org (D214 (5)): the header's "View another organisation" list and "Back to my organisation" (one org at a time), a banner while viewing (which org, why, until when), every edit button hidden while viewing, and a clear page when access ends. Plus the alerts bell for Admins in the same header (folded in from S7-022, D215 (E)): unread count, the list (break-glass opened, audit chain broken, auditor access or a parent link ending soon) with links, mark as read, checked every 15 s. Tests (unit): `pnpm --filter web test -- org-view notifications-ui` | | |
+| S7-023 | S7 | builder-platform | to do | S7 demo: `seed:demo` adds an auditor firm org whose Auditor holds a claimed grant to Acme, a parent org whose named people are linked to Globex, an ended and reviewed break-glass session and a sample alert, re-runnable; `docs/demo/s7.md`; Playwright journeys (people and a set-up link, grants, viewing another org with its banner, the break-glass log and alert, the audit trail with hidden contents). Tests (db + unit + e2e): `pnpm --filter api test -- seed-admin`, `pnpm --filter infra test -- s7-demo-doc`, `pnpm test:e2e` | | |
+| S7-024 | S7 | builder-platform | to do | One-time set-up links (D214 (1)): a `setup_links` table (a new migration; org wall with FORCE; only a SHA-256 of a 256-bit random token is stored), each person's home org, and a set-up-only session; Admin routes to issue a link (first set-up or a lost-authenticator reset; a new one cancels the old) and revoke it; shown once, valid 24 h, single use, built on the fixed base URL; the public `POST /api/v1/account/setup` under the sign-in rate limit and lockout; after the password step the session may only enrol TOTP, within 10 minutes; issuing, use and revoking audited; the token in no log line or audit entry; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- setup-links` | | |
+| S7-025 | S7 | builder-platform | blocked | Postgres in the backups (D58, D214 (7), D220 (6)): a new read-only Postgres account (SELECT only, bypasses row security, its own password in `.env`; made by `pnpm setup:postgres`, which the user runs if the auto-mode check refuses it; never used by the API or the worker) makes the `pg_dump -Fc` of the app database and `pg_dumpall --globals-only`, and `pnpm graph:leftovers` reads the full org list through it (closing Q-S1-014b); per-table row counts and each org's audit `seq` and last hash in the manifest, encrypted and copied to Google Drive like the other parts; the restore test checks the manifest, restores the dump into a throwaway database, checks the counts and every org's audit chain, and removes it. Tests (unit + db): `pnpm --filter infra test -- backups-postgres leftover-org-databases` | Waits on S7-Q10: which Postgres account makes, restores into and drops the restore test's throwaway copy. The D220 (6) account only reads and is used only by the dump and `graph:leftovers`, and `grc_migrator` can't make databases. S7-Q9 is answered (D220 (6)). | |
+| S7-026 | S7 | builder-platform | to do | Migrations and the environment check (D220 (1)): `pnpm test:env` requires only the migrations on `main` (read from the local `main` branch, so it works from the main checkout and any task worktree); a migration only on the current branch is listed as "this branch only, not required", while a `main` migration the live dev database lacks still fails; new root command `pnpm db:migrate` applies `main`'s migrations to the live dev database with drizzle-kit as grc_migrator through the dev relay (D57, D170), prints what it applied, is safe to rerun, and refuses, changing nothing, any migration that isn't on `main` (D176). Tests (unit + db): `pnpm --filter infra test -- test-env db-migrate` | | |
+| S7-027 | S7 | builder-platform | to do | Two flaky tests made steady (D171, D220 (3)): `packages/api/tests/platform/modules.unit.test.ts` (the identity module case went over its 5 s limit in a full suite under load) and `packages/api/tests/link-removal/ai-link-refused.db.test.ts` (waited over 5 s for the audit relay while S3-001 merged). The builder first checks whether the module layout or the relay's timing is at fault and changes code only if so; the test writer then makes both give the same result every time under load, keeping what each proves; no retries, no sleeps as waits. Tests (unit + db): `pnpm --filter api test -- modules ai-link-refused` | | |
 
-**Moved out of M0 (planned with slice 7, no task yet):**
-- SSO (OIDC/SAML) is planned for S7, with the Admin screens. Its tests will use a small stand-in sign-in provider that runs locally (D134).
-- Nightly backups and the monthly restore test are planned for S7, with the admin tools (D135).
+**Moved out of M0 (now planned in S7):**
+- SSO (OIDC/SAML) with the Admin screens: S7-009, S7-010 and S7-018. Its tests use a small stand-in sign-in provider that runs locally (D134).
+- Nightly backups and the monthly restore test: S7-012, S7-013 and S7-025 (D135, D214 (7), (8)).
 
 ## Briefs
 
@@ -1435,3 +1492,2299 @@ Task: S1-012
 **Tests to write (kind `unit`, Vitest + Testing Library, API mocked at the client boundary):** `packages/web/tests/link-removal/*.unit.test.tsx`, covering criteria 1–6, with at least an editor of this record, an editor of only the other end (a Risk Manager on a control page), a Viewer, and a Control Owner on an owned and a not-owned control. Also: an Admin on a group holding one `manual`, one `import` and one `ai` row sees "Remove" on the first two only (D207), and a mocked 409 `ai_link_review_only` shows its message. Security-matrix rows: none (web only).
 
 **Test command:** `pnpm --filter web test -- link-removal`
+
+---
+
+Task: S1-013
+
+**Goal:** One shared test set-up that gives the app under test every setting it needs from `.env`, so a new required setting can't be left out again. In S1-005, `prepareEnv` (`packages/api/tests/platform/helpers.ts`) copied only some settings into `process.env`, `NEO4J_QUERY_SECRET` was missing, and 305 tests failed. Three helpers were then patched one by one (`tests/links/helpers.ts:90`, `tests/link-removal/helpers.ts:64`, `tests/records-api/helpers.ts:138`), and the records-service helpers build `GraphService` from yet another loader (`fullEnv()` in `tests/graph-accounts/helpers.ts`). After this task there is one list of the app's settings, it can't drift from what the code reads, and every test helper gets its settings from it.
+
+**Decisions:** **D210 (4)** (this task), D57 (secrets only from `.env`; the migration URL never reaches the apps), D163 and D164 (no values in output), D170 (`.env` keeps the container addresses; Mac-side code picks the Mac ones), D171, D176, D177, D180 (`pnpm test:env` already checks the `.env` key names; unchanged here), D183 (hot files). Read the S1 shared notes.
+
+**Depends on:** none. Everything it touches (S1-003, S1-004, S1-005, S1-011) is already on `main`; it doesn't wait on S1-009 or S1-010.
+
+**Hot files:** `packages/api/tests/platform/helpers.ts` (`prepareEnv`, used by every in-process API and worker test).
+
+**How the work splits (test files belong to the test writer, D89, D96):**
+- **Test writer:** writes the three new unit test files below (red until the module exists), and moves the existing helpers onto the module (see "Helpers to move"). With the module missing, the helpers it moved stop loading too; that's expected until the builder's commit.
+- **Builder (builder-backend):** writes `packages/api/src/config/app-settings.ts` only. No change to how the running app reads its settings: `graphFromEnv`, `dbFromEnv`, `fileStoreFromEnv`, `createAuth`, `jobs.module.ts`, `logger.ts` and `main.api.ts` stay as they are.
+
+**Files:**
+- Create (builder): `packages/api/src/config/app-settings.ts`.
+- Create (test writer): `packages/api/tests/app-settings/list.unit.test.ts`, `loader.unit.test.ts` and `helpers-use-it.unit.test.ts`.
+- Modify (test writer): `packages/api/tests/platform/helpers.ts`, `tests/links/helpers.ts`, `tests/link-removal/helpers.ts`, `tests/records-api/helpers.ts`, `tests/records-service/helpers.ts` and `tests/graph-accounts/helpers.ts`.
+
+**Interfaces (produces), exact names, in `packages/api/src/config/app-settings.ts`:**
+- `interface AppSetting { name: string; required: boolean; macDefault?: string }`.
+- `APP_SETTINGS: readonly AppSetting[]`. Today's entries, from what `packages/api/src` reads:
+  - required, no default: `DATABASE_URL_APP`, `NEO4J_ADMIN_PASSWORD`, `NEO4J_WRITER_PASSWORD`, `NEO4J_QUERY_SECRET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `BETTER_AUTH_SECRET`;
+  - required, with a Mac default: `NEO4J_URI` (`bolt://127.0.0.1:7687`), `S3_ENDPOINT` (`http://127.0.0.1:8333`, the dev switch, D132);
+  - optional: `BETTER_AUTH_URL` (Mac default `https://grc.localhost`, D60), `HOST`, `PORT`, `LOG_LEVEL` (no default).
+  - Not in the list: `DATABASE_URL_MIGRATE` and `POSTGRES_PASSWORD` (the apps never read them, D57), `OLLAMA_BASE_URL` (no code reads it yet; the task that first reads it adds it, and the list test makes it).
+- `readDotEnv(startDir: string): Record<string, string>`: walks up from `startDir` and reads every `.env` it finds; a nearer file wins for a key. Lines are `KEY=value`; blank lines and `#` lines are skipped; one pair of matching `"` or `'` quotes around a value is removed. The same rules as `readDotEnv` in `tests/db/helpers.ts`. It never logs.
+- `loadAppSettings(opts: { env?: NodeJS.ProcessEnv; dotEnv?: Record<string, string>; overrides?: Record<string, string> }): Record<string, string>`: for each name in `APP_SETTINGS`, the first non-empty value from `overrides`, then `env` (default `process.env`), then `dotEnv` (default `{}`), then `macDefault`. It returns only names in `APP_SETTINGS`, and leaves out an optional one with no value. If any required one has no value, it throws `MissingAppSettings`.
+- `class MissingAppSettings extends Error` with `missing: string[]` (the names, in list order). The message is `Missing settings: <NAME>, <NAME>. Add them to .env.` It holds names only, never a value.
+- Pure apart from `readDotEnv`'s file reads: no network, no `console`, no pino, no writes to `process.env`. Imports nothing from the rest of `src`.
+
+**Helpers to move (test writer), no assertion changed:**
+1. `tests/platform/helpers.ts`: add `appTestEnv(overrides?: Record<string, string>): Record<string, string>`, which is `loadAppSettings({ dotEnv: readDotEnv(API_DIR), overrides })`. `prepareEnv(database)` becomes: `Object.assign(process.env, appTestEnv({ DATABASE_URL_APP: appUrl(database) }))`, then `delete process.env.DATABASE_URL_MIGRATE` as now. The copy list, the `||=` defaults and the random `BETTER_AUTH_SECRET` fallback go: a missing `BETTER_AUTH_SECRET` now fails loudly by name, like any other required setting (`.env` has it, and `pnpm test:env` checks it).
+2. `tests/links/helpers.ts`, `tests/link-removal/helpers.ts`, `tests/records-api/helpers.ts`: remove the hand copies of `NEO4J_QUERY_SECRET`; `prepareEnv` now covers them.
+3. `tests/records-service/helpers.ts` and `newGraph()` in `tests/graph-accounts/helpers.ts`: build `GraphService` with `graphFromEnv(appTestEnv())` instead of `graphFromEnv(fullEnv())`. `fullEnv()` stays only where the whole `.env` goes to a script (`runSetupNeo4j`) or where `secretValues()` needs it.
+
+**Pass criteria:**
+1. **The list matches the code, both ways:** every setting name `packages/api/src` reads is in `APP_SETTINGS`, and every name in `APP_SETTINGS` is read somewhere in `packages/api/src` (like the security-matrix rule, D175). The scan skips `src/config/app-settings.ts` itself. It finds names read as `process.env.NAME`, `env.NAME` (the `env: NodeJS.ProcessEnv` parameters), `process.env['NAME']` and `required('NAME')` (storage.module.ts). The test fails with the names that are missing from the list, or listed but not read.
+2. **Required and optional:** `NEO4J_QUERY_SECRET`, `BETTER_AUTH_SECRET`, `DATABASE_URL_APP`, both Neo4j passwords and both S3 keys are required; `HOST`, `PORT`, `LOG_LEVEL` and `BETTER_AUTH_URL` are optional; the Mac defaults are the ones above.
+3. **Where values come from:** overrides beat the environment, the environment beats `.env`, `.env` beats the Mac default; an empty string counts as not set at every level. `DATABASE_URL_MIGRATE`, `POSTGRES_PASSWORD`, `DEMO_USER_PASSWORD` and any other name not in the list are never in the result, even when `.env` and the environment hold them (D57).
+4. **Loud and safe when something is missing:** with any one required setting absent (a table test over every required name), `loadAppSettings` throws `MissingAppSettings` whose `missing` and message name exactly that setting. With several absent, all are named in list order. Neither the message nor `missing` contains any value that was present (the test gives every present setting a distinctive value and checks none appears).
+5. **Prints nothing:** with `console.log`, `console.info`, `console.warn`, `console.error` and `process.stdout.write`/`process.stderr.write` spied, `readDotEnv` and `loadAppSettings`, succeeding or throwing, write nothing. `loadAppSettings` doesn't change `process.env`.
+6. **`readDotEnv`:** in a temporary folder tree (made and removed by the test, never the real `.env`), a nearer `.env` wins per key, keys only in the farther file still come through, `#` and blank lines are skipped, quotes are removed, and a tree with no `.env` gives `{}`.
+7. **Helpers use it:** no file under `packages/api/tests/` other than `tests/platform/helpers.ts` assigns `process.env.<NAME>` for a name in `APP_SETTINGS` (`=`, `||=` or `??=`), and no test helper passes `fullEnv()` to `graphFromEnv`. The test names the file and line.
+8. **Nothing else breaks:** after the move, these still pass with no assertion changed and none skipped: `pnpm --filter api test -- platform`, `auth`, `api-keys`, `access-guard`, `outbox`, `audit`, `records-service`, `records-api`, `links`, `link-removal` and `graph-accounts`.
+9. Lint and typecheck clean.
+
+**Tests to write (kind `unit`; they need no service):**
+- `packages/api/tests/app-settings/list.unit.test.ts`: criteria 1 and 2.
+- `packages/api/tests/app-settings/loader.unit.test.ts`: criteria 3–6. Pass `env` and `dotEnv` in; don't depend on the real `.env` or the real `process.env`.
+- `packages/api/tests/app-settings/helpers-use-it.unit.test.ts`: criterion 7 (reads the test files as text).
+- Agreement (D174): the tests agree with the M0-007 platform tests, the M0-003 `tests/db/helpers.ts` `.env` rules, and TEST-002's `test:env` key list; name them in the hand-off.
+- Security-matrix rows: none (no route, no record type).
+- Never weaken live privileges, secrets or shared state to prove a test (D176): red comes from the module not existing in the worktree.
+
+**Migrations:** none.
+
+**Test command:** `pnpm --filter api test -- app-settings` (the builder also runs the criterion 8 suites once: `pnpm --filter api test -- platform auth api-keys access-guard outbox audit records-service records-api links link-removal graph-accounts`)
+
+---
+
+Task: S1-014
+
+**Goal:** Find and fix the real reason a throwaway Neo4j org database sometimes doesn't come online, so the full suite is stable 3 runs out of 3. At the S1 checkpoint (main dc4a7f2) the full suite passed in runs 1 and 2, then in run 3 `packages/api/tests/records-service/visibility.db.test.ts` stopped in its set-up: `newTestOrg` (`tests/records-service/helpers.ts:239`) → `GraphService.createOrgDatabase` → `waitOnline` threw "Database org-<uuid> did not come online in time" (`packages/api/src/graph/graph.service.ts:163`, `ONLINE_WAIT_MS = 120_000`, after `CREATE DATABASE $name IF NOT EXISTS WAIT` had already returned). All 176 tests in the file were skipped. The same file passed in runs 1 and 2 and on every merge. db tests now run at most 3 at a time across worktrees (D215 (B), `packages/infra/scripts/test-slot.ts`). Neo4j is Neo4j Desktop (Enterprise) on a 16 GB Mac. Report: `docs/checkpoints/s1.md`, "The failure".
+
+**The cause is now known (first builder run, code at 4fe11ba on `task/S1-014`; carry on from that branch):** Neo4j failed to start one brand-new database (its own `database_lock`), not leftovers or slowness, and `createOrgDatabase` then polled an offline database for 120 s. The user's answer is **D217**: `createOrgDatabase` fails at once with a clear error when the new database isn't online. So the task is now: the tracker and scan (unchanged), the fail-at-once change in `GraphService.createOrgDatabase`, and `pnpm graph:leftovers` kept fail-safe.
+
+**Decisions:** **D217** (a new org database that fails to start fails at once; no retries; `graph:leftovers` stays fail-safe, no privilege changes; the account question is Q-S1-014b, decided with S7-Q9), **D171** (a test that fails and then passes is a bug; no retries anywhere), **D176** (never weaken live privileges, secrets or the running stack to prove a test), D82 (one test process per agent; throwaway databases per agent), D96 (the test writer owns test files), D173 (a skipped test fails the check), D177 (test kinds), D180 (`pnpm test:env` checks and changes nothing; unchanged here), D183 (hot files), D214 (8) (the admin account has no DROP DATABASE; cleanup uses the Neo4j Desktop `neo4j` account the tests already use), D215 (B) (test slots), D57, D163 and D164 (no secret values in output). Read the S1 shared notes.
+
+**Depends on:** none.
+
+**Hot files:** `packages/api/tests/graph/helpers.ts` (`dropDatabases`, used by every Neo4j test helper), `packages/api/src/graph/graph.service.ts` (`createOrgDatabase`, used by provisioning and every Neo4j test helper) and the root `package.json` (the new `graph:leftovers` script).
+
+**Builder's findings from the first run (4fe11ba), for the record:**
+- 0 leftover throwaway databases on the DBMS; at most 10 org databases alive at once during the runs.
+- One `CREATE DATABASE … WAIT` plus the online check takes about 0.6 s.
+- The checkpoint failure was one Neo4j `database_lock` start failure (a `FileLockException` on a brand-new database) at 07:29:30 UTC, about once in 2,181 creates; the database stayed offline and `waitOnline` ran out its 120 s.
+- The Mac slept from 04:16 to 09:34 UTC that night.
+- `grc_migrator` can't read the `organization` rows (RLS with FORCE and no policy for it), so the script checks `row_security_active()` and refuses to run.
+
+**What was known before the first run, and the leads (kept for context; the findings above settle them):**
+- The helpers drop their databases in `afterAll` and swallow any error: `dropDatabases(env.sup, env.databases).catch(() => undefined)` in `tests/records-service/helpers.ts:211`, `tests/links/helpers.ts:99`, `tests/outbox/helpers.ts:179` and `tests/records-api/helpers.ts:161`. A failed drop, or a run that was killed before `afterAll`, leaves an `org-<uuid>` database behind with nobody told. Each Neo4j database has its own store files, transaction logs and share of the page cache, so hundreds of leftovers could make every new `CREATE DATABASE` slower until one passes the limit.
+- Other places make Neo4j databases in tests: `tests/graph-accounts/helpers.ts:198` and `outside-access.db.test.ts:94`, `tests/graph/org-database.db.test.ts` and `setup-neo4j.db.test.ts`, `tests/org-schema/ensure.db.test.ts`, `tests/provision/*` (through `provisionOrg`, `org:create` and `seed:demo` with `DEMO_ORG_SLUG_SUFFIX`, cleaned by `removeOrgDatabases` in `tests/provision/helpers.ts:256`), `tests/outbox/helpers.ts:189`, `tests/links/helpers.ts:124`, `tests/records-api/helpers.ts:173`, and `packages/infra/tests/graph-schema/graph-schema-script.db.test.ts:58`.
+- Other leads: one file making more databases than it needs; three slots making databases at the same moment; Neo4j Desktop's memory or store settings. Settings of Neo4j Desktop are the user's; read them, never change them.
+
+**How the work splits (test files belong to the test writer, D96):**
+- **Test writer (first):** writes the red tests below, writes the shared tracker `packages/api/tests/graph/throwaway-databases.ts` (a test helper, so theirs), and moves every place listed above onto it. The tracker needs no builder code, so its own unit test can be red only through the scan; that's fine: the scan is red today because four helpers swallow drop errors. Adds the new red unit test for the fail-at-once rule (`tests/graph/create-org-database.unit.test.ts`, below); it's red on 4fe11ba because `createOrgDatabase` still polls an offline database. Keep every existing test on the branch, including the leftover tests (`find.unit.test.ts`).
+- **Builder (builder-platform):**
+  1. The investigation is done (findings above); don't repeat it. Start from 4fe11ba.
+  2. Change `GraphService.createOrgDatabase` (`packages/api/src/graph/graph.service.ts`) to D217 (criterion 1 below). Nothing else in `GraphService` changes; `ONLINE_WAIT_MS` stays 120 000.
+  3. Keep `packages/infra/scripts/leftover-org-databases.ts` and the root script `graph:leftovers` fail-safe as they are at 4fe11ba (below). Don't add a policy, grant, `SECURITY DEFINER` function or new role so it can read the org list: that's Q-S1-014b, open until S7-Q9 (D217, D176).
+  4. **Never** drop, stop or change a database on the live DBMS except throwaway databases a test run makes and tracks, and never run `pnpm graph:leftovers --drop` (D176). Never change Neo4j Desktop's settings. Never touch `orion-neo4j` or `sentry-neo4j`.
+
+**Files:**
+- Create (test writer): `packages/api/tests/graph/throwaway-databases.ts`; the test files below, including `packages/api/tests/graph/create-org-database.unit.test.ts`.
+- Modify (test writer): `packages/api/tests/graph/helpers.ts` (`dropDatabases` stops being used for cleanup, or becomes the tracker's drop; no `IF EXISTS` swallowing beyond what Cypher's `IF EXISTS` itself does), `tests/records-service/helpers.ts`, `tests/links/helpers.ts`, `tests/outbox/helpers.ts`, `tests/records-api/helpers.ts`, `tests/graph-accounts/helpers.ts`, `tests/graph-accounts/outside-access.db.test.ts`, `tests/graph/org-database.db.test.ts`, `tests/graph/setup-neo4j.db.test.ts`, `tests/org-schema/ensure.db.test.ts`, `tests/provision/helpers.ts` (and the provision tests that make databases), `packages/infra/tests/graph-schema/graph-schema-script.db.test.ts`. No assertion changed.
+- Create (builder): `packages/infra/scripts/leftover-org-databases.ts`.
+- Modify (builder): root `package.json` (add `"graph:leftovers": "node packages/infra/scripts/leftover-org-databases.ts"`); `packages/api/src/graph/graph.service.ts` (`createOrgDatabase` and `waitOnline` only, plus the new error class).
+
+**Interfaces (produces), exact names:**
+- In `packages/api/tests/graph/throwaway-databases.ts` (test writer):
+  - `class ThrowawayDatabases { constructor(driver: Driver); track(name: string): void; names(): string[]; dropAll(): Promise<void> }`. `track` accepts only `org-<lowercase uuid>` names (any other name throws, so the tracker can never drop `neo4j`, `system` or a named database). `dropAll` drops every tracked name one at a time with `DROP DATABASE \`<name>\` IF EXISTS WAIT` in `system`, then checks with `SHOW DATABASES` that none of them is still listed, and forgets the ones that are gone. If any drop throws or any name is still listed, it rejects with `LeftoverDatabases`.
+  - `class LeftoverDatabases extends Error` with `names: string[]`; message `Throwaway Neo4j databases left behind: <name>, <name>`. Names only, never a password or a driver error's full text.
+  - Every helper calls `track(name)` **before** it creates the database (so a create that half-fails is still cleaned up), and calls `await tracker.dropAll()` in its tear-down with no `.catch`. Other tear-down steps (closing drivers and apps, dropping the Postgres throwaway database) still run when `dropAll` rejects (`try … finally`), and the rejection then fails `afterAll`, naming the database.
+- In `packages/api/src/graph/graph.service.ts` (builder):
+  - `export class OrgDatabaseNotOnline extends Error` with `database: string` (the `org-<uuid>` name) and `state: string` (what Neo4j reported: the WAIT result's state or `currentStatus`, for example `offline` or `quarantined`). The message names both, for example `Database org-<uuid> did not start: offline`. It may add Neo4j's own status message, but never a password or setting value (D57, D164).
+  - `createOrgDatabase(orgId: string): Promise<void>` keeps its signature and stays safe to re-run (M0-004).
+- In `packages/infra/scripts/leftover-org-databases.ts` (builder):
+  - `export function leftoverOrgDatabases(databaseNames: string[], liveOrgIds: string[]): string[]`: pure. Returns the names that are exactly `org-<lowercase uuid>` and whose UUID is not in `liveOrgIds`, sorted. Never returns `neo4j`, `system`, `restore-test` (D214 (8)), any name that isn't `org-<lowercase uuid>`, or a live org's database.
+  - Run as a script (`pnpm graph:leftovers`): reads the database names from Neo4j as the `neo4j` account (`NEO4J_DESKTOP_PASSWORD`, as `test-env.ts` does) and the live org IDs from the `organization` table the way `test-env.ts` reads Postgres (migration account through the dev relay, `toHostAddress`, a READ ONLY transaction). Prints the count and the names, one per line; exit 0. Prints no setting values. If Postgres or Neo4j can't be read, it prints which one and exits 1, and never treats "couldn't read the live orgs" as "no live orgs". **Fail-safe (D217):** while row security hides the `organization` rows from the account it reads with (today it does: `row_security_active()` is true for `grc_migrator`), it refuses to run: it prints that the org list can't be read and why, lists nothing, drops nothing and exits 1. It never counts an org it can't see as a leftover. No privilege, policy, function or role is added to make it see them (D176); which account reads the full org list is Q-S1-014b, decided with S7-Q9.
+  - `pnpm graph:leftovers --drop`: drops exactly the listed leftovers, one at a time with `WAIT`, printing each name; it refuses the same way first. **For the user (or the main session with the user's OK) only; no agent runs it.**
+
+**Pass criteria:**
+1. **A new database that fails to start fails at once (D217):** `createOrgDatabase` reads the result rows of `CREATE DATABASE $name IF NOT EXISTS WAIT` (check the column names, such as `state`, `message` and `success`, against a real WAIT result or Neo4j 2026.05's documentation; don't assume them) and, after it, `SHOW DATABASE $name YIELD currentStatus`. If the WAIT result reports a failure, or `currentStatus` is anything other than `online` (for example `offline` or `quarantined`), it throws `OrgDatabaseNotOnline` straight away, naming the database and that state. No retry, no drop-and-recreate, no second `CREATE`, no longer `ONLINE_WAIT_MS` and no new sleep (D171). The one wait kept: while the status is still `starting` (only possible when `IF NOT EXISTS` found a database another caller is still creating), it keeps checking as today, and fails at once as soon as the status is anything other than `starting` or `online`. An `online` database resolves as today, and an existing online one is still a no-op (M0-004).
+2. **No silent drops (the red check):** no file under `packages/*/tests/` calls `dropDatabases`, `removeOrgDatabases`, `dropAll` or runs `DROP DATABASE` with `.catch(() => undefined)`, `.catch(() => {})` or an empty `catch` around it. The scan names the file and line.
+3. **Every database a test makes is tracked:** every file under `packages/*/tests/` that makes a Neo4j database (`createOrgDatabase(`, `CREATE DATABASE`, `provisionOrg(`, or running `org:create` / `seed:demo`) also calls `.track(` on a `ThrowawayDatabases`, or imports a helper from the allow-list the scan keeps (`tests/records-service/helpers.ts`, `tests/links/helpers.ts`, …) that does. The scan names any file that makes one without it. Tests that check refusals (a `CREATE DATABASE` that must fail, `setup-neo4j.db.test.ts:198`, `:385`) still track the name, so a wrongly-successful create is cleaned up too.
+4. **The tracker:** with a stub driver, `dropAll` drops each tracked name once, in `system`; rejects with `LeftoverDatabases` naming exactly the names whose drop threw or that `SHOW DATABASES` still lists; forgets the dropped ones (a second `dropAll` does nothing); `track` throws for `neo4j`, `system`, `restore-test`, `org-NOT-A-UUID` and an upper-case UUID; neither the message nor `names` contains the stub's password or error text.
+5. **Against the real Neo4j (db):** two throwaway `org-<uuid>` databases made and tracked, then `dropAll`: `SHOW DATABASES` lists neither. No timing is asserted.
+6. **`leftoverOrgDatabases`:** table test — live org databases, `neo4j`, `system`, `restore-test`, `org-` plus an upper-case UUID or a short ID are never returned; an `org-<uuid>` with no live org is; the result is sorted; empty inputs give `[]`.
+7. **Nothing else breaks:** after the move, with no assertion changed and nothing skipped (D173): `pnpm --filter api test -- records-service records-api links link-removal outbox graph graph-accounts org-schema provision` and `pnpm --filter infra test -- graph-schema`. After those runs, no database they made is left: the builder checks once with `SHOW DATABASES` as the `neo4j` account (the `org-*` count before and after the runs), since `pnpm graph:leftovers` refuses to run for now, and says so in the findings. `pnpm graph:leftovers` run once exits 1 with its "can't read the org list" message and lists and drops nothing (the builder quotes the output line in the findings, with no values).
+8. **Stable (checked at the checkpoint rerun, not by this task's finish check):** after the merge, the S1 checkpoint's 3 full-suite runs pass (D171). If Neo4j fails to start a database again, the run fails at once with `OrgDatabaseNotOnline` naming it, and Neo4j itself gets looked at (D217).
+9. No retry, no longer `ONLINE_WAIT_MS`, no sleep or `setTimeout` added to any test, helper or `graph.service.ts`, and `retry: 0` stays in every `vitest.config.ts` (D171). Lint and typecheck clean.
+
+**Tests to write:**
+- `packages/api/tests/throwaway-databases/scan.unit.test.ts` (unit): criteria 2 and 3 (reads the test files as text; red today because of the four swallowed drops).
+- `packages/api/tests/throwaway-databases/tracker.unit.test.ts` (unit): criterion 4, stub driver, no service.
+- `packages/api/tests/throwaway-databases/drop.db.test.ts` (db): criterion 5, as the `neo4j` account through `superDriver()`, only databases it made itself.
+- `packages/infra/tests/leftover-org-databases/find.unit.test.ts` (unit): criterion 6. Already on the branch; keep it as it is.
+- `packages/api/tests/graph/create-org-database.unit.test.ts` (unit, new, red on 4fe11ba): criterion 1. No real Neo4j: `vi.mock('neo4j-driver')` so the admin driver's `system` session is a stub that returns scripted rows for `CREATE DATABASE … WAIT` and `SHOW DATABASE … YIELD currentStatus`. Cases: (a) the WAIT result reports a failure → rejects with `OrgDatabaseNotOnline` whose `database` is the `org-<uuid>` name and whose message names the database and the state; (b) WAIT succeeds but `currentStatus` is `offline` → the same, and `SHOW DATABASE` was read at most once (no polling); (c) `quarantined` → the same; (d) `starting` then `offline` → rejects on the read that sees `offline`; (e) `online` → resolves; (f) `ExistingDatabaseFound` from the create, then `online` → resolves. Each rejecting case settles without reaching `ONLINE_WAIT_MS` (on today's code they poll for 120 s and hit the test timeout, which is the red); no fake-timer tricks that would hide a wait. Neither the message nor the error's fields contain the stub's passwords.
+- Agreement (D174): the tests agree with M0-004's `tests/graph/org-database.db.test.ts` (database names, the admin account making databases, re-running is safe), D217 (fail at once, no retries), D214 (8) (no DROP for the admin; `restore-test`), S1-013's settings (the `neo4j` password comes through the existing `graphTestEnv()`), and D82's throwaway-database rule; name them in the hand-off.
+- Security-matrix rows: none (no route, no record type).
+- Never weaken live privileges, secrets or the running stack to prove a test (D176): the red comes from the swallowed drops and from `createOrgDatabase` polling an offline database, never from changing Neo4j or Postgres. No test makes a real database fail to start, and none changes a grant or policy to prove the leftover script's refusal.
+
+**Migrations:** none.
+
+**Test command:** `pnpm --filter api test -- throwaway-databases create-org-database` and `pnpm --filter infra test -- leftover-org-databases` (the builder also runs the criterion 7 suites once).
+
+---
+
+### S2 shared notes (every S2 brief includes these)
+S2 is slice 2, "Frameworks and mappings" (D76). It runs in one workflow run with S3 and S7 (D181, D183), after the S1 checkpoint. The M0 and S1 shared notes above (layout, test ownership, throwaway databases, one test process, code style, graph reads and writes, audit entries, no values in logs, 404 for anything hidden) still apply.
+
+- **Scope (planner's reading, D3(d), D20, D27 #7, D66, D67, D76):**
+  - The framework catalogs copied into every org's graph: NIST 800-53 Rev 5 and CSF 2.0 in full; ISO 27001:2022 and SOC 2 as IDs and titles plus our own one-line descriptions (D20). No SCF.
+  - The cross-framework links from NIST's own mappings (Requirement -MAPS_TO-> Requirement, origin `import`).
+  - Mapping controls to requirements by hand (Control -SATISFIES-> Requirement, origin `manual`), for all four frameworks, SOC 2 included (D212 (4)).
+  - Screen 7, Frameworks, with coverage, plus the requirements section on the control page.
+  - The control's free-text `framework` field stays, shown as **"Source note"** (D212 (5), S2-007). SATISFIES links are the real mapping: coverage, the Frameworks screen and the control's requirements section never read the Source note.
+  - **Not in S2:** the AI's suggested mappings and all SOC 2 cross-framework links (D212 (4), D16(b), D20: Gemma suggests them in S4, the Analyst approves them in S5; S2 loads SOC 2 criteria for hand mapping only), Evidence and SUPPORTS (S3, D202), chat and search over frameworks (S6). There's no real Gemma or bge-m3 anywhere in S2, and no `nameEmbedding` is set (D203 carries over).
+- **Folders S2 owns (D183):** `packages/api/src/frameworks/`, `packages/shared/src/frameworks/`, `packages/web/src/features/frameworks/`, `packages/infra/scripts/build-framework-catalogs.ts`, and the test folders each brief names. S2 never changes `intake/` or `admin/` (S3, S7) or anything under `packages/generators/`. It reads from `packages/api/src/records/` and `packages/shared/src/records/` (S1, finished) but changes nothing there. The exceptions, each named in S2-007's brief and each a hot file: S2-007's small change to `ControlPage.tsx`, and its "Source note" label change in `ControlPage.tsx` and `ControlList.tsx` (plus the S1 `record-screens` web tests that find the field by its label).
+- **The four frameworks (keys stored lowercase with `_`, like S1's values):**
+
+  | key | name shown | frameworkVersion | publisher | what a requirement is | group (shown in the UI) |
+  |---|---|---|---|---|---|
+  | `nist_800_53` | NIST SP 800-53 | Rev. 5 | NIST | each control and control enhancement that isn't withdrawn (`AC-2`, `AC-2(1)`) | the family, for example `AC Access Control` (20 families) |
+  | `nist_csf_2` | NIST Cybersecurity Framework | 2.0 | NIST | each subcategory (`GV.OC-01`; 106 in all) | the category, for example `GV.OC Organizational Context` |
+  | `iso_27001` | ISO/IEC 27001 | 2022 | ISO/IEC | each Annex A control (`A.5.1` to `A.8.34`; 93 in all) | the theme: `A.5 Organizational controls`, `A.6 People controls`, `A.7 Physical controls`, `A.8 Technological controls` |
+  | `soc_2` | SOC 2 Trust Services Criteria | 2017 (revised points of focus 2022) | AICPA | each criterion (`CC1.1` to `CC9.2`, `A1.1`–`A1.3`, `C1.1`–`C1.2`, `PI1.1`–`PI1.5`, `P1.1`–`P8.1`; 61 in all) | the series, for example `CC6 Logical and Physical Access Controls` |
+
+- **Graph nodes (D67, D68, D73; the property names the S1-002 schema already indexes):**
+  - Labels `Framework` and `Requirement`. `packages/api/src/graph/privileges.ts` already maps both to the `framework_mapping` row, so every one of the 28 query accounts can read them up to its clearance (every role's cell there allows view). Never change privileges or accounts (D131, D144, D176).
+  - Common properties, as S1's records: `id` (a lowercase UUID, **stable**: a name-based UUID v5 of `framework:<key>` or `requirement:<key>:<code>`, the same in every org, made the way `orgIdForSlug` in `provision-org.ts` does it), `number`, `sourceIds` (`[]`), `name`, `sensitivity`, `status` (`active` or `retired`), `owner` (`system`), `version`, `createdAt`, `createdBy` and `updatedAt`, `updatedBy` (`system:framework-catalog`), `origin` (`import`).
+  - `sensitivity` is `internal` for every catalog node: D51's default for everything that isn't an asset, incident or evidence (planner's reading; see findings).
+  - Framework's own properties: `key`, `frameworkVersion` (not `version`, which is the record's own counter, like S1's renames), `publisher`, `description`. `name` is the name shown in the table above.
+  - Requirement's own properties: `code`, `title`, `description`, `framework` (the key; a field, not a link, D73), `group`, `parentCode` (the base control for an 800-53 enhancement, `null` otherwise), `sortKey` (a string that sorts codes in natural order: `AC-2` before `AC-10`, `AC-2` before `AC-2(1)`). `name` is `<code> <title>`, for example `AC-2 Account Management`.
+  - Numbers (D68, **D212 (2)**): `FWK` and `REQ` followed by 7 digits, from `0001001` per org, as D196 (for example `FWK0001001`, `REQ0001014`).
+  - `code` is the NIST ID exactly as NIST publishes it (D212 (1)): `AC-2(1)`, `GV.OC-01`, never re-cased, re-padded or re-written. ISO and SOC 2 codes are the standard's own IDs.
+- **Links (D67):**
+  - `Control -SATISFIES-> Requirement`: made by people (origin `manual`) in S2, by the AI later (S4, origin `ai`, reviewed in S5).
+  - `Requirement -MAPS_TO-> Requirement`: from **NIST-authored** mappings only (D212 (1)), never third-party submissions to NIST's OLIR catalog; origin `import`, loaded with the catalogs. Direction: from the citing framework to the cited one (CSF subcategory → 800-53 control; 800-53 control → ISO control). No SOC 2 MAPS_TO in S2 (D212 (4)). Read-only in the app in S2: no route adds or removes one.
+  - Neither link type goes through S1's `POST /api/v1/links` or `/links/remove`: their body schemas only take S1's six types, so SATISFIES and MAPS_TO are refused there (400) and D200's owner rule never applies to mappings (D212 (3)). Leave S1's link code unchanged.
+  - Links carry `createdAt`, `createdBy` and `origin`, as in S1.
+- **Catalog items are read-only in the app** (planner's reading: the D50 row is "Framework mappings", not the catalogs). No route creates, edits or retires a Framework or Requirement. Only the loader (S2-003) changes them.
+- **Who may map (D212 (3)):** only Admins and Compliance Managers add or remove control-to-requirement mappings (the D50 "Framework mappings" `edit` cell), and only for controls they can see (label at or below their clearance). The Framework-mappings row wins over D200's owner rule: a Control Owner can't map even a control they own (their `edit_own` cell on controls counts for nothing here). Everyone else reads. The Analyst's `approve` cell is used from S5, for the AI's suggestions. API keys follow their one role. `canMapControl` in S2-001 is the one place this rule lives.
+- **Coverage (planner's reading):** a requirement is **covered** for a person when at least one active control they can see satisfies it; **implemented** when one of those controls has `controlStatus = 'implemented'`. Counts use only what the caller can see (D51, D52.1): a hidden control neither shows nor counts.
+- **Audit entries (D56, D69, D186):** mappings use S1's actions, `link.created` and `link.removed`, with `targetType: 'link'`, `targetId` from `linkTargetId('SATISFIES', controlId, requirementId)` (exported by `packages/api/src/records/links.service.ts`) and the removal entry from `linkRemovedAudit` (`packages/api/src/records/link-audit.ts`). `meta` is `{ type, fromNumber, toNumber, label }` with the higher of the two labels. The loader writes `framework.loaded` (S2-003).
+- **Reads (D45.3, D59):** through `GraphService.readAs(orgId, role, clearance, fn, { timeoutMs })`, so Neo4j hides what the account can't see and every link with a hidden end. The one exception is as in S1: the `control_owner` accounts have no MATCH on `Control`, so a read that must reach controls for a Control Owner runs as the writer with `owner = <their user ID>` **and** `sensitivity IN <labels at or below their clearance>` in the query (see `readsAsWriter` and `scopeOf` in `links.service.ts`; `visibleLabels` is exported by `record-queries.ts`).
+- **API paths (D47):** `/api/v1/frameworks`, `/api/v1/requirements`, `/api/v1/mappings`, and `/api/v1/controls/:id/requirements`. Anything the caller can't see (another org, a label above their clearance, a control they can't see) is **404** `not_found`, the same as a missing one.
+- **Security matrix (D175, D59):** every new route gets its row in `packages/shared/src/access/security-matrix.ts` in the same task. The `framework_mapping` record-type row already exists. The security reviewer checks the rows and their D59 tests.
+- **Tests (D96, D171, D173, D174, D176, D177):** as in S1. Name each file by what it needs (`*.unit.test.ts(x)`, `*.db.test.ts`, `*.stack.test.ts`, `e2e/*.e2e.ts`) and prefer `unit`. API route tests run an in-process Nest app against throwaway databases (kind `db`), with settings from `prepareEnv` / `appTestEnv` in `packages/api/tests/platform/helpers.ts` (S1-013). Tests that need catalog nodes or links create small fixtures directly in the throwaway org database, never in a real org. Never weaken live privileges, accounts, settings or shared state to prove a test.
+- **Migrations (D183):** S2 is expected to need no Postgres migration (everything is in Neo4j). If one turns out to be needed, it's "a new migration", numbered by the integrator at merge.
+- **Hot files (D183):** each brief lists its hot files; only one task at a time, across S2, S3 and S7, changes each.
+- **Git (D112, D159):** branch `task/<ID>` in its own worktree; commit messages start with the task ID and never mention Claude, Anthropic or AI tooling.
+
+---
+
+Task: S2-001
+
+**Goal:** One shared definition of the frameworks, their requirements and the mapping links, used by the API, the loader and the web app, so they agree on keys, fields, codes, numbers, order and who may map.
+
+**Decisions:** D20 (the four frameworks), D66, D67 (Framework, Requirement, SATISFIES, MAPS_TO), D68 (numbers), D69, D73 (fields; `framework` is a field), D50 ("Framework mappings" row), D51, D30 (Zod), D45.2, D45.7 (fail safe). **D212 (2)** (numbers `FWK0001001` and `REQ0001001` per org, as D196) and **D212 (3)** (only Admins and Compliance Managers map, for controls they can see; the Framework-mappings row wins over D200's owner rule). Read the S2 shared notes.
+
+**Depends on:** none.
+
+**Hot files:** `packages/shared/src/index.ts`.
+
+**Files:**
+- Create: `packages/shared/src/frameworks/frameworks.ts`, `codes.ts`, `schemas.ts`, `numbers.ts`, `mapping-rules.ts` and `index.ts`.
+- Modify: `packages/shared/src/index.ts`, to export `./frameworks/index.js`.
+
+**Interfaces (produces), exact names:**
+- `FRAMEWORK_KEYS = ['nist_800_53', 'nist_csf_2', 'iso_27001', 'soc_2'] as const`, `FrameworkKey`, `isFrameworkKey(v)`.
+- `FRAMEWORKS: Record<FrameworkKey, { name; frameworkVersion; publisher; description; groupNames: Record<string, string> }>` with the names and versions in the shared notes' table. `groupNames` maps a group code to its name (`AC` → `Access Control`, `GV.OC` → `Organizational Context`, `A.5` → `Organizational controls`, `CC6` → `Logical and Physical Access Controls`), covering every group of every framework (20 families, 22 CSF categories, 4 ISO themes, the SOC 2 series CC1–CC9, A1, C1, PI1, P1–P8).
+- `CODE_PATTERNS: Record<FrameworkKey, RegExp>` and `isRequirementCode(key, code)`:
+  - 800-53: `^[A-Z]{2}-\d{1,2}(\(\d{1,2}\))?$`;
+  - CSF: `^(GV|ID|PR|DE|RS|RC)\.[A-Z]{2}-\d{2}$`;
+  - ISO: `^A\.[5-8]\.\d{1,2}$`;
+  - SOC 2: `^(CC[1-9]|A1|C1|PI1|P[1-8])\.\d{1,2}$`.
+- `groupOf(key, code): string` (the group code: `AC`, `GV.OC`, `A.5`, `CC6`) and `parentCodeOf(key, code): string | null` (`AC-2` for `AC-2(1)`, else `null`).
+- `sortKeyOf(key, code): string`: natural order, so sorting by it gives `AC-1, AC-2, AC-2(1), AC-2(10), AC-3, AC-10`, `A.5.2` before `A.5.10`, `CC1.1` before `CC10`-style double digits, and `GV.OC-01` before `GV.OC-02`.
+- `frameworkIdFor(key)` and `requirementIdFor(key, code)`: the stable lowercase UUID v5s in the shared notes (fixed namespace constant `CATALOG_NAMESPACE`, pure, Node `crypto` only, no network or filesystem).
+- `CATALOG_NUMBER_PREFIX = { framework: 'FWK', requirement: 'REQ' }`, `formatCatalogNumber(kind, n)` and `parseCatalogNumber(text)`, 7 digits, 1 to 9,999,999, with `FIRST_NUMBER` (1001) reused from `@grc/shared` records, so the first ones are `FWK0001001` and `REQ0001001` (D212 (2)).
+- Schemas: `frameworkSchema` and `requirementSchema` (the record as the API returns it: the common fields with `label` for `sensitivity`, plus the type's own fields from the shared notes), `catalogRequirementSchema` (one requirement as it sits in a catalog file: `code`, `title`, `description`, `group`; strict), `catalogMappingSchema` (`{ from: { framework, code }, to: { framework, code } }`; strict).
+- `MAPPING_LINK_TYPES = [{ type: 'SATISFIES', from: 'control', to: 'requirement' }, { type: 'MAPS_TO', from: 'requirement', to: 'requirement' }] as const`.
+- `canMapControl(caller: { userId; role; clearance }, control: { label; owner }): boolean` (D212 (3)): true only when `can(role, 'framework_mapping', 'edit')` holds (Admin and Compliance Manager) **and** the caller can see the control (`can(role, 'control', 'view', { isOwner })` and the label at or below the clearance). Owning the control never makes it true: D200 and `canLinkRecords` are not used here. Anything unknown is false.
+
+**Pass criteria:**
+1. `FRAMEWORK_KEYS` and `FRAMEWORKS` hold exactly the four frameworks with the names and versions in the table; `groupNames` has all 20 families, 22 CSF categories, 4 ISO themes and 17 SOC 2 series (CC1–CC9, A1, C1, PI1, P1–P8).
+2. `isRequirementCode` accepts sample valid codes of each framework (`AC-2`, `AC-2(1)`, `SI-4(24)`, `GV.OC-01`, `PR.AA-05`, `A.5.1`, `A.8.34`, `CC6.1`, `PI1.5`, `P8.1`) and refuses wrong-case, wrong-framework and malformed ones (`ac-2`, `AC2`, `A.9.1`, `CC0.1`, `GV.OC-1`, an empty string, a code with spaces).
+3. `groupOf` and `parentCodeOf` give the right answers for each framework; `sortKeyOf` sorts a shuffled list of mixed codes into natural order (table-driven, per framework).
+4. `frameworkIdFor` and `requirementIdFor` return the same lowercase UUID v5 every call, a different one for every different input, and match the RFC 9562 v5 layout.
+5. `formatCatalogNumber('requirement', 1014)` is `REQ0001014`, `framework` gives `FWK`; out-of-range numbers are refused; `parseCatalogNumber` round-trips and returns `null` for anything else (a record prefix like `RSK`, lowercase, 6 or 8 digits).
+6. The schemas accept a valid framework and requirement and refuse unknown fields, an unknown framework key, a code that doesn't match its framework's pattern, and a label outside the four.
+7. `canMapControl`: a table-driven test over every role × clearance × control label matches the rule above: true only for Admin and Compliance Manager with the label at or below their clearance. The Control Owner is false on a control they own and on one they don't, at every clearance; the Analyst (`approve`) is false. Unknown roles, clearances or labels are false.
+8. Nothing in `packages/shared/src/frameworks/` imports from `packages/api` or `packages/web`, or touches the network, the filesystem or the environment. The existing `packages/shared/tests/access/` and `records/` tests still pass.
+
+**Tests to write (kind `unit`):** `packages/shared/tests/frameworks/frameworks.unit.test.ts`, `codes.unit.test.ts`, `numbers.unit.test.ts`, `schemas.unit.test.ts`, `mapping-rules.unit.test.ts`. Agreement (D174): with S1-001's number rules and S1-005's `canLinkRecords` tests. Security-matrix rows: none (no route; `framework_mapping` already has its row).
+
+**Test command:** `pnpm --filter shared test -- frameworks`
+
+---
+
+Task: S2-002
+
+**Goal:** The four catalogs and NIST's cross-framework mappings are in the repo as small, checked JSON files, so every org gets the same content, the app never downloads anything (D63), and a rebuild from NIST's files gives the same result (D45.8).
+
+**Decisions:** **D212 (1)** (the builder downloads the NIST 800-53 Rev 5 OSCAL catalog, CSF 2.0 and NIST-authored crosswalks once and commits a trimmed copy; each file keeps its source URL, release version and SHA-256 beside it; NIST IDs kept exactly as published; only NIST-authored mappings, never third-party OLIR submissions; the app never downloads at run time), **D212 (4)** (no SOC 2 cross-framework links in S2; SOC 2 criteria are loaded for hand mapping only), D20 (content and licences; no SCF), D66, D63 (nothing calls out at run time), D45.8, the "Framework content" research findings in memory.md (NIST OSCAL at github.com/usnistgov/oscal-content; ISO and AICPA text is copyrighted: IDs and short titles only, our own descriptions). Read the S2 shared notes.
+
+**Depends on:** S2-001 (`FRAMEWORK_KEYS`, `CODE_PATTERNS`, `groupOf`, `sortKeyOf`, `catalogRequirementSchema`, `catalogMappingSchema`).
+
+**Hot files:** none. If the converter truly needs a new package (for example to read a crosswalk NIST publishes only as a spreadsheet), it's a dev dependency of `packages/infra`, and `packages/infra/package.json` and `pnpm-lock.yaml` become this task's hot files; say so in the hand-off. Prefer no new package.
+
+**Downloading (D212 (1)):** the builder downloads NIST's files once, while building, into a folder outside the repo (for example the task's scratchpad), and never commits the downloaded originals. Only NIST's own sites: `csrc.nist.gov`, `nvlpubs.nist.gov`, `www.nist.gov`, and `github.com/usnistgov` (with `raw.githubusercontent.com/usnistgov`). Only documents NIST itself wrote: the CSF 2.0 informative references to 800-53 Rev 5 as NIST publishes them, and NIST's own 800-53 Rev 5 to ISO/IEC 27001 mapping. Never a third-party submission to NIST's OLIR catalog, even when it's hosted on csrc.nist.gov, and never a mapping from any other site. **If NIST's own 800-53 → ISO mapping exists only for ISO/IEC 27001:2013 and not 2022, don't translate its codes and don't use anyone else's mapping: build everything else, leave `map-800-53-to-iso-27001.json` out, and hand in `blocked` with what you found (a question for the user).**
+
+**Files:**
+- Create: `packages/api/src/frameworks/catalogs/nist-800-53.json`, `nist-csf-2.json`, `iso-27001.json`, `soc-2.json`, `map-csf-2-to-800-53.json`, `map-800-53-to-iso-27001.json`.
+  - Each catalog file: `{ key, frameworkVersion, source, requirements: [{ code, title, description, group }] }` in natural code order.
+  - Each mapping file: `{ source, mappings: [{ from: { framework, code }, to: { framework, code } }] }`.
+  - `source` sits beside the data in every file (planner's reading of "beside it"): `{ publisher, author, documentTitle, url, release, downloadedOn, sha256 }`. For the NIST files: `author` `NIST`, `url` the exact download address, `release` NIST's release or version string as published (for example the OSCAL catalog's `metadata.version`), `downloadedOn` the date, `sha256` the lowercase hex SHA-256 of the downloaded original. For ISO and SOC 2 (written by hand, nothing downloaded): `publisher` `ISO/IEC` or `AICPA`, `author` `project` (IDs and titles from the standard, descriptions ours), `url` the standard's official page, `release` `2022` or `2017 (revised points of focus 2022)`, `downloadedOn` and `sha256` `null`.
+- Create: `packages/api/src/frameworks/catalogs/SOURCES.md`: a readable copy of every file's `source`, the licence note for each framework (NIST: public domain; ISO and SOC 2: IDs and titles only, descriptions written by us), how to rebuild (the converter command), and the count of NIST mapping pairs left out because an end isn't in our catalogs (for example a withdrawn 800-53 control).
+- Create: `packages/api/src/frameworks/catalog-files.ts`: `readCatalogFiles(): { catalogs: Record<FrameworkKey, CatalogFile>; mappings: MappingFile[] }` that reads and checks the JSON with S2-001's schemas plus a `catalogSourceSchema` of its own for `source` (strict), and throws a clear error naming the file and the entry on anything wrong. The files sit under `src/` so the API image carries them.
+- Create: `packages/infra/scripts/framework-sources.json`: the committed list of what to download: for each NIST file, its output file name, `documentTitle`, `url`, `release` and `author` (`NIST`).
+- Create: `packages/infra/scripts/build-framework-catalogs.ts` (no root script; run with `pnpm --filter infra exec tsx scripts/build-framework-catalogs.ts --sources <dir>`): reads the downloaded NIST files from `<dir>` (outside the repo, never committed), computes each one's SHA-256, and writes the NIST JSON files above with their `source`. It exports its pure parts for the tests: `convert80053(oscal, source)`, `convertCsf2(csf, source)`, `convertMappings(rows, source)` and `sha256Hex(bytes)`. It refuses any entry in `framework-sources.json` whose `author` isn't `NIST` or whose URL host isn't one of NIST's above. ISO and SOC 2 files are written by hand.
+
+**What goes in:**
+- 800-53: every control and enhancement not marked withdrawn in the OSCAL catalog. `code` is the control's published label exactly as in the OSCAL file (`AC-2`, `AC-2(1)`), never rebuilt from the OSCAL `id` (`ac-2.1`) or re-cased or re-padded. `title` from OSCAL; `description` the control statement as plain text (parameters shown as `[Assignment: …]` / `[Selection: …]`, as NIST prints them); `group` the family code.
+- CSF 2.0: the 106 subcategories. `code` is NIST's identifier exactly as published (`GV.OC-01`). `title` a short title (CSF subcategories have none, so use the first clause of the outcome, up to about 80 characters); `description` the full outcome text; `group` the category code.
+- ISO 27001:2022: the 93 Annex A controls, `title` the control's title, `description` our own one line (at most 160 characters) saying what the control is for. No text copied from the standard.
+- SOC 2: the 61 criteria, `title` our own short title, `description` our own one line (at most 160 characters). No AICPA text.
+- Mappings: CSF 2.0 → 800-53 from NIST's own CSF 2.0 informative references; 800-53 → ISO 27001:2022 from NIST's own 800-53 Rev 5 mapping. Only pairs whose both ends are in our catalogs (a reference to a withdrawn 800-53 control is left out and counted in SOURCES.md). A NIST ID in a mapping that doesn't match our code pattern stops the converter with an error naming it; it is never rewritten to fit. No SOC 2 mappings (D212 (4)).
+
+**Pass criteria:**
+1. `readCatalogFiles()` loads all six files and every entry passes S2-001's schemas and `isRequirementCode` for its framework.
+2. Counts: CSF 106 subcategories in 22 categories and 6 functions; ISO exactly 93 (37 in A.5, 8 in A.6, 14 in A.7, 34 in A.8); SOC 2 exactly the 61 codes listed in the shared notes; 800-53 all 20 families present, between 1,000 and 1,200 items, `AC-2` and `AC-2(1)` present, none withdrawn.
+3. Within each framework, codes are unique and listed in `sortKeyOf` order; every `group` is in `FRAMEWORKS[key].groupNames`; every 800-53 enhancement's base control is present.
+4. Every mapping's two ends exist in the catalogs, no mapping appears twice, directions are CSF → 800-53 and 800-53 → ISO only, no mapping file names `soc_2`, and there are at least 100 of each.
+5. Every ISO and SOC 2 description is one line of at most 160 characters; every title and description in all four is non-empty and has no leading or trailing spaces.
+6. **Source beside each file (D212 (1)):** every one of the six files has a `source` that passes `catalogSourceSchema`. Every NIST catalog and every mapping file has `author` `NIST`, a `url` whose host is one of NIST's above, a non-empty `release`, a `downloadedOn` date and a 64-character lowercase hex `sha256`. ISO and SOC 2 have `sha256` `null`. `SOURCES.md` shows the same URL, release and SHA-256 for each file (the test compares them) and the licence note for each framework.
+7. `readCatalogFiles` on a broken copy (a bad code, an unknown group, a mapping to a missing code, a missing or malformed `source`, a mapping file whose `author` isn't `NIST`) throws an error that names the file and the entry.
+8. Nothing in the API reads the network for catalogs; the converter is the only code that reads the downloaded files, and it isn't imported by the API.
+9. **Converter (fixtures in the published formats, not the real downloads):** `convert80053` takes codes from the published label unchanged (`AC-2(1)` stays `AC-2(1)`), drops withdrawn items, and throws, naming the ID, when a published label doesn't match our pattern instead of rewriting it; `convertCsf2` keeps `GV.OC-01` as published; `convertMappings` keeps only pairs with both ends present and reports how many it left out; `sha256Hex` matches Node's `crypto` for a known input and the `source.sha256` it writes is the SHA-256 of the fixture file's bytes; the same inputs give byte-identical output twice (D45.8); an entry in the sources list with a non-NIST author or host is refused.
+
+**Tests to write:**
+- `packages/api/tests/framework-catalogs/files.unit.test.ts` (unit): criteria 1–6.
+- `packages/api/tests/framework-catalogs/broken.unit.test.ts` (unit): criterion 7, with broken copies made in a temporary folder by the test, or by passing parsed objects to the checker.
+- `packages/api/tests/framework-catalogs/no-network.unit.test.ts` (unit): criterion 8, reading the source files as text.
+- `packages/infra/tests/framework-catalogs/convert.unit.test.ts` (unit): criterion 9, with small fixtures the test writer makes in `packages/infra/tests/fixtures/nist/` in NIST's published formats (an OSCAL catalog excerpt with AC-1, AC-2, AC-2(1) and one withdrawn enhancement; a few CSF 2.0 subcategories; a few mapping rows, one naming a withdrawn control). No network in any test.
+- Security-matrix rows: none (no route, no record type).
+- Agreement (D174): with S2-001's code patterns and sort order.
+
+**Test command:** `pnpm --filter api test -- framework-catalogs` (the builder also runs `pnpm --filter infra test -- framework-catalogs`)
+
+---
+
+Task: S2-003
+
+**Goal:** Every org's graph holds the four catalogs and NIST's cross-framework links, loaded the same way everywhere, safe to re-run, and updated in every org when the catalog files change (D66).
+
+**Decisions:** D66 (copied into each org's graph; updates pushed to every org), D67, D68, D69 (retired, never deleted; history in the audit trail), D73, D37 and D45.4 (the change and its audit entry in one transaction), D45.5 (re-runs are safe), D133 (org provisioning), D170 (Mac scripts swap the database host themselves), D57, D163 and D164 (no values in logs), D144 (no `USE`), D176. Read the S2 shared notes.
+
+**Depends on:** S2-001 and S2-002.
+
+**Hot files:** `packages/api/src/identity/provision-org.ts`, `packages/infra/scripts/create-org.ts`, `packages/infra/scripts/seed-demo.ts` (only if their provisioning deps change), `package.json` (root; adds the `frameworks:load` script).
+
+**Files:**
+- Create: `packages/api/src/frameworks/catalog-loader.ts`, exporting `loadFrameworkCatalogs(deps: { outbox: Pick<AuditOutbox, 'withAuditedWrite'> }, orgId: string, catalogs = readCatalogFiles()): Promise<LoadReport>`, where `LoadReport = { frameworks: { key; added; updated; retired; unchanged }[]; mapsTo: { added; retired } }`.
+- Create: `packages/infra/scripts/frameworks-load.ts` (root script `frameworks:load`): applies the loader to every org, finding the orgs as `graph-schema.ts` does (`AuditService.orgIds()`), with the D170 host swap. It prints only org IDs, framework keys, counts and OK or failed per org, never titles or descriptions (D164); one org failing doesn't stop the others; exit code non-zero if any failed.
+- Modify: `packages/api/src/identity/provision-org.ts`: call `loadFrameworkCatalogs` right after `ensureOrgSchema`. A re-run of `provisionOrg` stays safe. Its deps gain what the loader needs; update `packages/infra/scripts/create-org.ts` and `seed-demo.ts` only where they build those deps.
+- Modify: `package.json` (root script only).
+
+**What the loader does, per org, one framework per transaction, as `grc_writer` through `AuditOutbox.withAuditedWrite(orgId, { actorType: 'system', actorId: 'framework-catalog' }, fn)`:**
+1. MERGE the Framework node by its stable `id`; MERGE each Requirement by its stable `id` (UNWIND, not one query per item).
+2. New nodes get every property in the shared notes, `version` 1, `status` `active`, and the next free number: numbers go up from 1001 in catalog order across all frameworks the first time, and an item added later gets the org's highest `REQ` number + 1. A node that already exists keeps its number.
+3. A node whose `title`, `description`, `group`, `parentCode` or `frameworkVersion` changed gets the new values, `version` + 1, and new `updatedAt`; an unchanged node isn't touched (same `version`, same `updatedAt`).
+4. A requirement no longer in the file is set to `retired` (`version` + 1), never deleted; one that comes back is set `active` again.
+5. MAPS_TO links from the mapping files are MERGEd with origin `import`, `createdBy` `system:framework-catalog`; an `import` MAPS_TO link no longer in the files is deleted (these are catalog content, not people's links; the `framework.loaded` entry counts them). Links with any other origin are never touched. SATISFIES links are never touched.
+6. When anything in that framework changed, the same transaction writes one audit entry: `action: 'framework.loaded'`, `targetType: 'framework'`, `targetId` the framework's `id`, `before: null`, `after: { frameworkVersion, added, updated, retired, mapsToAdded, mapsToRemoved }`, `meta: { number, label: 'internal' }`. When nothing changed, no transaction commits and no entry is written.
+7. Never passes Cypher with `USE`; never touches Postgres except through the outbox relay.
+
+**Pass criteria:**
+1. On a throwaway org database, a first load creates exactly the catalog's frameworks, requirements and MAPS_TO links, with every property in the shared notes (`sensitivity` `internal`, `origin` `import`, `owner` `system`, stable IDs from S2-001), and numbers `FWK0001001`… and `REQ0001001`… with no gaps or repeats.
+2. A second load with the same files changes nothing: same node and link counts, same `version`s and `updatedAt`s, no new audit entries, and a report of all `unchanged`.
+3. With a changed file (a fixture: one title changed, one requirement added, one removed, one mapping added and one removed): only those change; the new item gets the next number; the removed one is `retired` with its number kept and its SATISFIES links kept; one `framework.loaded` entry per changed framework, with the right counts.
+4. Two orgs loaded from the same files have the same IDs and numbers for the same items; loading org A never touches org B (D22).
+5. A manual SATISFIES link and an `ai` MAPS_TO link (made directly in the fixture) survive a reload unchanged.
+6. The change and its `framework.loaded` entry commit together: a failure part-way (a fixture that makes the write throw) leaves the org's catalog as it was and writes no entry. The entry reaches the Postgres audit trail through the relay within 5 s.
+7. `provisionOrg` gives a new org the catalogs; a re-run stays safe; the existing `provision` and `org-schema` tests still pass.
+8. `pnpm frameworks:load` loads every org and exits 0; with one org's database missing it names that org as failed, carries on and exits non-zero; its output holds no title or description text.
+9. The query accounts see the catalog nodes up to their clearance: a Viewer at `internal` reads them through `readAs`; a `public`-clearance account doesn't (D51). No privilege changes.
+
+**Tests to write:**
+- `packages/api/tests/framework-load/plan.unit.test.ts` (unit): any pure part the builder factors out (for example the diff between a file and what's stored). The test writer names the function it expects: `planCatalogChanges(stored, file): { add; update; retire; revive; mapsToAdd; mapsToRemove }`.
+- `packages/api/tests/framework-load/load.db.test.ts` (db, throwaway Neo4j and Postgres): criteria 1–6 and 9, with small fixture catalogs in `packages/api/tests/fixtures/frameworks/` (a few items per framework), not the real files, except one test that loads the real files once and checks the counts from S2-002.
+- `packages/api/tests/framework-load/provision.db.test.ts` (db): criterion 7.
+- `packages/infra/tests/frameworks-load/script.db.test.ts` (db): criterion 8, on throwaway orgs only.
+- Security-matrix rows: none (no route).
+
+**Test command:** `pnpm --filter api test -- framework-load` (the builder also runs `pnpm --filter infra test -- frameworks-load` and `pnpm --filter api test -- provision org-schema`)
+
+---
+
+Task: S2-004
+
+**Goal:** The read side of Frameworks: the frameworks with their coverage, their requirements, one requirement with its controls and its links to other frameworks, and the requirements a control satisfies. Each person sees only what they may see, and the counts agree with what they see.
+
+**Decisions:** D3(d), D27 #7, D47 (paged lists with filters and sorting; one error format), D50 (every role may view framework mappings; controls per their row), D51 (labels; a link is visible only if both ends are), D52.1, D59, D66, D67, D73, D45.3 (checked in the API and again in Neo4j), D48 (pages 95% under 300 ms), D175, D163, D164, D176. Read the S2 shared notes and S1-005's brief (read patterns).
+
+**Depends on:** S2-001. (Tests make their own catalog fixtures in the throwaway database, with the node shape in the shared notes; they don't wait for the loader.)
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/frameworks/frameworks.module.ts`.
+
+**Files:**
+- Create: `packages/api/src/frameworks/frameworks.service.ts` (`FrameworksService`), `framework-queries.ts` (the Cypher and the list and filter building, every name from fixed lists), `frameworks.controller.ts`.
+- Modify: `packages/api/src/frameworks/frameworks.module.ts` (provide and export the service, add the controller) and `packages/shared/src/access/security-matrix.ts` (the rows).
+
+**Routes (all `documentRoute`d with Zod schemas; `Caller` as in S1):**
+
+| Route | Access (`Requires`) | Answer |
+|---|---|---|
+| `GET /api/v1/frameworks` | `framework_mapping` `view` | `{ items: FrameworkSummary[] }`: each active framework with `requirementCount`, `coveredCount`, `implementedCount` (for this caller) |
+| `GET /api/v1/frameworks/:id` | `framework_mapping` `view` | one `FrameworkSummary` |
+| `GET /api/v1/frameworks/:id/requirements` | `framework_mapping` `view` | `Paged<RequirementRow>`; query: `page`, `pageSize` (`pageQuerySchema`), `group`, `coverage` (`covered` / `not_covered` / `implemented`), `status` (`active` default, `retired`, `all`), `q` (code or title, case-insensitive), `sort` (`code` default, `-code`); unknown filters 400 |
+| `GET /api/v1/requirements/:id` | `framework_mapping` `view` | `RequirementDetail`: the requirement, `controls` (the active and retired controls that satisfy it and the caller can see: `id`, `number`, `name`, `code`, `controlStatus`, `label`, `status`, plus the link's `origin`, `createdAt`, `createdBy`), `mapsTo` (both directions: `direction` `out`/`in`, the other requirement's `id`, `number`, `code`, `title`, `framework`) |
+| `GET /api/v1/controls/:id/requirements` | `control` `view`, `{ own: true }` | `{ items }`: the requirements the control satisfies (`id`, `number`, `code`, `title`, `framework`, `group`, `status`, plus the link's `origin`, `createdAt`, `createdBy`), in framework then natural code order |
+
+`RequirementRow` = the requirement's fields plus `covered: boolean`, `implemented: boolean` and `controlCount`. Every row in the matrix: `orgWalled: true`, `labels: true`.
+
+**Pass criteria:**
+1. The routes answer as the table says, sorted in natural code order (`sortKey`), paged with the S1 paging helper; a framework or requirement ID that doesn't exist, or is hidden, is 404 `not_found`.
+2. **Coverage (the shared notes' rule):** with a fixture of requirements and controls: a requirement with one visible active control is covered; with only a retired control, not covered; with a visible `implemented` control, implemented; a control above the caller's clearance neither appears nor counts; the counts on `GET /frameworks` equal the numbers of rows the `coverage` filter returns.
+3. **Control Owner:** sees every requirement, but only their own controls under a requirement and in the counts; `GET /api/v1/controls/:id/requirements` on a control they don't own is 404 (as S1's controls).
+4. **D59, every role cell:** every role may call the read routes (the `framework_mapping` row allows view for all seven); `GET /controls/:id/requirements` follows the `control` row (Incidents-style 403 never applies, since every role views controls; the Control Owner's own rule applies). API keys follow their one role.
+5. **D59, every org pair** (3 orgs): org A's caller gets 404 for org B's framework, requirement and control IDs, and org B's mappings never appear in org A's answers or counts.
+6. **D59, every clearance × label pair:** a requirement labelled above the caller's clearance (a fixture; real catalog items are `internal`) is 404 and missing from lists and counts; a SATISFIES link with a hidden control end isn't shown.
+7. Reads run through `readAs` with a time limit (5 s, like S1's `LINK_READ_TIMEOUT_MS`); only the Control Owner's control reads run as the writer, always with the owner and label conditions in the query. No Cypher contains `USE`.
+8. Query values are parameters; filter and sort names come from fixed lists (a test sends a `sort` and `group` with Cypher in them and gets 400).
+9. Errors log only the error type or code, the reference ID and IDs (D163, D164).
+10. **Security matrix (D175):** the five routes have their rows; the TEST-003 completeness test passes.
+
+**Tests to write:**
+- `packages/api/tests/frameworks-api/queries.unit.test.ts` (unit): the query building (criterion 8), fixed names only, parameters for values.
+- `packages/api/tests/frameworks-api/*.db.test.ts` (db, in-process Nest app, throwaway Postgres and Neo4j, fixtures made directly in the org database): criteria 1–7 and 9. Generate the role, org-pair and clearance × label cases from `ROLE_TABLE`, `ROLES` and `LABELS`.
+- New security-matrix rows: `GET /api/v1/frameworks`, `GET /api/v1/frameworks/:id`, `GET /api/v1/frameworks/:id/requirements`, `GET /api/v1/requirements/:id`, `GET /api/v1/controls/:id/requirements`.
+- Agreement (D174): with S1-004's 404 rules and S1-005's link-visibility tests.
+
+**Test command:** `pnpm --filter api test -- frameworks-api`
+
+---
+
+Task: S2-005
+
+**Goal:** A Compliance Manager (or Admin) can record that a control satisfies a requirement, and take it back if it was a mistake, with each change in the audit trail.
+
+**Decisions:** D50 ("Framework mappings": Edit for Admin and Compliance Manager, Approve for the Analyst, View for the rest), D16(b) and D24 (AI-suggested mappings go through the Analyst, S4/S5), D207 (applied to mappings: only `manual` and `import` mappings are removed by hand; planner's reading), D51, D37 and D45.4, D56, D69, D59, D175, D163, D164, D176. **D212 (3)** (only Admins and Compliance Managers add or remove mappings, for controls they can see; the Framework-mappings row wins over D200's owner rule; through `canMapControl` from S2-001) and **D212 (4)** (SOC 2 criteria can be mapped by hand). Read the S2 shared notes and S1-011's brief.
+
+**Depends on:** S2-001.
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/frameworks/frameworks.module.ts`.
+
+**Files:**
+- Create: `packages/api/src/frameworks/mappings.service.ts` (`MappingsService`) and `mappings.controller.ts`.
+- Modify: `packages/api/src/frameworks/frameworks.module.ts` (provide the service, add the controller) and `packages/shared/src/access/security-matrix.ts` (the rows).
+- Reuse without changing: `linkTargetId` (`records/links.service.ts`), `linkRemovedAudit` (`records/link-audit.ts`), `isRemovableLinkOrigin` (`@grc/shared`), `visibleLabels` (`records/record-queries.ts`).
+
+**Routes:**
+- `POST /api/v1/mappings`, body `{ controlId, requirementId }` (strict; lowercase UUIDs). Access `{ subject: 'framework_mapping', action: 'edit' }`. 201 with `{ type: 'SATISFIES', fromId, toId, origin: 'manual', createdAt, createdBy }`.
+- `POST /api/v1/mappings/remove`, the same body. Access `{ subject: 'framework_mapping', action: 'edit' }`. 200 with `{ type: 'SATISFIES', fromId, toId }`.
+
+**Pass criteria:**
+1. **Order of checks (as S1-011):** the control and the requirement must exist in the caller's org and be visible to them (404 `not_found`, the same for missing and hidden); then `canMapControl` (403 `forbidden`); then, for add, 409 `link_exists` if the mapping is there, and for remove, 404 if it isn't and 409 `ai_link_review_only` for an `ai` mapping ("This mapping was suggested by the AI. It can only be removed through the Analyst's review."). A caller who fails the 404 or 403 check never learns a mapping's origin.
+2. Add creates one `Control -SATISFIES-> Requirement` with origin `manual`, `createdAt`, `createdBy`, for a requirement of each of the four frameworks, SOC 2 included (D212 (4)); it never creates any other link type, and the two nodes are unchanged (same `version`, and the control's `framework` Source note untouched, D212 (5)).
+3. Remove deletes that one link; other links between the same nodes stay; an `import` mapping is removable, an `ai` one isn't (for every role, Admin and API keys included).
+4. **Audit:** add writes `link.created` and remove writes `link.removed` (from `linkRemovedAudit`, with the full copy in `before`), each in the same Neo4j transaction as the change, `targetId` from `linkTargetId('SATISFIES', …)`, `meta` with the higher label. A failed transaction leaves no link change and no entry. Entries reach Postgres within 5 s.
+5. **Two at once:** two adds of the same mapping give one 201 and one 409; two removals give one 200 and one 404; exactly one entry each.
+6. Re-adding a removed mapping works (201) with a new `link.created`.
+7. **D59, every role cell (D212 (3)):** Admin and Compliance Manager may add and remove; Risk Manager, Control Owner, Auditor, Analyst and Viewer get 403 `forbidden` from the guard, before any lookup (the Analyst's `approve` cell doesn't allow hand edits). The Control Owner gets 403 on a control they own too, for both add and remove: owning the control, or D200's "can edit either end" rule, never allows a mapping. API keys follow their one role.
+8. **D59, org pairs (3 orgs):** org A can't map or unmap org B's control or requirement even with the right IDs (404), and B's graph and audit trail are untouched.
+9. **D59, clearance × label pairs:** a control above the caller's clearance is 404 for both routes, and nothing changes.
+10. A body with a missing, extra or malformed field is 400 `validation_failed`. Errors log only the error type or code, the reference ID and IDs.
+11. **Security matrix (D175):** both routes have their rows (`orgWalled: true`, `labels: true`); the TEST-003 completeness test passes; S1's `links` and `link-removal` tests still pass.
+12. **No back door through S1's link routes (D212 (3)):** `POST /api/v1/links` and `POST /api/v1/links/remove` with type `SATISFIES` or `MAPS_TO` are refused with 400 for every role, the Control Owner on their own control included, and nothing changes in the graph or the audit trail. S1's link code is not changed to make this pass.
+
+**Tests to write:**
+- `packages/api/tests/framework-mappings/body.unit.test.ts` (unit): the body schemas (criterion 10).
+- `packages/api/tests/framework-mappings/*.db.test.ts` (db, in-process Nest app, throwaway databases; controls made through the records service or directly; requirements and `import`/`ai` mappings made directly in the throwaway org database): criteria 1–9 and 12. Generate the cases from `ROLE_TABLE`, `ROLES` and `LABELS`.
+- New security-matrix rows: `POST /api/v1/mappings`, `POST /api/v1/mappings/remove`.
+- Agreement (D174): with S1-005 and S1-011's tests (the same 404/403/409 order and audit shape).
+
+**Test command:** `pnpm --filter api test -- framework-mappings`
+
+---
+
+Task: S2-006
+
+**Goal:** Screen 7, Frameworks: see each framework's coverage at a glance, browse and search its requirements, and open one to see which controls satisfy it and how it lines up with the other frameworks.
+
+**Decisions:** D27 #7, D2 (ServiceNow look), D1 (must look finished), D7 (the web only shows; the API decides), D30 (typed client), D33 (TanStack Router, Query and Table, shadcn, shadcn charts), D51, D59. Read the S2 shared notes and S1-006's brief (the records kit: tables, paging, 404 page, `ApiProblem`).
+
+**Depends on:** S2-004.
+
+**Hot files:** `packages/web/src/router.tsx`, `packages/web/src/api/client.ts` (regenerated with `pnpm gen:api-client` after S2-004 is on `main`).
+
+**Files:**
+- Create: `packages/web/src/features/frameworks/FrameworkList.tsx`, `FrameworkPage.tsx`, `RequirementPage.tsx`, `CoverageBar.tsx`, `useFrameworks.ts` (TanStack Query hooks over the generated client).
+- Modify: `packages/web/src/router.tsx` (routes `/frameworks`, `/frameworks/$id` with its search params, `/requirements/$id`; take `/frameworks` out of the empty-state screens) and `packages/web/src/api/client.ts` (regenerated only).
+
+**Pass criteria:**
+1. `/frameworks` shows the four frameworks (name, version, publisher) with covered and implemented as counts and a bar ("412 of 1,007 requirements covered, 300 implemented"), each opening its page. An org with no catalogs shows the screen's existing empty text.
+2. `/frameworks/$id` shows the requirements table (code, title, group, covered or not, number of controls), in natural code order, paged, with filters for group and coverage and a search box on code or title, all kept in the URL's search params so a reload or shared link keeps them.
+3. `/requirements/$id` shows the code, title, description, framework, group, parent (for an enhancement, linking to it), number and status; "Controls that satisfy this requirement" listing each control's number, name, code and status, linking to `/controls/$id`; and "Related requirements in other frameworks" listing both directions with the other framework's name and code, linking to their pages. Empty sections say so in plain words (a SOC 2 criterion has no related requirements in S2, D212 (4)). Coverage comes only from the API's SATISFIES counts, never from a control's Source note (D212 (5)).
+4. A 404 shows the records kit's "doesn't exist or you can't see it" page; other errors show the API's message and reference ID.
+5. Retired requirements are marked "Retired" and hidden unless the status filter asks for them.
+6. All calls go through the generated client with relative `/api/v1` URLs (the M0-015 rule); nothing on these screens offers editing catalog content.
+7. The S1 web tests still pass.
+
+**Tests to write (kind `unit`, Vitest + Testing Library, API mocked at the client boundary):** `packages/web/tests/frameworks-screen/*.unit.test.tsx`, covering criteria 1–6, with at least a Compliance Manager, a Viewer and a Control Owner (whose counts come back smaller from the mocked API). Security-matrix rows: none (web only).
+
+**Test command:** `pnpm --filter web test -- frameworks-screen`
+
+---
+
+Task: S2-007
+
+**Goal:** The people allowed to map controls can do it where they work: from a requirement ("Map a control") and from a control ("Requirements this control satisfies"). Everyone else sees the mappings without the buttons. On the control screens, the control's free-text `framework` field reads as what it is, a "Source note", so nobody takes it for the real framework mapping (the SATISFIES links S2-005 and this task add). (The Source note part was S2-009, folded in here per D215 (E): both change `ControlPage.tsx`.)
+
+**Decisions:** D50, D7, D30, D207 (no "Remove" on AI mappings), D51, D56 (the confirmation says the change is recorded), D1 (must look finished), D197 (the control's own fields), D215 (E) (no tiny tasks; the Source note label is folded in here). **D212 (3)** through `canMapControl` (only Admins and Compliance Managers, for controls they can see; a Control Owner never gets the buttons, even on a control they own) and **D212 (5)** (the control's free-text Framework field stays, labelled "Source note"; the Source note isn't a mapping; SATISFIES links are the real mapping). Read the S2 shared notes and S1-007, S1-008 and S1-012's briefs (the control screens, the related-records groups, the add dialog, the remove confirmation).
+
+**Depends on:** S2-005 (the routes) and S2-006 (the requirement page and the hooks).
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated after S2-005 is on `main`), `packages/web/src/features/records/controls/ControlPage.tsx` (also S3-013's: one at a time), `packages/web/src/features/records/controls/ControlList.tsx`.
+
+**Files:**
+- Create: `packages/web/src/features/frameworks/mapping/MapControlDialog.tsx`, `AddRequirementDialog.tsx`, `RemoveMappingDialog.tsx`, `ControlRequirements.tsx`, `useMappings.ts`.
+- Modify: `packages/web/src/features/frameworks/RequirementPage.tsx` (the "Map a control" button and per-row "Remove").
+- Modify: `packages/web/src/features/records/controls/ControlPage.tsx`: render `ControlRequirements` after `RelatedRecords` in the `related` slot. Also, in `CONTROL_FORM_FIELDS`, the `framework` field's `label` becomes `Source note`, its `message` "Enter where this control comes from, for example NIST 800-53.", and it gains a `description` (the `FormFieldDef` field that already exists): "Free text for your own reference. The requirements this control satisfies are mapped separately." The detail row's label becomes `Source note`. Update the comment at the top to match.
+- Modify: `packages/web/src/features/records/controls/ControlList.tsx`: the column header and the filter's label and `anyText` become `Source note`; update the comment at the top.
+- No other change to the S1 folder. For the Source note, nothing else changes: the stored field, the API field, the shared schema (`packages/shared/src/records/schemas.ts`, still required and non-empty), the list filter's URL parameter (`framework`) and the generated client's field all stay `framework`. No API, shared or Neo4j change for it.
+- Tests (test writer only): `packages/web/tests/record-screens/forms.unit.test.tsx`, `lists.unit.test.tsx` and the comments in `helpers.tsx` find the field, column and filter by `Source note` instead of `Framework`; nothing else in those tests changes.
+
+**Pass criteria:**
+1. "Map a control" (requirement page) and "Add requirement" (control page) show only when `canMapControl(user, control)` holds; on the requirement page, the button shows when the user's role has the `framework_mapping` `edit` cell, and the control picker offers only controls for which `canMapControl` holds.
+2. "Map a control" searches controls by name or number through `GET /api/v1/controls?q=…`; "Add requirement" picks a framework, then searches its requirements by code or title through `GET /api/v1/frameworks/:id/requirements?q=…`. Already-mapped items are shown as mapped and can't be picked again.
+3. Confirm sends `POST /api/v1/mappings` with `{ controlId, requirementId }`; on success both the requirement's controls and the control's requirements refresh, with a short message.
+4. "Remove" shows on a row only when `canMapControl` holds **and** `isRemovableLinkOrigin(row.origin)` holds; never on an `ai` mapping, Admins included. It opens a confirmation naming the control and the requirement and saying the removal is recorded in the audit trail; confirm sends `POST /api/v1/mappings/remove`, then both sides refresh.
+5. Refusals: 404 "This record or mapping no longer exists or you can't see it" (and refresh); 403 "You can't change mappings"; 409 `link_exists` "This control already satisfies this requirement"; 409 `ai_link_review_only` shows the API's message and refreshes; others show the API's message and reference ID.
+6. "Requirements this control satisfies" on the control page lists each requirement's framework, code and title, grouped by framework, linking to `/requirements/$id`, from `GET /api/v1/controls/:id/requirements`; empty says so.
+7. All calls go through the generated client with relative URLs. The S1 `record-screens` (with only the label changes above made to them), `record-links` and `link-removal` web tests and S2-006's `frameworks-screen` tests still pass.
+8. **Source note, forms:** the control create and edit forms show a field labelled "Source note" with the hint text above; it saves to `framework` exactly as before, and an empty value still shows the field's message.
+9. **Source note, page:** the control page's details show "Source note" with the stored text; no control screen shows the word "Framework" as the label of this field.
+10. **Source note, list:** the Controls list has a "Source note" column and a "Source note" filter that still sends `framework=<text>` in the URL and to the API.
+11. In the S1 folders, no file changes apart from `ControlPage.tsx` and `ControlList.tsx` (and the tests named above).
+
+**Tests to write (kind `unit`, Vitest + Testing Library, API mocked at the client boundary):**
+- `packages/web/tests/control-mapping/*.unit.test.tsx`, covering criteria 1–6 with a Compliance Manager, an Admin (one `manual`, one `import`, one `ai` row: "Remove" on the first two only), a Risk Manager, a Control Owner on a control they own (no "Add requirement" and no "Remove", D212 (3)), an Analyst, and a Viewer.
+- `packages/web/tests/source-note/source-note.unit.test.tsx`: criteria 8–10 (label, hint, detail row, column, filter, the value sent as `framework`), for a Compliance Manager and a Control Owner on a control they own.
+- Update `packages/web/tests/record-screens/forms.unit.test.tsx` and `lists.unit.test.tsx` as above (criterion 7). These are red until the builder's change, like any new test.
+- Security-matrix rows: none (web only, no route or record type).
+- Agreement (D174): with S2-001's `canMapControl` table, and with S1-007's `record-screens` tests (same fields, values and URL parameters; only the label differs).
+
+**Test command:** `pnpm --filter web test -- control-mapping source-note record-screens`
+
+---
+
+Task: S2-008
+
+**Goal:** The S2 part of the combined S2+S3+S7 checkpoint (D182) can be demonstrated: the demo orgs have the catalogs and a believable set of mappings, the steps are written out, and browser tests walk the main journeys through the front door.
+
+**Decisions:** D114, D115, D172, D182, D45.5, D45.8, D170, D57, D164, D176. Read the S2 shared notes and S1-010's brief (the demo seed and browser-test pattern).
+
+**Depends on:** S2-003 (the loader) and S2-007 (the finished screens). It also assumes S1-010 (the S1 demo records) is merged, which the S1 checkpoint guarantees before this run starts.
+
+**Hot files:** `packages/infra/scripts/seed-demo.ts`.
+
+**Files:**
+- Modify: `packages/infra/scripts/seed-demo.ts`: after S1's records, run `loadFrameworkCatalogs` for each demo org (a no-op when provisioning already did it), then add the demo mappings through `MappingsService`, so they're audited like any change.
+- Create: `packages/infra/scripts/demo-mappings.ts`: the fixed demo mappings as plain objects, naming controls by their `demo:` source ID and requirements by framework key and code, so a re-run adds nothing. About 25 mappings per demo org across all four frameworks, including at least one control that satisfies requirements in three frameworks, and one requirement with two controls. The two orgs' mappings differ.
+- Create: `docs/demo/s2.md`.
+- Create (test writer): `packages/web/e2e/frameworks.e2e.ts`.
+
+**Pass criteria:**
+1. `pnpm seed:demo` gives each demo org the four catalogs and the demo mappings; running it twice adds nothing the second time (same counts, same numbers, no new audit entries).
+2. Every demo mapping has its `link.created` entry in Postgres.
+3. `docs/demo/s2.md` gives click-through steps: the four frameworks and their coverage; filtering a framework's requirements to "not covered"; a CSF subcategory and its 800-53 links, then that control's ISO links; a Compliance Manager mapping a control to a requirement (one step maps to a SOC 2 criterion, which has no links to other frameworks yet: those come with the AI's suggestions in S4 and S5, D212 (4)) and removing it; the control page's requirements, and its "Source note" being free text, not a mapping (D212 (5)); the Control Owner (on a control they own) and the Viewer seeing the mappings with no buttons (D212 (3)); the other org seeing none of org A's mappings. It names `pnpm seed:demo` as the source of the logins and prints no passwords.
+4. **Playwright** (`packages/web/e2e/frameworks.e2e.ts`, through `https://grc.localhost` with the seeded users): the Compliance Manager sees coverage, maps a control to a not-covered requirement, sees the count go up, removes the mapping and sees it go back; the Viewer, and the Control Owner on a control they own, see the same pages with no map or remove buttons (D212 (3)); a Globex user opening an Acme requirement URL still sees the requirement (catalogs are in every org) but none of Acme's controls under it; the CSF → 800-53 links open.
+
+**Tests to write:**
+- `packages/api/tests/provision/seed-frameworks.db.test.ts` (db): criteria 1–2, on throwaway databases.
+- `packages/infra/tests/demo/s2-demo-doc.unit.test.ts` (unit): criterion 3's steps and that no password appears.
+- `packages/web/e2e/frameworks.e2e.ts` (e2e): criterion 4.
+- Security-matrix rows: none.
+
+**Who runs the browser tests:** as in S1-010. The builder runs the db and unit tests; the **integrator**, after merging, rebuilds and recreates `grc-api`, `grc-worker` and `grc-caddy` with `--no-deps` from the main checkout, runs `pnpm seed:demo`, then `pnpm test:e2e` (D172).
+
+**Test command:** `pnpm --filter api test -- seed-frameworks` (the builder also runs `pnpm --filter infra test -- s2-demo-doc`; the integrator runs `pnpm test:e2e`)
+
+---
+
+### S3 shared notes (every S3 brief includes these)
+S3 is slice 3, "Uploads, import mapping and the synthetic generators" (D76). It runs in one workflow run with S2 and S7 (D181, D183), after the S1 checkpoint. The M0 and S1 shared notes above (layout, test ownership, throwaway databases, one test process, code style, graph reads and writes, audit entries, no values in logs, 404 for anything hidden) still apply.
+
+- **Scope (planner's reading, D11, D18, D27 #10, D40–D42, D44, D53, D76, D202):**
+  - Uploads in the web app and through the API: files stored in the org's own bucket, identified by content, so a repeat upload is ignored (D21, D45.5, D53).
+  - Asset lists (CSV and flat JSON) mapped by column into Neo4j with no Gemma (D40, D44), with mappings saved per source.
+  - The push API for machines, which ignores batches it has already received (D47).
+  - Evidence and Audit findings, which first arrive with uploads (D202), with their SUPPORTS and CONCERNS links (D67).
+  - Screen 10, Data intake (uploads, status, and the generator part: it shows what the generators pushed and how to run them, and never starts them, D213 (6)).
+  - Evidence and audit findings appear as sections on the control and risk pages, plus a page per finding; no new menu item (D213 (4)).
+  - The synthetic data generators (D18, D42) in both modes: full pipeline (through the real API) and fast load (one audit entry per batch listing every ID it created, D213 (7)).
+  - **Not in S3:** reading the text out of PDF, DOCX and TXT documents, chunking, embeddings, Gemma extraction, duplicate matching and the rule checks (S4, D76; planner's reading R1; D213 (7): fast load's chunking and embedding come with S4 too). S3 stores documents with status `stored` and queues their `processing.document-read` job; S4 adds the handler. The Analyst's queue and "remove everything from one bad upload" (D52.5) are S5. Generating PDF and DOCX files is planned before the S8 benchmark (D213 (8)); S3's generators write plain text, and uploads still accept PDF and DOCX (D53). There's no real Gemma or bge-m3 anywhere in S3, and no `nameEmbedding` is set (D203 carries over).
+- **Folders S3 owns (D183):**
+  - `packages/api/src/intake/` (subfolders `uploads/`, `documents/`, `imports/`, `push/`, `evidence/`, `audit-findings/`), `packages/shared/src/intake/`, `packages/web/src/features/intake/`, `packages/generators/`, and the test folders each brief names.
+  - S3 never changes `frameworks/` or `admin/` (S2, S7). It reads from S1's `packages/api/src/records/` and `packages/shared/src/records/` but changes nothing there (planner's reading R4: Evidence and Audit findings get their own small services in `intake/`, not new kinds in S1's records kit, so S1's generic tests and `/links` routes stay as they are). The exceptions are the web record pages S3-013 and S3-014 name, and they're hot files.
+- **Upload kinds (planner's reading, D51, D71: a document carries a record type so the role table applies to it):**
+
+  | kind | what it is | record type | formats |
+  |---|---|---|---|
+  | `asset_list` | a CMDB export, mapped by column (D40, D44) | `asset` | csv, json |
+  | `policy_document` | a policy | `policy` | pdf, docx, txt |
+  | `soc_ticket` | SOC tickets (D41) | `incident` | pdf, docx, txt, json |
+  | `audit_report` | an audit report with findings (D41) | `audit_finding` | pdf, docx, txt, json |
+  | `evidence` | an evidence file, only through `POST /api/v1/evidence` (S3-009) | `evidence` | pdf, docx, csv, json, txt |
+
+- **Who may upload (D50 "Uploads and imports"):** Admin, Risk Manager, Compliance Manager and Analyst may upload the first four kinds; the Control Owner uploads evidence only (`evidence_only`), and only to controls they own (D213 (3)); the Auditor and the Viewer upload nothing. `canUpload` in S3-001 is the one place this rule lives.
+- **Who may import asset lists (D213 (5), planner's reading R14):** Risk Managers, Compliance Managers and Analysts, and API keys with those roles, may import asset lists that create or change assets. The Admin, who edits assets (D50) and has the uploads Yes cell, may too. `canImportAssets` in S3-007 is the one place this rule lives. Every change an import makes is audited, marked origin `import`, and carries the import's batch ID (`importId`, plus `pushBatchId` when it came through the push API).
+- **Evidence (D213 (1)–(3)):** numbers `EVD0001001` upward per org. Fields: name, the file, date collected, optional valid-until ("Expiring soon" within 30 days), review status (`pending`, `accepted`, `rejected`; new evidence is `pending`) and reviewer (with the review time). Who: a Control Owner adds evidence only to controls they own, sees all evidence on their own controls (whoever added it) and changes (edits or retires) only evidence they added; Admins add to any control they can see and change any evidence; Risk Managers, Compliance Managers, Auditors and Analysts view; Viewers don't see evidence. Labels always apply on top (D51). Review (S3-021, S3-022): Admins and Compliance Managers accept or reject evidence, never on evidence they added themselves (D220 (4)), and editing accepted or rejected evidence sends it back to pending (D220 (5)); until S3-021 is merged, nothing sets the review status except creation.
+- **Audit findings (D213 (1), (2)):** numbers `AUD0001001` upward per org. Fields: title (`name`), severity (`low`, `medium`, `high`, `critical`), status (`findingStatus`: `open`, `in_progress`, `remediated`, `risk_accepted`, `closed`), owner, the control or risk it concerns (a CONCERNS link made when the finding is created), source or audit reference, root cause, remediation plan, date identified, due date, closed date and an optional description. Planner's readings: R11, a finding always concerns at least one control or risk, so it's created with one and its last CONCERNS link can't be removed; R15, `closedDate` is required when the status is `closed` and refused otherwise, and a finding is overdue when its due date is before today and its status is `open` or `in_progress`.
+- **Where they appear (D213 (4), planner's reading R13):** the control page gets an "Evidence" section and an "Audit findings" section; the risk page gets an "Audit findings" section (evidence supports controls only, D67); each finding has its own page at `/audit-findings/$id`. No new menu item.
+- **Upload safety (D53, D64):**
+  - Only PDF, DOCX, CSV, JSON and TXT, **checked by content**: PDF by its `%PDF-` start; DOCX by being a zip whose entry list holds `[Content_Types].xml` and `word/document.xml` (the API reads only the zip's entry names, never extracts); CSV, JSON and TXT by being valid UTF-8 with no NUL bytes, JSON also starting with `{` or `[`. The file name's extension must agree with the content. Any other zip is refused, and so is anything else.
+  - 25 MB per file (`MAX_UPLOAD_BYTES`); Caddy caps the request at the door (M0-016).
+  - **Only the worker opens files** (reads their contents), with time and memory limits. The API only checks the type, hashes and stores.
+  - 20 uploads a minute per person (counting `POST /uploads` and `POST /evidence` together); 60 push batches a minute per API key; 1 MB for every other request.
+  - Each org's files live in its own bucket (`FileStore`, M0-006) under the key `sha256/<hex>`; downloads go only through the API.
+- **Postgres tables (S3-003, D73 "Documents" and "Intake"):** `documents`, `import_mappings`, `imports`, `push_batches`, each with `org_id` and the standard org-wall RLS with FORCE on (`orgTablePolicySql`, D57). On `documents` and `imports`, SELECT also needs the reader's role to view the row's record type and the row's label to be at or below the reader's clearance (D73: "Documents, chunks and findings also check role and label"). The worker's jobs run under a system context (planner's reading R10): `withOrgContext(db, { orgId, userId: 'system:intake', role: 'admin', clearance: 'restricted' }, fn)`. **Evidence documents (planner's reading R12):** ownership of a control lives in Neo4j, so Postgres can't apply D213 (3)'s Control Owner rule. Evidence's `documents` rows are therefore written and read under that same system context (the org wall still applies), and only after S3-009's evidence rules have passed in the API and the evidence was found by the graph query (the database-side check for evidence is Neo4j's). No owner rule is added to the `documents` policy.
+- **One step for a row, its audit entry and its job (D29, D45.4):** the document row, the `document.uploaded` entry (`AuditService.appendInTx`) and the job (`JobsService.sendInTx`) commit in one Postgres transaction. Graph changes (assets, evidence, findings, their links) use `AuditOutbox.withAuditedWrite` as in S1, and imports use S3-007's `withAuditedWrites` for many entries in one transaction.
+- **Audit actions (D56, D186):** `document.uploaded` (`meta { kind, format, label, duplicate }`), `document.downloaded` (`meta { kind, label }`), `import_mapping.saved`, `import.started`, `import.finished` (counts only), `push.received`, `generator.loaded` (fast load, one per batch, `meta { recordIds }` or `meta { documentIds }` plus counts, D213 (7)); graph changes use S1's `record.created`, `record.updated`, `record.retired`, `link.created` and `link.removed`, with `targetType` `evidence` or `audit_finding` for the new records and `meta { number, label }`; entries written by an import also carry `meta.importId` (and `meta.pushBatchId`, D213 (5)). `before`/`after` never hold file contents; file names only where the brief says.
+- **Graph nodes (D67, D68, D73):** labels `Evidence` and `AuditFinding`, already in S1-002's schema and in `NODE_RECORD_TYPES` (`packages/api/src/graph/privileges.ts`). Every one of S1's common properties (`id`, `number`, `sourceIds`, `name`, `sensitivity`, `status`, `owner`, `version`, `createdAt`, `createdBy`, `updatedAt`, `updatedBy`, `origin`). The Control Owner's query accounts have no MATCH on `Evidence` (the `upload_own` cell), so their evidence reads run as the writer with the owner rule (D213 (3): the evidence SUPPORTS a control whose `owner` is the caller) **and** `sensitivity IN <labels at or below their clearance>` (on the evidence and the control) in the query, as S1 does for controls (`visibleLabels` in `record-queries.ts`). Never change Neo4j privileges or accounts (D131, D144, D176).
+- **Imported assets (D40, D51, D68):** origin `import`; `sourceIds` holds `<source>:<the row's source ID>`, so a re-import finds the same asset (planner's reading R3: matching on the source ID only; name-based duplicate matching is S4, D43); the label comes from the mapped data classification (D51), else `defaultLabel('asset')`. Each asset and HOSTS/RUNS link an import writes stores `importId` (the last import that wrote it, D213 (5)); S1's record schemas drop unknown properties, so S1's API answers don't change.
+- **API paths (D47):** `/api/v1/uploads`, `/api/v1/documents`, `/api/v1/imports`, `/api/v1/import-mappings`, `/api/v1/push/batches`, `/api/v1/evidence`, `/api/v1/audit-findings`, plus `/api/v1/controls/:id/evidence`, `/api/v1/controls/:id/audit-findings` and `/api/v1/risks/:id/audit-findings`. Anything the caller can't see is **404** `not_found`, the same as a missing one. Long tasks answer 202 with a job ID.
+- **Security matrix (D175, D59, D186):** every new route gets its row in `packages/shared/src/access/security-matrix.ts` in the same task, with `orgWalled: true` and `labels: true` (TEST-005's note: routes guarded by the `uploads` row carry labels). The security reviewer checks the rows and their D59 tests: every role cell (generated from `ROLE_TABLE`), every org pair (3 orgs), every clearance × label pair (from `LABELS`), and API keys with their one org and one role.
+- **Tests (D96, D171, D173, D174, D176, D177):** as in S1 and S2. Name each file by what it needs and prefer `unit`. API route tests run an in-process Nest app against throwaway Postgres and Neo4j databases and throwaway org buckets (kind `db`), with settings from `prepareEnv` / `appTestEnv` in `packages/api/tests/platform/helpers.ts` (S1-013). Test files (CSV, JSON, TXT, small PDF and DOCX samples, a zip, a renamed binary) sit in `packages/api/tests/fixtures/intake/` and belong to the test writer. Never weaken live privileges, accounts, settings or shared state to prove a test.
+- **Migrations (D183):** S3-003 adds "a new migration"; any other task that finds it needs one says "a new migration" too. Never pick its number: the integrator numbers it at merge.
+- **Hot files (D183):** each brief lists its hot files; only one task at a time, across S2, S3 and S7, changes each.
+- **Git (D112, D159):** branch `task/<ID>` in its own worktree; commit messages start with the task ID and never mention Claude, Anthropic or AI tooling.
+
+---
+
+Task: S3-001
+
+**Goal:** One shared definition of what can be uploaded and how an asset list maps onto our fields, used by the API, the worker, the web app and the generators, so they agree on kinds, formats, limits, statuses, field names and who may upload.
+
+**Decisions:** D40, D44 (column mapping; obvious matches pre-filled by column name; CSV plus flat JSON), D47, D50 ("Uploads and imports" row), D51 (labels), D53 (the five formats, checked by content; 25 MB; zip refused), D71 (documents carry a record type), D30 (Zod), D45.2, D45.7 (fail safe). Read the S3 shared notes.
+
+**Depends on:** none.
+
+**Hot files:** `packages/shared/src/index.ts`.
+
+**Files:**
+- Create: `packages/shared/src/intake/uploads.ts`, `file-format.ts`, `statuses.ts`, `asset-import.ts`, `push.ts`, `upload-rules.ts` and `index.ts`.
+- Modify: `packages/shared/src/index.ts`, to export `./intake/index.js`.
+
+**Interfaces (produces), exact names:**
+- `UPLOAD_KINDS = ['asset_list', 'policy_document', 'soc_ticket', 'audit_report'] as const`, `UploadKind`, `DOCUMENT_KINDS = [...UPLOAD_KINDS, 'evidence'] as const`, `DocumentKind`, `isUploadKind(v)`.
+- `DOCUMENT_RECORD_TYPE: Record<DocumentKind, RecordType>` and `KIND_FORMATS: Record<DocumentKind, readonly FileFormat[]>`, as in the shared notes' table.
+- `FILE_FORMATS = ['pdf', 'docx', 'csv', 'json', 'txt'] as const`, `FileFormat`, `FORMAT_CONTENT_TYPES: Record<FileFormat, string>` (`application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `text/csv`, `application/json`, `text/plain`).
+- `MAX_UPLOAD_BYTES = 26_214_400` (25 MB), `MAX_FILE_NAME_LENGTH = 255`.
+- `detectFileFormat(input: { fileName: string; head: Uint8Array; zipEntries?: readonly string[]; isUtf8Text: boolean }): { ok: true; format: FileFormat } | { ok: false; reason: 'zip' | 'unknown_type' | 'extension_mismatch' | 'empty' }`. Pure: the API gives it the first bytes, the zip's entry names (when the file starts with `PK\x03\x04`) and whether the whole file decodes as UTF-8 with no NUL byte. Rules in the shared notes ("Upload safety"). Extensions are compared case-insensitively; a missing extension is `unknown_type`.
+- `DOCUMENT_STATUSES = ['stored', 'processing', 'processed', 'failed'] as const` (S4 moves documents past `stored`) and `IMPORT_STATUSES = ['reading', 'needs_mapping', 'queued', 'importing', 'done', 'failed'] as const`, with their types.
+- `ASSET_IMPORT_FIELDS = ['sourceId', 'name', 'assetType', 'criticality', 'dataClassification', 'owner', 'hostedOn', 'runsOn'] as const`, `AssetImportField`, `REQUIRED_IMPORT_FIELDS = ['sourceId', 'name'] as const`. `owner` holds an org member's email; `hostedOn` and `runsOn` hold the source ID of the asset that hosts or runs this one (read by S3-007 as HOSTS and RUNS links).
+- `normaliseHeader(h: string): string` (lowercase, spaces, dashes and dots to `_`, trimmed) and `suggestMapping(headers: readonly string[]): Partial<Record<AssetImportField, string>>`: pre-fills a field when one header matches its synonym list after `normaliseHeader`, for example `sourceId` ← `id`, `sys_id`, `asset_id`, `assetid`, `ci_id`; `name` ← `name`, `hostname`, `asset_name`, `display_name`; `assetType` ← `type`, `asset_type`, `class`, `sys_class_name`, `category`; `criticality` ← `criticality`, `tier`, `business_criticality`, `u_criticality`; `dataClassification` ← `data_classification`, `classification`, `sensitivity`; `owner` ← `owner`, `owner_email`, `managed_by`, `assigned_to`; `hostedOn` ← `hosted_on`, `host`, `parent`, `runs_on_host`; `runsOn` ← `runs_on`, `platform`, `depends_on`. A header is used for one field only; with two candidates for one field, the field stays empty (no guessing).
+- `normaliseValue(v: string): string` (trim, lowercase, spaces and dashes to `_`), used before checking a mapped value against the D197 lists.
+- `importMappingSchema`: strict `{ source, fields: Partial<Record<AssetImportField, string>> }`, `source` 1–100 characters of letters, digits, space, `_`, `-` and `.`; `fields` must name `sourceId` and `name`, and no column twice.
+- `pushBatchSchema`: strict `{ batchId, source, rows }`, `batchId` 1–200 characters of `[A-Za-z0-9._:-]`, `source` as above, `rows` 1–5,000 flat objects whose values are strings, numbers, booleans or null (no nested objects or arrays).
+- `canUpload(role: string, kind: string): boolean`: `can(role, 'uploads', 'use', { recordType: DOCUMENT_RECORD_TYPE[kind] })` for a known kind, false otherwise. So the Control Owner is true for `evidence` only, and the Auditor and Viewer are never true.
+
+**Pass criteria:**
+1. The kind, record type and format tables match the shared notes exactly; `canUpload` matches the D50 row for every role × kind (table-driven from `ROLE_TABLE`), and unknown roles or kinds are false.
+2. `detectFileFormat`, table-driven: a PDF head with `.pdf` is `pdf`; a zip with the two DOCX entries and `.docx` is `docx`; a zip without them, or any zip named `.zip`, is `zip`; valid UTF-8 named `.csv` or `.txt` is that format; `.json` needs `{` or `[` as the first non-space character; a PDF head named `.txt`, a binary named `.csv` (`isUtf8Text` false) and a `.docx` that isn't a zip are `extension_mismatch`; `.exe`, no extension, or an unknown binary is `unknown_type`; an empty head is `empty`. Upper-case extensions work.
+3. `suggestMapping` pre-fills the obvious fields for three sample header sets (a ServiceNow-style `sys_id,name,sys_class_name,u_criticality,…`, a plain `ID,Hostname,Type,Tier,Owner Email,Hosted On`, and one with no matches), never uses a header twice, and leaves a field empty when two headers could fill it.
+4. `importMappingSchema` refuses a mapping without `sourceId` or `name`, a column used twice, an unknown field, and a bad source name; `pushBatchSchema` refuses nested values, 0 or 5,001 rows, a bad `batchId` and unknown top-level fields.
+5. Nothing in `packages/shared/src/intake/` imports from `packages/api` or `packages/web`, or touches the network, the filesystem or the environment. The existing `packages/shared/tests/access/` and `records/` tests still pass.
+
+**Tests to write (kind `unit`):** `packages/shared/tests/intake/uploads.unit.test.ts`, `file-format.unit.test.ts`, `asset-import.unit.test.ts`, `push.unit.test.ts`, `purity.unit.test.ts`. Agreement (D174): with M0-008's `access` tests (the D50 row) and S1-001's value lists. Security-matrix rows: none (no route; `uploads` already has its row).
+
+**Test command:** `pnpm --filter shared test -- intake`
+
+---
+
+Task: S3-002
+
+**Goal:** One shared definition of Evidence and Audit findings (D202), used by the API and the web app: their fields, value lists, numbers, links and who may add them.
+
+**Decisions:** D50 ("Evidence files" and "Audit findings" rows), D51 (evidence defaults to `confidential`, findings to `internal`), D67 (Evidence -SUPPORTS-> Control; AuditFinding -CONCERNS-> Control|Risk), D68, D69, D73 (Evidence: file key, file hash, collected date, valid-until; AuditFinding: severity, status, due date), D196 (numbering pattern), D198, D200, D207, D30, **D213 (1) numbers, (2) fields and values, (3) who may add, see and change evidence**, planner's readings R11 and R15 (S3 shared notes). Read the S3 shared notes ("Evidence" and "Audit findings").
+
+**Depends on:** S3-001 (it adds to `packages/shared/src/intake/index.ts`).
+
+**Hot files:** none (`packages/shared/src/index.ts` already exports `./intake/index.js` after S3-001).
+
+**Files:**
+- Create: `packages/shared/src/intake/evidence.ts`, `audit-findings.ts`, `intake-numbers.ts`, `intake-links.ts`, `evidence-rules.ts`.
+- Modify: `packages/shared/src/intake/index.ts` (the new exports).
+
+**Interfaces (produces), exact names:**
+- `INTAKE_RECORD_KINDS = ['evidence', 'audit_finding'] as const`, `IntakeRecordKind`, `INTAKE_NODE_LABELS = { evidence: 'Evidence', audit_finding: 'AuditFinding' }`, `INTAKE_PATHS = { evidence: 'evidence', audit_finding: 'audit-findings' }`.
+- Numbers (D213 (1)): `INTAKE_NUMBER_PREFIX = { evidence: 'EVD', audit_finding: 'AUD' }`, 3 letters + 7 digits, per org and per type, the first being `FIRST_NUMBER` (1001), so `EVD0001001` and `AUD0001001`; `formatIntakeNumber(kind, n)`, `parseIntakeNumber(text): { kind, n } | null`.
+- Values (D213 (2)), stored lowercase with `_`: `FINDING_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const`, `FINDING_STATUSES = ['open', 'in_progress', 'remediated', 'risk_accepted', 'closed'] as const`, `OPEN_FINDING_STATUSES = ['open', 'in_progress'] as const` (the statuses in which a finding can be overdue, R15), `EVIDENCE_REVIEW_STATUSES = ['pending', 'accepted', 'rejected'] as const`, `EXPIRING_SOON_DAYS = 30`, with their types.
+- `evidenceValidity(validUntil: string | null, today: string): 'valid' | 'expiring' | 'expired'`: no `validUntil` is `valid`; before today is `expired`; today up to `EXPIRING_SOON_DAYS` days ahead is `expiring` ("Expiring soon"); later is `valid`. Dates are `YYYY-MM-DD`; pure (the caller passes today).
+- `isFindingOverdue(f: { dueDate; findingStatus }, today): boolean` (due date before today and status in `OPEN_FINDING_STATUSES`, R15).
+- Schemas, like S1's three per kind: `intakeCreateSchemas`, `intakeUpdateSchemas` (create fields made optional, plus a required `version`), `intakeRecordSchemas` (S1's common fields plus the kind's own).
+  - **Evidence** (D213 (2)): create `name` (S1's name rule), `collectedDate` (a date, not after today), optional `validUntil` (on or after `collectedDate`), optional `label` (default `confidential`, D51), optional `owner` (defaults to the person adding it, as S1). The record adds `fileKey`, `fileHash`, `documentId`, `fileName`, `format`, `sizeBytes`, `reviewStatus` (an `EVIDENCE_REVIEW_STATUSES` value; `pending` on create), `reviewedBy` (a user ID or `null`) and `reviewedAt` (a datetime or `null`). `reviewStatus`, `reviewedBy` and `reviewedAt` are **not** in the create or update schemas (unknown field, refused); only S3-021's review route will set them. The file itself and its control come with the create request (S3-009), not this schema.
+  - **Audit finding** (D213 (2)): create `name` (the title, S1's name rule), `severity`, `findingStatus` (named so it doesn't clash with S1's `status` active/retired), optional `owner` (an org member; defaults to the creator, as S1), `concernsId` (required: the ID of the control or risk it concerns, R11), `sourceReference` (the source or audit reference, 1–200 characters), `rootCause` (1–4,000), `remediationPlan` (1–4,000), `identifiedDate` (a date, not after today), `dueDate` (on or after `identifiedDate`), `closedDate` (required when `findingStatus` is `closed`, refused otherwise; on or after `identifiedDate` and not after today, R15), optional `description` (at most 4,000), optional `label` (default `internal`, D51). The update schema has no `concernsId` (links change through S3-010's concerns routes). The record has every field but `concernsId`.
+  - `findingDateProblems(f: { findingStatus; identifiedDate; dueDate; closedDate? }, today): { field: string; code: 'in_future' | 'before_identified' | 'required' | 'not_allowed' }[]`: the date rules above as one pure check, which the schemas use and S3-010 runs again on the merged record after an update.
+- `INTAKE_LINK_TYPES = [{ type: 'SUPPORTS', from: 'evidence', to: 'control' }, { type: 'CONCERNS', from: 'audit_finding', to: 'control' }, { type: 'CONCERNS', from: 'audit_finding', to: 'risk' }] as const` and `isAllowedIntakeLink(type, fromKind, toKind)`.
+- Evidence rules (D213 (3)), with `caller: { userId; role; clearance }` and "label visible" meaning the label is at or below the caller's clearance (D51):
+  - `canAddEvidence(caller, control: { label; owner }): boolean`: the Admin for any control whose label is visible; the Control Owner only when `control.owner === caller.userId` and its label is visible; everyone else false.
+  - `canSeeEvidence(caller, evidence: { label }, supportedControlOwners: readonly string[]): boolean`: the evidence's label must be visible; then Admin, Risk Manager, Compliance Manager, Auditor and Analyst true; the Control Owner only when `caller.userId` owns at least one control the evidence supports (whoever added the evidence); the Viewer false.
+  - `canEditEvidence(caller, evidence: { label; createdBy }, supportedControlOwners): boolean` (edit and retire): `canSeeEvidence` **and** either the Admin, or the Control Owner with `evidence.createdBy === caller.userId` (only evidence they added).
+  - Unknown roles, clearances or labels are false (fail safe).
+- Finding rules: `canAddFinding(caller)` (`can(role, 'audit_finding', 'edit')`: the Auditor) and `canLinkFinding(caller, finding, other)`: can edit the finding **and** can see the other end (`can(role, otherKind, 'view', { isOwner })` and its label visible). Removal of a CONCERNS link follows the same rule and `isRemovableLinkOrigin` (D207); the last CONCERNS link of a finding is never removable (R11, checked in S3-010).
+
+**Pass criteria:**
+1. The schemas accept valid records and refuse, with a field-named message: a missing name; an unknown value (including a `findingStatus` outside the five); a future `collectedDate` or `identifiedDate`; a `validUntil` before `collectedDate`; a `dueDate` before `identifiedDate`; `closed` without `closedDate`; a `closedDate` with any other status; a missing `concernsId`, `sourceReference`, `rootCause` or `remediationPlan` on a finding; `reviewStatus`, `reviewedBy` or `reviewedAt` in an evidence create or update; an unknown field; a bad label. Update schemas need `version`.
+2. Numbers format (`EVD0001001`, `AUD0001001`), pad, refuse out-of-range values and round-trip; `parseIntakeNumber` returns `null` for S1 prefixes and for anything malformed.
+3. `evidenceValidity` and `isFindingOverdue` are right on each side of today and of the 30-day line, and for every finding status.
+4. `isAllowedIntakeLink` is true for exactly the three rows, in their direction.
+5. `canAddEvidence`, `canSeeEvidence`, `canEditEvidence`, `canAddFinding` and `canLinkFinding`: table-driven over every role × clearance × label, matching the rules above. For the Control Owner, at least: evidence an Admin added to a control they own (sees it, can't edit it), evidence they added to a control they own (sees and edits it), evidence on a control someone else owns (sees nothing), and adding to an owned and a not-owned control. Unknown values are false.
+6. Pure: no imports from `packages/api` or `packages/web`, no network, filesystem, clock or environment. S3-001's and S1's shared tests still pass.
+
+**Tests to write (kind `unit`):** `packages/shared/tests/evidence-findings/schemas.unit.test.ts`, `numbers.unit.test.ts`, `dates.unit.test.ts`, `links.unit.test.ts`, `rules.unit.test.ts`. Agreement (D174): S1-001's number and schema tests, S1-005's `canLinkRecords` tests, S1-011's `isRemovableLinkOrigin` tests, and D213 (1)–(3). Security-matrix rows: none (`evidence` and `audit_finding` already have theirs).
+
+**Test command:** `pnpm --filter shared test -- evidence-findings`
+
+---
+
+Task: S3-003
+
+**Goal:** The Postgres side of intake: the four tables behind the org wall, documents and imports also hidden by role and label inside the org, and the two small helpers that let a row, its audit entry and its job commit in one transaction.
+
+**Decisions:** D13, D29 (a job is enqueued in the same transaction as the record that creates it), D45.4, D45.5, D51, D56, D57 (grc_app can't bypass RLS), D72 (job keys from the content hash), D73 ("Documents: content hash (unique per org), record type, label, uploader, status"; "Intake: import mappings, and push batches"; "RLS on every org table … Documents, chunks and findings also check role and label"), D176, D183. Read the S3 shared notes and M0-003, M0-009 and M0-012's code (`rls.sql.ts`, `org-context.ts`, `audit.service.ts`, `jobs.module.ts`).
+
+**Depends on:** S3-001 (the kind, format and status lists the check constraints use) and S7-026 (`pnpm test:env` then accepts this task's own new migration, D220 (1)).
+
+**Hot files:** `packages/api/src/db/migrations/meta/_journal.json` (a new migration), `packages/api/src/audit/audit.service.ts`, `packages/api/src/jobs/jobs.module.ts`.
+
+**Files:**
+- Create: a new migration in `packages/api/src/db/migrations/` (the integrator numbers it at merge, D183) and `packages/api/src/intake/intake.schema.ts` (Drizzle tables).
+- Create: `packages/api/src/intake/queues.ts`: `INTAKE_QUEUES = { assetListRead: 'intake.asset-list-read', assetImport: 'intake.asset-import', documentRead: 'processing.document-read' } as const`, and `INTAKE_SYSTEM_CONTEXT(orgId)` giving the worker's system context from the shared notes.
+- Create: `packages/api/src/db/role-visibility.sql.ts`: a pure function that builds, from `ROLE_TABLE`, the SQL for `app_role_views(record_type text) returns boolean` (true when the cell of `current_setting('app.role')` for that type is `view`, `edit` or `approve`; `edit_own`, `upload_own` and anything unknown are false, fail safe) and `app_label_visible(label text) returns boolean` (the label's rank at or below `app.clearance`'s; unknown false). The migration uses its output, pasted as SQL.
+- Modify: `packages/api/src/audit/audit.service.ts`: add `appendInTx(tx: Tx, e: AuditEventInput)`, the same append (advisory lock, `sourceId` dedup, hash chain) inside a transaction the caller opened with `withOrgContext` for the same org; `append` calls it. Every existing `audit` test still passes.
+- Modify: `packages/api/src/jobs/jobs.module.ts`: add `sendInTx(tx: Tx, queue, data, opts)` that queues through pg-boss's `db` option on the caller's transaction, so the job exists only if the transaction commits. Same defaults and `singletonKey` rule as `send`.
+
+**Tables (all with `org_id uuid not null`, `created_at`, `updated_at`):**
+- `documents`: `id` uuid pk, `kind` (a `DOCUMENT_KINDS` value), `record_type`, `format`, `file_name`, `content_type`, `size_bytes`, `content_hash` (64 lowercase hex), `storage_key`, `label`, `uploader_type` (`user`, `api_key` or `system`; `system` is for S3-019's fast load, D213 (7)), `uploader_id`, `source` (null except asset lists), `status` (a `DOCUMENT_STATUSES` value, default `stored`); **unique (`org_id`, `content_hash`)**.
+- `import_mappings`: `id`, `source` (**unique per org**), `fields` jsonb, `version` integer, `created_by`, `updated_by`.
+- `imports`: `id`, `document_id` (fk to `documents`), `source`, `status` (an `IMPORT_STATUSES` value), `label` (the document's), `record_type` (`asset`), `columns` jsonb, `sample` jsonb (at most 5 rows), `row_count`, `mapping` jsonb (the mapping a run used), `counts` jsonb (`added`, `updated`, `unchanged`, `failed`, `linksAdded`), `errors` jsonb (at most 200 `{ row, field, code }`), `job_id`, `created_by`.
+- `push_batches`: `id`, `api_key_id`, `source`, `batch_id`, `document_id`, `import_id`, `row_count`, `answer` jsonb (the first answer, returned again for a repeat); **unique (`org_id`, `source`, `batch_id`)**.
+- Check constraints on every list column, from the S3-001 lists.
+
+**RLS:** `orgTablePolicySql` on all four (ENABLE and FORCE; grc_app only). On `documents` and `imports`, the SELECT policy is `app_visible_org(org_id) AND app_role_views(record_type) AND app_label_visible(label)`. A Control Owner therefore sees no evidence documents through their own context, and that stays so: S3-009 reaches evidence document rows under the intake system context after its own rules pass (D213 (3), planner's reading R12), and no owner rule is added to this policy.
+
+**Pass criteria:**
+1. The migration applies to an empty throwaway database after the existing ones, and `drizzle` types in `intake.schema.ts` match the columns.
+2. **Org wall (D59):** for each ordered pair of 3 orgs, org A's context can't select, insert, update or delete org B's rows in any of the four tables; no org context sees and writes nothing; grc_app can't turn RLS off.
+3. **Role and label (D59):** for every role × record type in `DOCUMENT_RECORD_TYPE` and every clearance × label pair, a `documents` and an `imports` row is visible exactly when the D50 cell is `view`, `edit` or `approve` and the label is at or below the clearance (table-driven from `ROLE_TABLE` and `LABELS`); `edit_own` and `upload_own` cells see nothing (fail safe).
+4. The unique rules hold: a second document with the same `content_hash` in the same org is refused; the same hash in another org is allowed; a second push batch with the same `source` and `batch_id` in one org is refused.
+5. `appendInTx`: an entry appended inside a transaction that then rolls back leaves no entry and no gap in `seq`; one that commits chains correctly (`verifyChain` ok); concurrent `append` and `appendInTx` for one org give `seq` 1, 2, 3… with no forks.
+6. `sendInTx`: a job queued in a transaction that rolls back doesn't exist; one that commits does, once; the same `singletonKey` twice gives one job.
+7. `role-visibility.sql.ts` is pure and its output, for every role × type, agrees with `can(role, type, 'view')` except that ownership cells are false.
+8. The existing `org-wall`, `audit`, `outbox` and `platform` tests still pass.
+
+**Tests to write:**
+- `packages/api/tests/intake-tables/rls.db.test.ts` (db): criteria 1–4, cases generated from `ROLE_TABLE`, `ROLES`, `LABELS` and `DOCUMENT_RECORD_TYPE`.
+- `packages/api/tests/intake-tables/in-tx.db.test.ts` (db): criteria 5–6.
+- `packages/api/tests/intake-tables/role-visibility.unit.test.ts` (unit): criterion 7.
+- Security-matrix rows: none (no route).
+- Never weaken live privileges or shared state to prove a test (D176); red comes from the missing migration and helpers in the worktree.
+
+**Test command:** `pnpm --filter api test -- intake-tables` (the builder also runs `pnpm --filter api test -- audit outbox org-wall`)
+
+---
+
+Task: S3-004
+
+**Goal:** People and machines can upload a file. It's checked by content, stored once in the org's own bucket, recorded with its label and uploader, audited, and handed to the next step (the asset-list reader, or S4's document reader), all safely re-runnable.
+
+**Decisions:** D21, D29, D45.4, D45.5 (content-identified files), D47 (long tasks return a job ID), D50 ("Uploads and imports"), D51 (the uploader labels a document, default `internal`; D198: not above one's own clearance), D53, D54 (API keys), D56 (uploads logged), D57, D59, D64 (20 uploads/min per person; 25 MB), D72 (job keys from the content hash), D163, D164, D175, D176. Read the S3 shared notes.
+
+**Depends on:** S3-003.
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/intake/intake.module.ts`, `packages/api/src/main.api.ts` (registers multipart), `packages/api/src/common/openapi.ts` (multipart request bodies in `documentRoute`), `packages/api/package.json` and `pnpm-lock.yaml` (adds `@fastify/multipart`, exact version pinned; planner's reading R8).
+
+**Files:**
+- Create: `packages/api/src/intake/uploads/uploads.controller.ts`, `uploads.service.ts`, `sniff.ts` (reads the first bytes, the zip's central-directory entry names without extracting anything, and whether the file is UTF-8 text with no NUL; feeds `detectFileFormat`), `store-upload.ts` (the shared "check, hash, store, record" step S3-009 reuses), `upload-rate-limit.ts` (a second `RateLimiter` at 20/min per person on the upload routes, using `personKey`).
+- Modify: `intake.module.ts`, `main.api.ts`, `openapi.ts`, `security-matrix.ts`, `packages/api/package.json`.
+
+**Interfaces (produces):**
+- `storeUpload(deps, caller, input: { kind: DocumentKind; fileName: string; body: Buffer; label?: Label; source?: string }): Promise<{ document: DocumentOut; duplicate: boolean }>`: runs the checks, `sha256`, `FileStore.put(orgId, 'sha256/<hex>', body, contentType)` (skipped when `exists`), then in one `withOrgContext` transaction inserts the `documents` row (or finds the existing one by hash), appends `document.uploaded` with `appendInTx`, and calls an optional `afterInsert(tx, document)` hook for the kind's job. `DocumentOut = { id, kind, recordType, format, fileName, sizeBytes, contentHash, label, uploader: { type, id }, source, status, createdAt }`.
+- `UPLOAD_RATE_PER_MINUTE = 20`.
+
+**Route:** `POST /api/v1/uploads`, multipart with one file part and the fields `kind`, `label` (optional) and `source` (required for `asset_list`, forbidden otherwise). The route's body limit is `MAX_UPLOAD_BYTES` plus the multipart overhead; the file part itself must be at most `MAX_UPLOAD_BYTES`. Access `{ subject: 'uploads', action: 'use' }` at the guard (so the Control Owner, Auditor and Viewer get 403), then `canUpload(role, kind)` in the service. Answers:
+- 201 `{ document, duplicate: false, jobId, importId? }` for a new file. For `asset_list` the same transaction creates the `imports` row (`status` `reading`) and queues `INTAKE_QUEUES.assetListRead` (`singletonKey` `<orgId>:<hash>`); for the other kinds it queues `INTAKE_QUEUES.documentRead` with the same key style (S4 handles it; planner's reading R1).
+- 200 `{ document, duplicate: true }` when the org already has that content: nothing is stored or queued again, and the existing document keeps its kind, label and uploader (planner's reading R5: the repeat is still audited, `document.uploaded` with `meta.duplicate: true`).
+- 400 `validation_failed` (missing file, two files, unknown kind, bad source, empty file); 413 `file_too_large`; 415 `unsupported_file_type` with the reason (`zip`, `unknown_type`, `extension_mismatch`) in plain words; 403 `forbidden` (role, or a label above the uploader's clearance, D198); 429 `rate_limited` from the 21st upload in a minute.
+
+**Pass criteria:**
+1. **By content (D53):** each fixture gets the right answer: PDF, DOCX, CSV, JSON and TXT accepted for the kinds that take them; a zip, a renamed zip (`.docx` with no Word entries), a PDF named `.txt`, a binary named `.csv`, an `.exe` and an empty file refused with 415 or 400; a format the kind doesn't take (a PDF as `asset_list`) is 415. The API never extracts a zip or parses a document (a test checks `sniff.ts` reads only the first bytes and the central directory).
+2. **Size:** a file of exactly `MAX_UPLOAD_BYTES` is accepted; one byte more is 413 in the D47 format; every other route keeps the 1 MB cap.
+3. **Stored once (D45.5):** the object key is `sha256/<hex>` in `grc-org-<orgId>`; the same file twice in one org stores once, makes one document and queues one job, the second answer being 200 `duplicate: true`; the same file in two orgs is stored in each org's bucket (planner's reading R7).
+4. **One step (D29, D45.4):** the document row, its `document.uploaded` entry and its job commit together; a failure forced after the insert leaves no row, no entry and no job (the stored object may stay; a retry reuses it).
+5. **Labels (D51, D198):** no label means `internal`; a label above the uploader's clearance is 403 and nothing is stored as a document; API keys use their key's clearance.
+6. **D59, every role cell:** for every role × kind, the answer follows `canUpload` (the guard's 403 for the Control Owner, Auditor and Viewer); API keys follow their one role and one org.
+7. **D59, every org pair:** an upload lands only in the caller's org (row, bucket and audit trail); org B sees none of it.
+8. **Rate limit (D64):** 20 uploads in a minute pass, the 21st is 429 with "try again in N s", per person (two people don't share a counter).
+9. **Audit and logs (D56, D163, D164):** the entry has `actorType` `user` or `api_key`, `targetType` `document`, `targetId` the document ID and `meta { kind, format, label, duplicate }`, with no file contents; a failing upload logs only the error type or code, the reference ID and IDs, never the file name or contents.
+10. The security-matrix row is there and the TEST-003 completeness test passes; the OpenAPI document shows the multipart body.
+
+**Tests to write:**
+- `packages/api/tests/uploads/sniff.unit.test.ts` (unit): the sniffing and criterion 1's refusals on buffers, with no services.
+- `packages/api/tests/uploads/*.db.test.ts` (db, in-process app, throwaway databases and buckets): criteria 1–10. Generate role, org-pair and clearance × label cases from `ROLE_TABLE`, `ROLES` and `LABELS`.
+- Fixtures in `packages/api/tests/fixtures/intake/`; the 25 MB files are built in memory by the test, not committed.
+- New security-matrix row: `POST /api/v1/uploads`.
+
+**Test command:** `pnpm --filter api test -- uploads`
+
+---
+
+Task: S3-005
+
+**Goal:** People see the documents they're allowed to see, with their status, and can download them, always through the API and always on the record.
+
+**Decisions:** D47 (paged, filtered, sorted lists), D50, D51, D53 (downloads only through the API), D56 (downloads logged), D59, D64 (security headers), D73 (role and label checks on documents, in the API and in Postgres), D45.3, D163, D164, D175, D176. Read the S3 shared notes.
+
+**Depends on:** S3-003. (Tests insert document rows and stored objects directly; they don't wait for S3-004.)
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/intake/intake.module.ts`.
+
+**Files:**
+- Create: `packages/api/src/intake/documents/documents.controller.ts`, `documents.service.ts`.
+- Modify: `intake.module.ts`, `security-matrix.ts`.
+
+**Routes (access `{ subject: 'uploads', action: 'use' }`; the service also checks `can(role, recordType, 'view')` and the label, and RLS checks both again):**
+- `GET /api/v1/documents`: `Paged<DocumentOut>`; query `page`, `pageSize`, `kind`, `status`, `source`, `label`, `q` (file name contains, case-insensitive), `sort` (`-createdAt` default, `createdAt`, `fileName`); unknown filters 400. Evidence documents aren't listed here (they're reached through S3-009).
+- `GET /api/v1/documents/:id`: the `DocumentOut`, plus `importId` for an asset list.
+- `GET /api/v1/documents/:id/download`: the file from the org's bucket, with `Content-Type` from `FORMAT_CONTENT_TYPES`, `Content-Disposition: attachment` with a safe file name, `X-Content-Type-Options: nosniff`, and the D64 headers; a `document.downloaded` entry (`appendInTx`) is written before the bytes are sent.
+
+**Pass criteria:**
+1. The list pages, filters and sorts as above; `total` counts only visible documents.
+2. **D59, every role cell:** Admin, Risk Manager, Compliance Manager and Analyst reach the routes; the Control Owner, Auditor and Viewer get 403; within the allowed roles, a document whose record type the role can't view is 404 and missing from the list (every role × kind, from `ROLE_TABLE`).
+3. **D59, every org pair:** org A gets 404 on org B's document IDs, including download, and never sees them listed.
+4. **D59, every clearance × label pair:** a document above the reader's clearance is 404 on get and download and missing from the list.
+5. **Twice checked (D45.3):** with the service check bypassed in a test double, RLS alone still hides the same rows (proves the second check).
+6. Download returns exactly the stored bytes with the headers above; it's never served for a hidden document; each download writes one `document.downloaded` entry (`meta { kind, label }`, no contents), and a download that fails to read the file writes none and answers 500 with a reference ID.
+7. No values in logs (D163, D164): errors log the type or code, reference ID and IDs only.
+8. The three security-matrix rows are there and the TEST-003 completeness test passes.
+
+**Tests to write:** `packages/api/tests/documents-api/*.db.test.ts` (db): criteria 1–8, generated from `ROLE_TABLE`, `ROLES`, `LABELS`; `packages/api/tests/documents-api/list-query.unit.test.ts` (unit) for the query parsing. New security-matrix rows: the three routes above.
+
+**Test command:** `pnpm --filter api test -- documents-api`
+
+---
+
+Task: S3-006
+
+**Goal:** When an asset list is uploaded, the worker reads it safely and the person sees its columns and a few sample rows, with our fields already matched where the column names make it obvious, and can save that mapping for the source (D44).
+
+**Decisions:** D36 (the worker), D40, D44 (column mapping; saved per source; obvious matches pre-filled; CSV plus flat JSON), D45.5, D45.7, D51 (the sample carries the document's label), D53 (only the worker opens files, with time and memory limits), D56, D59, D72 (read file ×4), D163, D164, D175, D176. Read the S3 shared notes.
+
+**Depends on:** S3-003. (Tests store a file and insert its document and `imports` rows directly.)
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/intake/intake.module.ts`, and `packages/api/src/jobs/jobs.module.ts` only if `work` needs a concurrency option for the 4-at-a-time reader (say so in the hand-off).
+
+**Files:**
+- Create in `packages/api/src/intake/imports/`: `csv.ts` (our own RFC 4180 parser: quoted fields, `""` escapes, commas and newlines inside quotes, CRLF or LF, a UTF-8 BOM dropped; no new package, planner's reading R8), `flat-json.ts` (an array of flat objects; the columns are the union of keys in first-seen order), `file-sandbox.ts` (runs a parse in a `worker_threads` Worker with `resourceLimits` of 256 MB and a 30 s time limit, then terminates it; reusable by S4), `asset-list-reader.job.ts` (the `INTAKE_QUEUES.assetListRead` handler, registered only when `jobs.processesJobs`, 4 at a time, D72), `imports.service.ts`, `imports.controller.ts`, `mappings.service.ts`, `mappings.controller.ts`.
+- Modify: `intake.module.ts`, `security-matrix.ts`.
+
+**What the reader job does:** under the system context, it reads the stored file, parses it in the sandbox, and saves `columns`, `row_count` and the first 5 rows as `sample`, then sets `status` `needs_mapping`. Limits: at most 50,000 rows and 200 columns; a file over a limit, malformed (an unclosed quote, JSON that isn't an array of flat objects) or out of time or memory gets `status` `failed` with one error `{ row, field: null, code }` (`too_many_rows`, `too_many_columns`, `malformed`, `timed_out`, `too_much_memory`). A second run of the same job changes nothing more.
+
+**Routes (access `{ subject: 'uploads', action: 'use' }`; `imports` rows are also role- and label-checked by RLS):**
+- `GET /api/v1/imports` (paged; `status`, `source`; newest first) and `GET /api/v1/imports/:id`: the import with `columns`, `sample`, `rowCount`, `status`, `counts`, `errors`, plus `mapping`: the source's saved mapping when every column it names exists in this file, else `suggestMapping(columns)`, and `mappingFrom: 'saved' | 'suggested'`.
+- `GET /api/v1/import-mappings` (the org's saved mappings) and `GET /api/v1/import-mappings/:id`.
+- `POST /api/v1/import-mappings` with `importMappingSchema` plus an optional `version`: creates the source's mapping, or replaces it when `version` matches (409 `stale_version` when not); audited `import_mapping.saved` (`after` holds the source and the field names mapped, `meta { source }`).
+
+**Pass criteria:**
+1. `csv.ts` and `flat-json.ts` parse every fixture correctly (quotes, embedded commas and newlines, CRLF, BOM, empty cells, a header-only file) and refuse malformed ones with `malformed`.
+2. The job reads a 2,000-row CSV and a JSON list into `columns`, `row_count` and 5 `sample` rows, and sets `needs_mapping`; the limits and the sandbox's time and memory limits give `failed` with the right code (a fixture that loops or allocates without end is stopped).
+3. The API program never parses files: only the worker registers the reader (a test checks the API app has no handler for the queue).
+4. `GET /imports/:id` returns the saved mapping when it fits the columns, else the suggestion, with `mappingFrom`.
+5. Saving a mapping is audited, versioned (stale save 409) and unique per source.
+6. **D59:** every role cell (the three `uploads` roles plus the Analyst reach the routes; the Control Owner, Auditor and Viewer get 403); every org pair (404 across orgs, nothing listed); every clearance × label pair on imports (the sample of a `restricted` list is invisible to an `internal` reader: 404).
+7. No values in logs: a failing read logs only the error code and IDs, never cell values or column names.
+8. The security-matrix rows are there and the TEST-003 completeness test passes.
+
+**Tests to write:** `packages/api/tests/import-read/csv.unit.test.ts`, `flat-json.unit.test.ts` (unit); `packages/api/tests/import-read/sandbox.unit.test.ts` (unit, the Worker limits with tiny budgets); `packages/api/tests/import-read/*.db.test.ts` (db): criteria 2–8. New security-matrix rows: `GET /api/v1/imports`, `GET /api/v1/imports/:id`, `GET /api/v1/import-mappings`, `GET /api/v1/import-mappings/:id`, `POST /api/v1/import-mappings`.
+
+**Test command:** `pnpm --filter api test -- import-read`
+
+---
+
+Task: S3-007
+
+**Goal:** A mapped asset list becomes assets in the graph: new ones created, known ones updated, their HOSTS and RUNS links drawn, each change audited, quickly and safely re-runnable (D40, D44, D48).
+
+**Decisions:** D26, D37, D40, D44, D45.4, D45.5, D48 (a 2,000-row asset list mapped in under 1 minute), D50, **D213 (5)** (Risk Managers, Compliance Managers and Analysts, and API keys with those roles, may import asset lists that create or change assets; every change audited, marked imported and carrying the import's batch ID), planner's reading R14 (the Admin may too), D51 (assets take their data classification; D198), D56, D68 (source IDs as aliases), D69, D72, D196 (numbers), D197 (value lists), D163, D164, D175, D176. Read the S3 shared notes ("Who may import asset lists", "Imported assets") and S1-003's brief (the record shape and numbers).
+
+**Depends on:** S3-006 (the reader's output and its job, which this task extends with the automatic run).
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/intake/intake.module.ts`, `packages/api/src/audit/outbox.ts`.
+
+**Files:**
+- Create in `packages/api/src/intake/imports/`: `import-plan.ts` (pure: rows + mapping + what's stored → `{ create, update, unchanged, links, errors }`), `asset-import.job.ts` (the `INTAKE_QUEUES.assetImport` handler, worker only), `run.controller.ts`, `import-numbers.ts` (takes n numbers at once from S1's `(:RecordCounter {kind: 'asset'})` node, the same node S1's `takeNumber` uses).
+- Create: `packages/shared/src/intake/import-rules.ts` with `IMPORT_ROLES = ['admin', 'risk_manager', 'compliance_manager', 'analyst'] as const` and `canImportAssets(role: string): boolean` (true exactly for those four, D213 (5) and R14; the Control Owner, Auditor, Viewer and unknown roles false), exported from `packages/shared/src/intake/index.ts`. It applies the same way to people and to API keys (a key's one role, D54).
+- Modify: `packages/api/src/audit/outbox.ts`: add `withAuditedWrites(orgId, actor, fn → { result, audits: OutboxAudit[] })`, one outbox node per entry in order, in the same transaction; `withAuditedWrite` unchanged; the M0-013 `outbox` tests still pass.
+- Modify: `asset-list-reader.job.ts` (S3-006): at its end, when the source has a saved mapping that fits and the uploader passes `canImportAssets`, it queues the run itself (D44: "repeat uploads map automatically").
+- Modify: `intake.module.ts`, `security-matrix.ts`.
+
+**Route:** `POST /api/v1/imports/:id/run`, body `{ mapping: importMappingSchema['fields'], saveForSource: boolean }`; access `{ subject: 'uploads', action: 'use' }` plus `canImportAssets` in the service. It needs `status` `needs_mapping` or `done` (a re-run) and answers 202 `{ jobId }`, with `status` `queued`, the mapping snapshot saved on the import, an `import.started` entry and the job in one transaction (`singletonKey` `<importId>`). 409 `import_busy` while `queued` or `importing`; 400 when the mapping names a column the file lacks.
+
+**What the job does (as `grc_writer` through `withAuditedWrites`, batches of 200 rows):**
+1. For each row: the mapped values, normalised with `normaliseValue` for list fields, must pass `createSchemas.asset` (D197 lists); `owner` is looked up by email among the org's members (unknown → the person who ran the import, with an `unknown_owner` note); the label is the mapped data classification (else `defaultLabel('asset')`) and above the runner's clearance is a row error `label_above_clearance` (D198). A failing row is skipped and recorded `{ row, field, code }`; codes: `missing_value`, `bad_value`, `label_above_clearance`, `duplicate_source_id` (the same source ID twice in one file: the later row is skipped).
+2. A row whose `<source>:<sourceId>` is in an existing asset's `sourceIds` updates only the mapped fields that changed (`version` + 1, `updatedAt`, `updatedBy`, `record.updated` with changed fields only); unchanged rows write nothing. A new one is created with the next `AST` number, origin `import`, `status` `active`, `version` 1 (`record.created`). A retired asset stays retired.
+3. After every row: `hostedOn` X → `(X)-[:HOSTS]->(this)`, `runsOn` X → `(X)-[:RUNS]->(this)`, found by the same source's alias, MERGEd with origin `import` and `link.created`; an unknown X is a row note `unknown_parent`; an existing link is left alone.
+4. The import ends `done` with `counts` and `errors` (at most 200) and an `import.finished` entry, or `failed` with its code. Re-running the same file adds nothing and writes no record entries (all `unchanged`). A job retried after a crash part-way finishes without duplicates.
+5. **The import's batch ID (D213 (5)):** every `record.created`, `record.updated` and `link.created` entry the job writes has `meta.importId` (this import's ID) and, when a `push_batches` row points at this import, `meta.pushBatchId` (that row's `batch_id`); every asset it creates or changes and every HOSTS/RUNS link it adds stores `importId` as a property (the last import that wrote it); origin stays `import` on everything it creates. An unchanged row changes neither.
+
+**Pass criteria:**
+1. `import-plan.ts` (unit, table-driven): create, update (changed fields only), unchanged, each row error code, and the links, for fixture rows.
+2. A 2,000-row fixture with 1,500 HOSTS/RUNS parents imports in under 60 s on the throwaway databases (D48), with numbers `AST…` in one unbroken run after the org's existing ones.
+3. Re-running gives all `unchanged`, no new nodes, links or record entries; a crash simulated between batches then a retry gives the same end state as one clean run.
+4. Every created, updated and linked item has its outbox entry in the same transaction and reaches the Postgres audit trail through the relay; a batch that fails keeps none of its changes or entries.
+5. Imported assets appear in S1's `GET /api/v1/assets` with origin `import` and their labels, and their links on S1's `…/links` and map routes (S1's answers are otherwise unchanged by the `importId` property).
+6. A second upload from a source with a saved mapping imports without anyone pressing Run, when the uploader passes `canImportAssets`; otherwise it waits in `needs_mapping`.
+7. **D59:** every role cell on the run route (Admin, Risk Manager, Compliance Manager and Analyst run it; the Control Owner, Auditor and Viewer get 403 at the guard), for people and for API keys of each role; every org pair (404; org B's graph untouched); every clearance × label pair (a hidden import is 404; a row labelled above the runner's clearance is a row error).
+8. No values in logs: row errors and log lines hold row numbers, field names and codes, never cell values.
+9. The security-matrix row is there and the TEST-003 completeness test passes; the M0-013 `outbox` tests pass.
+10. **Batch ID (D213 (5)):** after an import, every audit entry it wrote carries `meta.importId`, the assets and links it wrote carry `importId`, and a second import that changes one asset moves only that asset's `importId`.
+
+**Tests to write:** `packages/api/tests/import-run/plan.unit.test.ts` (unit); `packages/api/tests/import-run/*.db.test.ts` (db): criteria 2–10 (the `pushBatchId` part with a `push_batches` row inserted directly); `packages/api/tests/import-run/rules.unit.test.ts` (unit, `canImportAssets` for every role in `ROLES`, table-driven). Agreement (D174): D213 (5), D50's uploads row. New security-matrix row: `POST /api/v1/imports/:id/run`.
+
+**Test command:** `pnpm --filter api test -- import-run` (the builder also runs `pnpm --filter api test -- outbox`)
+
+---
+
+Task: S3-008
+
+**Goal:** Connectors (and our generators) can push asset rows in batches. A batch that arrives twice is ignored, and each batch becomes an asset list imported with the source's saved mapping (D11, D47).
+
+**Decisions:** D11, D18, D30, D45.5, D47 (the push API ignores batches it has already received; long tasks return job IDs), D54 (API keys: one org, one role), D56, D59, D64 (60 push batches/min per key; 1 MB), D73 (push batches: repeat batch IDs ignored), **D213 (5)** (API keys with the Risk Manager, Compliance Manager or Analyst role, and the Admin per R14, may import; every change carries the batch ID), through S3-007's `canImportAssets`, D163, D164, D175, D176. Planner's reading R2: the push API takes asset rows only; machines send documents through `POST /api/v1/uploads` with their API key. Read the S3 shared notes.
+
+**Depends on:** S3-007 (the import rule and run) and S3-004 (`storeUpload`).
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/intake/intake.module.ts`.
+
+**Files:** create `packages/api/src/intake/push/push.controller.ts`, `push.service.ts`, `push-rate-limit.ts` (60/min per API key); modify `intake.module.ts`, `security-matrix.ts`.
+
+**Routes:**
+- `POST /api/v1/push/batches`, body `pushBatchSchema`, **API keys only** (a signed-in person gets 403 `api_key_required`); access `{ subject: 'uploads', action: 'use' }` plus `canImportAssets(key role)`. The source must have a saved mapping (else 409 `mapping_required`). The rows are written as a JSON asset list through `storeUpload` (kind `asset_list`, the key as uploader, label `internal` unless the key's clearance is lower), then in one transaction the `push_batches` row, an `imports` row (`status` `queued`, the saved mapping), a `push.received` entry and the S3-007 run job. Answer 202 `{ batchId, importId, jobId, duplicate: false }`.
+- The same `source` and `batchId` again: 200 with the first answer and `duplicate: true`; nothing is stored, queued or imported again, even when the rows differ. Two requests with the same batch at the same moment give one batch.
+- Rows identical to an earlier batch's (the same content hash) make no second document: the batch is recorded against the existing document, and the answer says `duplicate: true`.
+- `GET /api/v1/push/batches` (paged; `source`, `batchId`): the org's batches with their import status and counts. Access `{ subject: 'uploads', action: 'use' }` (people and keys).
+
+**Pass criteria:**
+1. A first batch is stored, recorded and imported (its assets appear, origin `import`); the answer carries the job ID; the import's audit entries carry `meta.importId` and `meta.pushBatchId` (this batch's ID, D213 (5)).
+2. Repeats and simultaneous duplicates behave as above (D47).
+3. 60 batches a minute per key pass, the 61st is 429; two keys don't share a counter; a body over 1 MB is 413.
+4. Sessions get 403 `api_key_required`; a key whose role fails `canImportAssets` gets 403; a missing mapping is 409 `mapping_required`.
+5. **D59:** every role for keys (from `ROLE_TABLE`: Admin, Risk Manager, Compliance Manager and Analyst keys push; Control Owner, Auditor and Viewer keys get 403), every org pair (a key of org A can't push into or list org B), every clearance × label pair on the list.
+6. No values in logs; the `push.received` entry holds `{ source, batchId, rowCount }` only.
+7. The security-matrix rows are there and the TEST-003 completeness test passes.
+
+**Tests to write:** `packages/api/tests/push-api/*.db.test.ts` (db): criteria 1–7; any pure part as `*.unit.test.ts`. New security-matrix rows: `POST /api/v1/push/batches`, `GET /api/v1/push/batches`.
+
+**Test command:** `pnpm --filter api test -- push-api`
+
+---
+
+Task: S3-009
+
+**Goal:** Evidence (D202): a file that shows a control works, attached to that control, with its dates and label, visible and changeable only by the people the rules allow.
+
+**Decisions:** D50 ("Evidence files": Admin edit; Control Owner upload own; Risk Manager, Compliance Manager, Auditor, Analyst view; Viewer none), **D213 (1)** (`EVD0001001`), **D213 (2)** (fields: name, file, date collected, optional valid-until with "expiring soon" within 30 days, review status and reviewer), **D213 (3)** (a Control Owner adds only to controls they own, sees all evidence on their own controls and changes only evidence they added; Admins add to any control; Risk Managers, Compliance Managers, Auditors and Analysts view; Viewers don't see evidence), planner's reading R12 (evidence document rows under the system context), D51 (evidence defaults to `confidential`; D198), D53, D56, D59, D67 (SUPPORTS), D68, D69, D73, D37, D45.4, D200/D207 patterns, D163, D164, D175, D176. Read the S3 shared notes ("Evidence", "Postgres tables") and S1-003's and S1-005's briefs.
+
+**Depends on:** S3-002 (the model and rules) and S3-004 (`storeUpload`).
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/intake/intake.module.ts`.
+
+**Files:** create in `packages/api/src/intake/evidence/`: `evidence.service.ts`, `evidence.controller.ts`, `evidence-queries.ts`, `evidence-numbers.ts` (takes the next `EVD` number from `(:RecordCounter {kind: 'evidence'})`, the same way S1's `takeNumber` does); modify `intake.module.ts`, `security-matrix.ts`, and `packages/api/src/intake/uploads/store-upload.ts` (S3-004's; S3 owns it, not a hot file): an option `{ context: 'caller' | 'system' }`, default `caller`, so evidence files are written and found under the intake system context (R12). No migration.
+
+**Routes:**
+- `POST /api/v1/evidence`: multipart with the file and the fields `controlId`, `name`, `collectedDate`, optional `validUntil`, `label`, `owner`. Rate-limited with the uploads (D64). The rules are checked first (the control found through the caller's visibility, then `canAddEvidence`), and only then the file goes through `storeUpload` (kind `evidence`, `context: 'system'`); then one `withAuditedWrite` transaction creates the Evidence node (the next `EVD` number, origin `manual`, `fileKey`, `fileHash`, `documentId`, `fileName`, `format`, `sizeBytes`, `reviewStatus` `pending`, `reviewedBy` and `reviewedAt` null) and its SUPPORTS link to the control, with one `record.created` entry whose `after` also names the control (`supports: <controlId>`), so this task doesn't need S3-007's `withAuditedWrites`. Allowed per `canAddEvidence`; the control must exist and be visible (404 otherwise). The same file already attached to the same control is 409 `evidence_exists`. 201 with the evidence.
+- `GET /api/v1/evidence` (paged; `controlId`, `label`, `status`, `reviewStatus`, `validity`, `q`; sort `number`, `name`, `collectedDate`, `validUntil`), `GET /api/v1/evidence/:id`, `PATCH /api/v1/evidence/:id` (name, dates, label, owner; `version`; 409 `stale_version`; `reviewStatus`, `reviewedBy` and `reviewedAt` are refused with 400), `POST /api/v1/evidence/:id/retire`. PATCH and retire need `canEditEvidence` (403 when the caller can see the evidence but didn't add it, for a Control Owner). Each record answer includes `controls` (the controls it supports that the caller can see), `validity` (`evidenceValidity` from S3-002: `valid`, `expiring` or `expired`), `reviewStatus`, `reviewer` (`{ id, name }` or `null`) and `reviewedAt`, and `canEdit` (the caller's `canEditEvidence`, so the web app needn't guess `createdBy`).
+- `GET /api/v1/evidence/:id/download`: the file, as S3-005's download (the document row read under the system context after `canSeeEvidence` passes, R12), audited `document.downloaded`.
+- `GET /api/v1/controls/:id/evidence`: all visible evidence supporting a visible control (`{ own: true }` on the control, as S1). For a Control Owner on a control they own, that's every evidence item on it within their clearance, whoever added it (D213 (3)).
+- Reads go through `readAs`, except the Control Owner's, which run as the writer with the owner and label conditions (shared notes: the evidence supports a control the caller owns, and both labels are visible).
+
+**Pass criteria:**
+1. Adding evidence stores the file once (content hash), creates the node and the SUPPORTS link with their audit entries in one transaction; a failure in the graph step keeps neither (the document row may stay; a retry reuses it).
+2. **D213 (3) through the routes:** the Admin adds to any visible control and edits or retires any evidence; a Control Owner adds only to controls they own (403 on a visible control someone else owns), sees and downloads every evidence item on their own controls including one an Admin added, can't edit or retire that one (403), edits and retires evidence they added, and gets 404 for evidence on controls they don't own; Risk Manager, Compliance Manager, Auditor and Analyst list, get and download but get 403 on create, edit and retire; the Viewer gets 403 on the list and 404 on anything else. A Control Owner who no longer owns the control (it was handed to someone else) no longer sees its evidence (404).
+3. Labels: default `confidential`; not above the saver's clearance (403); raise or lower per `canChangeLabel`.
+4. `validity` is right on each side of today and of the 30-day line; `validUntil` before `collectedDate` is 400.
+5. **Review fields (D213 (2)):** new evidence has `reviewStatus` `pending` and no reviewer; PATCH with `reviewStatus`, `reviewedBy` or `reviewedAt` is 400 and changes nothing; the `reviewStatus` filter works.
+6. Retire keeps the node, the link and the file; retired evidence shows only with `status=retired` or `all`.
+7. **Evidence documents (R12):** a Control Owner's upload and download work although RLS hides evidence document rows from their own context; evidence documents never appear in `GET /api/v1/documents` or its download for anyone; a rule failure stores no file and writes no document row.
+8. **D59:** every role cell on every route; every org pair (404, nothing listed or downloaded); every clearance × label pair on list, get, download and the control's evidence.
+9. No values in logs; audit `before`/`after` hold fields and IDs, never file contents.
+10. The security-matrix rows are there and the TEST-003 completeness test passes; the S1 `records-api` and `links` tests and the S3 `uploads` and `documents-api` tests still pass.
+
+**Tests to write:** `packages/api/tests/evidence-api/*.db.test.ts` (db): criteria 1–10, generated from `ROLE_TABLE`, `ROLES`, `LABELS`; any pure part (for example list-query parsing) as `*.unit.test.ts`. Agreement (D174): S3-002's `rules` and `dates` tests, D213 (2) and (3). New security-matrix rows: the seven routes above.
+
+**Test command:** `pnpm --filter api test -- evidence-api`
+
+---
+
+Task: S3-010
+
+**Goal:** Audit findings (D202): an Auditor records what an audit found, how serious it is and when it's due, and links it to the controls and risks it concerns; everyone the role table allows can read them.
+
+**Decisions:** D50 ("Audit findings": Auditor edit; Admin, Risk Manager, Compliance Manager, Control Owner, Analyst view; Viewer none), D51 (default `internal`; D198), D56, D59, D67 (CONCERNS), D68, D69, D73, D37, D45.4, D200, D201 and D207 (link add and remove rules; AI links only through the Analyst), D163, D164, D175, D176, **D213 (1)** (`AUD0001001`), **D213 (2)** (title, severity, status with `risk_accepted`, owner, the control or risk it concerns, source reference, root cause, remediation plan, identified, due and closed dates, optional description), planner's readings R11 (created with its CONCERNS link; the last one can't be removed) and R15 (closed date and overdue). Read the S3 shared notes ("Audit findings") and S1-003, S1-005 and S1-011's briefs.
+
+**Depends on:** S3-002.
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/intake/intake.module.ts`.
+
+**Files:** create in `packages/api/src/intake/audit-findings/`: `findings.service.ts`, `findings.controller.ts`, `finding-queries.ts`, `finding-numbers.ts` (takes the next `AUD` number from `(:RecordCounter {kind: 'audit_finding'})`, the same way S1's `takeNumber` does; its own file, so S3-009 and S3-010 never touch the same one); modify `intake.module.ts`, `security-matrix.ts`.
+
+**Routes:**
+- `/api/v1/audit-findings`: `GET` list (paged; `severity`, `findingStatus`, `owner`, `label`, `status`, `due` = `overdue`/`next_30_days`, `q`; sort `number`, `name`, `severity`, `dueDate`, `identifiedDate`, `updatedAt`), `GET /:id`, `POST` (201), `PATCH /:id` (`version`; 409 `stale_version`), `POST /:id/retire`: access `{ subject: 'audit_finding', action: 'view' | 'edit' }`, with numbers (`AUD…`), versions, labels, owner and audit exactly as S1-003 does for its kinds, and every D213 (2) field from S3-002's schemas. `due=overdue` uses `isFindingOverdue` (due date before today, status `open` or `in_progress`); `next_30_days` is due from today to 30 days ahead with an open status.
+- **Create (R11):** the body carries `concernsId`: it must be a visible control or risk (404 otherwise) and `canLinkFinding` must hold (403); one `withAuditedWrite` transaction creates the AuditFinding node and its CONCERNS link (origin `manual`) with one `record.created` entry whose `after` also names it (`concerns: <id>`), as S3-009 does for SUPPORTS.
+- **Update:** after merging the PATCH into the stored finding, `findingDateProblems` runs on the result, so for example setting `findingStatus` `closed` without a `closedDate`, or reopening a closed finding while keeping its `closedDate`, is 400 with the field named.
+- `GET /api/v1/audit-findings/:id/concerns`: the controls and risks it concerns that the caller can see, with the link's `origin`, `createdAt`, `createdBy`.
+- `POST /api/v1/audit-findings/:id/concerns` `{ toId }`: the other end must be a visible control or risk (404 otherwise), `canLinkFinding` must hold (403), 409 `link_exists`; origin `manual`, `link.created` in the same transaction with `meta { type, fromNumber, toNumber, label }` (higher label).
+- `POST /api/v1/audit-findings/:id/concerns/remove` `{ toId }`: as S1-011 (404, then 403, then 409 `ai_link_review_only` for `ai` links, D207), then 409 `last_concern` when it's the finding's only CONCERNS link (counting links the caller can't see, without saying so; R11); `linkRemovedAudit` in the same transaction.
+- `GET /api/v1/controls/:id/audit-findings` and `GET /api/v1/risks/:id/audit-findings`: the visible findings concerning a visible control or risk (the control route with `{ own: true }`, as S1).
+
+**Pass criteria:**
+1. Create, read, list, update, retire behave as S1-003's criteria 1–8 for this kind (numbers from `AUD0001001`, versions, labels, owner members only, audit in the same transaction), with S3-002's value and date checks: all five statuses including `risk_accepted`, and every D213 (2) field stored and returned.
+2. **Created with its concern (R11):** a create without `concernsId`, or with one the caller can't see or that isn't a control or risk, stores nothing (400 or 404); a good create makes the node and the CONCERNS link together, and a failure in the transaction keeps neither.
+3. **Dates (R15):** `closedDate` required with `closed` and refused otherwise, on create and on update after merging; `dueDate` before `identifiedDate` and a future `identifiedDate` or `closedDate` are 400; `due=overdue` and `due=next_30_days` return exactly the findings `isFindingOverdue` and the 30-day rule give, around today, for every status.
+4. Only the Auditor edits; Admin, Risk Manager, Compliance Manager, Control Owner and Analyst view; the Viewer gets 403 on the list and 404 on anything else.
+5. CONCERNS add, list and remove follow the rules above, including AI links refused (seed an `ai` link directly in the throwaway database), the last link refused with 409 `last_concern` (also when the other links are hidden from the caller), and never revealing a link's origin to a caller who fails the 404 or 403 check.
+6. **D59:** every role cell on every route; every org pair; every clearance × label pair, including a finding linked to a control the reader can't see (the link isn't shown).
+7. No values in logs; the security-matrix rows are there and the TEST-003 completeness test passes; the S1 tests still pass.
+
+**Tests to write:** `packages/api/tests/finding-records/*.db.test.ts` (db): criteria 1–7, generated from `ROLE_TABLE`, `ROLES`, `LABELS`; `finding-queries.unit.test.ts` (unit) for query building, including the `due` filters. Agreement (D174): S3-002's `schemas` and `dates` tests, S1-011's removal tests, D213 (2). New security-matrix rows: the ten routes above.
+
+**Test command:** `pnpm --filter api test -- finding-records`
+
+---
+
+Task: S3-011
+
+**Goal:** Screen 10, Data intake: a finished-looking page (D1) where people upload files, see what happened to them, and download them.
+
+**Decisions:** D1, D2, D7 (the web only hides buttons; the API decides), D27 #10, D30 (typed client), D33, D50, D51 (label chooser up to one's own clearance, D198), D53 (the five formats; 25 MB), D56. Read the S3 shared notes and S1-006's brief (the kit: `RecordTable`, `LabelBadge`, `ApiProblem`).
+
+**Depends on:** S3-004 and S3-005.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated), `packages/web/scripts/gen-api-client.ts` (multipart bodies, if the generator lacks them), `packages/web/src/router.tsx`.
+
+**Files:**
+- Regenerate `packages/web/src/api/client.ts` (`pnpm gen:api-client`) after S3-004 and S3-005 are on `main`.
+- Create in `packages/web/src/features/intake/`: `IntakePage.tsx`, `UploadPanel.tsx`, `DocumentsTable.tsx`, `StatusBadge.tsx`, `useDocuments.ts`, `permissions.ts` (uses `canUpload` from `@grc/shared`).
+- Modify: `router.tsx` (`/intake` becomes this page instead of `ScreenPage`).
+
+**Pass criteria:**
+1. **Upload panel:** the kind chooser offers only the kinds `canUpload` allows (plain names: "Asset list", "Policy document", "SOC tickets", "Audit report"); asset lists ask for a source name; the label chooser defaults to Internal and offers nothing above the person's clearance; drag-and-drop or a file picker; the file's extension and size (≤ 25 MB) are checked before sending, with clear messages; upload progress shows.
+2. After a new upload, the document appears in the table; after a repeat, a notice says "This file was already uploaded on <date>; nothing new was stored" and links to it. An asset list's row links to its import page (`/intake/imports/$id`).
+3. **Documents table:** file name, kind, format, size, label, uploaded by, uploaded at, status (Stored, Processing, Processed, Failed; asset lists show their import status); filters for kind and status and a file-name search, in the URL; paging and sorting through the API; it refreshes every 5 s while any row is still working, and stops when none is.
+4. Download is a button per row, going through the API.
+5. The Control Owner, Auditor and Viewer see the no-access screen (the API's 403), with a line telling a Control Owner that evidence is added from a control's page. The API's 415, 413, 429 and 403 answers show clear messages; others show the message and reference ID.
+6. All calls go through the generated client with relative `/api/v1` URLs (the M0-015 rule).
+
+**Tests to write (kind `unit`, API mocked at the client boundary):** `packages/web/tests/intake-screen/*.unit.test.tsx`, criteria 1–6, with an Admin, a Risk Manager with `internal` clearance, an Analyst, a Control Owner and a Viewer. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- intake-screen`
+
+---
+
+Task: S3-012
+
+**Goal:** The column-mapping screen (D44), like ServiceNow import sets: the person matches the file's columns to our fields, saves that for the source, runs the import and sees what happened.
+
+**Decisions:** D1, D2, D7, D27 #10, D40, D44, D48, D51, **D213 (5)** with reading R14 (through `canImportAssets`: Admin, Risk Manager, Compliance Manager and Analyst). Read the S3 shared notes, S3-006's and S3-007's briefs.
+
+**Depends on:** S3-006 and S3-007.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated), `packages/web/src/router.tsx`.
+
+**Files:** regenerate the client after S3-006 and S3-007 are on `main`; create in `packages/web/src/features/intake/imports/`: `ImportPage.tsx`, `MappingTable.tsx`, `SamplePreview.tsx`, `ImportResults.tsx`, `useImport.ts`; modify `router.tsx` (`/intake/imports/$id`).
+
+**Pass criteria:**
+1. The page shows the file name, source, row count and status; while `reading` it says so and refreshes every 2 s.
+2. For `needs_mapping`: one row per our field (plain names: "Source ID", "Name", "Asset type", "Criticality", "Data classification", "Owner (email)", "Hosted on", "Runs on"), each with a chooser of the file's columns, pre-filled from `mapping` with a note "Filled from the saved mapping for <source>" or "Suggested from the column names"; "Source ID" and "Name" required; a column can't be chosen twice; the 5 sample rows show under the file's column names, with the chosen fields highlighted.
+3. "Save this mapping for <source>" is on by default; "Run import" shows only when `canImportAssets` holds, sends the mapping, and the page shows progress (queued, importing) every 2 s.
+4. When done: added, updated, unchanged and failed counts, links added, and a table of row problems (row number, field, and the reason in plain words for each code); a link to the Assets list.
+5. `failed` reads show the reason in plain words (too many rows, not a valid CSV, and so on). 404 shows "This import doesn't exist or you can't see it". 409 `import_busy` and `stale_version` show clear messages.
+6. All calls go through the generated client with relative `/api/v1` URLs.
+
+**Tests to write (kind `unit`):** `packages/web/tests/import-screen/*.unit.test.tsx`, criteria 1–6, with an Admin and a role without `canImportAssets`. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- import-screen`
+
+---
+
+Task: S3-013
+
+**Goal:** Evidence in the web app: the people allowed can attach proof to a control and everyone allowed can see and download it, with its validity at a glance.
+
+**Decisions:** D1, D7, D27, **D213 (4)** with reading R13 (an "Evidence" section on the control page; evidence supports controls only, so the risk page gets none; no new menu item or screen), **D213 (2)** (fields, "Expiring soon" within 30 days, review status and reviewer), **D213 (3)** (through `canAddEvidence` and the API's `canEdit`), D50, D51, D53, D198. Read the S3 shared notes, S3-009's brief and S1-008's brief (the related-records groups on record pages).
+
+**Depends on:** S3-009.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated), `packages/web/src/features/records/controls/ControlPage.tsx` (also changed by S2-007: one at a time).
+
+**Files:** regenerate the client after S3-009 is on `main`; create in `packages/web/src/features/intake/evidence/`: `EvidenceSection.tsx`, `AddEvidenceDialog.tsx`, `EditEvidenceDialog.tsx`, `ValidityBadge.tsx`, `useEvidence.ts`; modify `ControlPage.tsx` (one line placing the section).
+
+**Pass criteria:**
+1. The control page shows "Evidence" with number, name, collected, valid until, a validity badge (Valid, Expiring soon, Expired, from the API's `validity`), review status ("Pending review", "Accepted", "Rejected", with the reviewer's name and date when there is one), label, and a download button, for what the API returns only. The risk page has no evidence section, and no new menu item is added.
+2. "Add evidence" shows only when `canAddEvidence` holds for this control (the Admin on any control; a Control Owner only on a control they own); the dialog takes the file (checked for type and size first), name, collected date, valid-until date and label (default Confidential, nothing above one's clearance); it has no review field; success adds the row as "Pending review".
+3. Edit and Retire show per row only when the API's `canEdit` is true (so a Control Owner sees them on evidence they added and not on evidence an Admin added to their control); the edit dialog has no review field; stale saves show S1's message; retire asks for confirmation.
+4. The API's 409 `evidence_exists`, 415, 413, 429, 403 and 404 show clear messages; others show the message and reference ID.
+5. All calls go through the generated client with relative `/api/v1` URLs; the S1 `record-screens` and `record-links` tests still pass.
+
+**Tests to write (kind `unit`):** `packages/web/tests/evidence-ui/*.unit.test.tsx`, criteria 1–5, with an Admin, a Control Owner on an owned control (one item they added, one an Admin added) and on a not-owned control, a Compliance Manager (view only) and a Viewer. Agreement (D174): D213 (2)–(4), S3-002's `evidenceValidity` values. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- evidence-ui`
+
+---
+
+Task: S3-014
+
+**Goal:** Audit findings in the web app: the Auditor records and links findings, and everyone allowed sees them where they matter.
+
+**Decisions:** D1, D7, D27, **D213 (4)** (an "Audit findings" section on the control page and on the risk page, where the Auditor adds a finding, created with its CONCERNS link to that record; a finding's own page at `/audit-findings/$id` built on S1's records kit; no new menu item), **D213 (2)** (every field), readings R11 and R15, D50, D51, D198, D200, D201, D207. Read the S3 shared notes, S3-010's brief and S1-008 and S1-012's briefs.
+
+**Depends on:** S3-010.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated), `packages/web/src/router.tsx`, `packages/web/src/features/records/controls/ControlPage.tsx` and `packages/web/src/features/records/risks/RiskPage.tsx` (one line each placing the section).
+
+**Files:** regenerate the client after S3-010 is on `main`; create in `packages/web/src/features/intake/audit-findings/`: `FindingsSection.tsx`, `AddFindingDialog.tsx`, `FindingPage.tsx`, `ConcernsList.tsx`, `useFindings.ts`; modify `router.tsx`, `ControlPage.tsx`, `RiskPage.tsx`.
+
+**Pass criteria:**
+1. The section lists number, title, severity, status (plain names: Open, In progress, Remediated, Risk accepted, Closed), owner, due date (overdue in red, per `isFindingOverdue`), label, each linking to the finding's page. No new menu item is added.
+2. "Add audit finding" shows only when `canAddFinding` holds; the form has every D213 (2) field (title, severity, status, owner, source or audit reference, root cause, remediation plan, date identified, due date, closed date shown and required only when the status is Closed, optional description, label) and uses the S3-002 schemas, with field-named messages for the date rules; this record is the finding's concern (`concernsId`), so saving creates the finding and its CONCERNS link together.
+3. The finding's page shows every field, the controls and risks it concerns (with "Link a control or risk" and "Remove" per `canLinkFinding` and `isRemovableLinkOrigin`, never on AI links; the API's 409 `last_concern` shows "A finding must concern at least one control or risk"), and Edit and Retire for the Auditor; stale save and 404 as in S1.
+4. The Viewer never sees the section; refusals show clear messages.
+5. All calls go through the generated client; the S1 web tests still pass.
+
+**Tests to write (kind `unit`):** `packages/web/tests/findings-ui/*.unit.test.tsx`, criteria 1–5, with an Auditor, an Admin (view only), a Control Owner and a Viewer, on a control page and a risk page. Agreement (D174): D213 (2) and (4), S3-002's `schemas` and `dates` tests. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- findings-ui`
+
+---
+
+Task: S3-015
+
+**Goal:** The generator part of screen 10 (D27 #10: "generator controls").
+
+**Decisions:** D18, D27 #10, D36 (the generators are command-line tools), D42, D50, **D213 (6)** (the Data intake screen shows what the generators pushed and how to run them; it doesn't start them). What it builds: a "Sample data" panel on `/intake`, for Admins, that lists the pushes and uploads made by API keys (from `GET /api/v1/push/batches` and the documents list, grouped by source and key) and shows the `pnpm gen:data` commands for each size, with no button, route or job that starts a generator.
+
+**Depends on:** S3-008 and S3-011.
+
+**Hot files:** `packages/web/src/api/client.ts` (if regenerated).
+
+**Files:** create `packages/web/src/features/intake/SampleDataPanel.tsx`; modify `IntakePage.tsx`.
+
+**Pass criteria:**
+1. Admins see the panel; other roles don't. Nothing on it starts a generator, and it makes no call other than the two list routes.
+2. It lists each source's batches (count, rows, last received, import status) and document uploads made by API keys, from the API only.
+3. It shows the `pnpm gen:data` commands for `tiny`, `accuracy` and `stress`, with a copy button, and says they run on the Mac.
+4. Empty and error states as S1's.
+
+**Tests to write (kind `unit`):** `packages/web/tests/generator-panel/*.unit.test.tsx`. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- generator-panel`
+
+---
+
+Task: S3-016
+
+**Goal:** The hidden answer key (D18): a made-up but believable world per org, built first, so every benchmark question later has a known right answer.
+
+**Decisions:** D18 (one generator per source; the answer-key graph first; a size dial for orgs and volume), D33 (@faker-js/faker with fixed seeds), D42, D45.8 (repeatable), D48 (the stress and accuracy sizes), D67, D196, D197 (value lists), the spec's ontology. Read the S3 shared notes.
+
+**Depends on:** none (S1's shared records model is on `main`).
+
+**Hot files:** `packages/generators/package.json` and `pnpm-lock.yaml` (adds `@faker-js/faker`, exact version pinned, and `@grc/shared` as a workspace dependency).
+
+**Files:** create in `packages/generators/src/world/`: `sizes.ts`, `build-world.ts`, `names.ts`, `answer-key.ts`, `index.ts`; modify `packages/generators/src/index.ts` and `package.json`.
+
+**Interfaces (produces):**
+- `SIZES = { tiny: { orgs: 1, assets: 30, risks: 10, controls: 15, policies: 3, incidents: 10 }, accuracy: { orgs: 2, … sized so the documents come to about 300 chunks in all (D48) }, stress: { orgs: 20, assets: 2000, risks: 300, controls: 400, policies: 40, incidents: 1000 } }` and `parseSize(text)` (a name, or `custom:orgs=…,assets=…`).
+- `GENERATOR_VERSION` (a string bumped when output changes, D45.8).
+- `buildWorld({ seed: number; size: SizeSpec }): AnswerKey`, where `AnswerKey = { generatorVersion, seed, size, orgs: WorldOrg[] }` and `WorldOrg = { key, name, assets, risks, controls, policies, incidents, links }`. Each record has a stable `key` (`AST-0001` …), a canonical `name` and the fields of S1's `createSchemas` for its kind; each link is `{ type, fromKey, toKey }`.
+- The world's shape: HOSTS and RUNS form a layered estate (network devices and cloud services host servers, servers host databases and run applications) with no cycles; every risk is exposed through at least one asset and mitigated by 1–3 controls; every control is governed by one policy; incidents impact 1–3 assets and expose 0–2 risks.
+
+**Pass criteria:**
+1. The same seed and size give byte-identical JSON (a hash test); two seeds differ.
+2. Every record passes S1's `createSchemas` for its kind; every link passes `isAllowedLink`; no HOSTS/RUNS cycles; the counts match the size exactly.
+3. The shape rules above hold for every org of `tiny` and `accuracy`, and on a sample of `stress`.
+4. `stress` builds in under 30 s and in under 1 GB of memory on this Mac (one process).
+5. Orgs in one world have different names and different estates.
+6. Nothing in `packages/generators/src/world/` touches the network, the filesystem or the environment.
+
+**Tests to write (kind `unit`):** `packages/generators/tests/world/*.unit.test.ts`. Agreement (D174): S1-001's schema and link tests. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter generators test -- world`
+
+---
+
+Task: S3-017
+
+**Goal:** The dummy sources (D18): the files real connectors would deliver, written from the answer key, with the mess real data has, and every planted trap written down so the benchmark can score it.
+
+**Decisions:** D18 (duplicates, typos, planted false positives), D41 (logs arrive as SOC tickets and audit findings), D44 (any CSV's columns), D45.8, D52.6 (injection attacks planted in the synthetic data), D53 (formats), **D213 (8)** (the generators write plain text for now: CSV, flat JSON and TXT; PDF and DOCX generation is planned before the S8 benchmark, not in S3). Read the S3 shared notes.
+
+**Depends on:** S3-016.
+
+**Hot files:** none.
+
+**Files:** create in `packages/generators/src/sources/`: `cmdb.ts`, `policies.ts`, `soc-tickets.ts`, `audit-reports.ts`, `mess.ts`, `injections.ts`, `render-sources.ts`, `index.ts`.
+
+**Interfaces (produces):**
+- `renderSources(key: AnswerKey, opts?: { seed?: number; duplicateRate?: number; typoRate?: number; falsePositiveRate?: number; injectionRate?: number }): { orgs: { orgKey; assetLists: SourceFile[]; documents: SourceFile[] }[]; plants: Plants }`, where `SourceFile = { source; kind: UploadKind; fileName; format; body: string; mentions: Mention[] }`, `Mention = { fact: { type, fromKey, toKey }; sentence: string }` for documents, and `Plants = { duplicates, typos, falsePositives, injections }`, each item naming the org, file and record keys or sentence.
+- `CMDB_SOURCES`: at least three source systems with their own column layouts, for example a ServiceNow-style CSV (`sys_id,name,sys_class_name,u_criticality,data_classification,managed_by,hosted_on`), a cloud inventory flat JSON (`resourceId`, `displayName`, `kind`, `tier`, `owner`, `runsOn`), and a spreadsheet-style CSV with spaces in headers. Each carries its `mapping` (`importMappingSchema`) so S3-018 can save it.
+- Documents as text: policy documents that state which controls they govern and which risks those controls mitigate; SOC tickets (TXT and JSON) that state the assets an incident impacted and the risks it exposed; audit reports whose findings name controls and risks. Every fact appears in a sentence that names both ends (D39's "same sentence" rule).
+
+**Pass criteria:**
+1. The same answer key and options give byte-identical files; the defaults give roughly the stated rates.
+2. Every CMDB file, read with its source's mapping, gives back every asset of the org (plus the planted duplicates) with the right HOSTS/RUNS parents; column layouts differ between sources.
+3. Every document fact is in `mentions` with its sentence, and that sentence names both ends by a name or alias the answer key knows.
+4. Planted duplicates (the same asset under a spelling variant or in two sources), typos, false positives (sentences that mention two records with no link between them, recorded as "not a fact") and injections (text that tells a model to ignore its instructions, leak data or add links, D52.6) are all recorded in `plants`, and none of them changes the answer key's facts.
+5. Every file is valid for its format under S3-001's `detectFileFormat` and at most 25 MB; asset lists at `stress` size are split into files of at most 2,000 rows.
+6. Nothing touches the network, the filesystem or the environment.
+
+**Tests to write (kind `unit`):** `packages/generators/tests/sources/*.unit.test.ts`, criteria 1–6 on `tiny` and `accuracy`. Agreement: S3-001's `detectFileFormat` and `suggestMapping` tests. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter generators test -- sources`
+
+---
+
+Task: S3-018
+
+**Goal:** Full-pipeline mode (D42): the generators act as dummy connectors and push the sources through the real API, exactly as a customer's connector would, so extraction accuracy can be measured later on known data.
+
+**Decisions:** D11, D18 (each generator pushes through the real upload API), D42, D45.5, D45.8, D47, D54 (API keys: one org, one role, expiring, revocable), D57 (secrets only from `.env`; key values never printed or saved), D60 (`https://grc.localhost`), D81 (generated test data never pushed), D133 (org creation by the operator), D163, D164, D170 (Mac scripts swap the database host), D176. Planner's reading R9: the command provisions its own orgs like `seed:demo` and makes one short-lived API key per org. Read the S3 shared notes and M0-014's and S1-010's briefs (provisioning and `seed:demo`).
+
+**Depends on:** S3-017, S3-004 and S3-008 (S3-006's mappings route comes with S3-008's chain).
+
+**Hot files:** `package.json` (root; adds the `gen:data` script), `.gitignore` (adds `data/generated/`).
+
+**Files:**
+- Create: `packages/generators/src/connectors/api-client.ts` (a small client over `fetch`: `saveMapping`, `pushBatch`, `uploadDocument`; takes `{ baseUrl, apiKey, fetch? }`; knows nothing about the API's internals), `packages/generators/src/connectors/run-full.ts` (`runFullPipeline({ key, sources, targets: { orgKey, baseUrl, apiKey }[] })`: saves each source's mapping, pushes the asset lists in batches of at most 1,000 rows with batch IDs `<generatorVersion>:<seed>:<orgKey>:<source>:<n>`, then uploads each document; returns counts).
+- Create: `packages/infra/scripts/gen-data.ts` (root script `gen:data`, options `--mode full|fast`, `--size`, `--seed`, `--base-url` default `https://grc.localhost`): builds the world and sources, provisions orgs `gen-<seed>-<n>` with `provisionOrg` (safe to re-run), makes one Admin-role API key per org that expires in 1 hour, runs `runFullPipeline`, revokes the keys at the end (also on failure), and writes `data/generated/<seed>-<size>/answer-key.json` and `plants.json`. `--mode fast` stops with "fast load isn't built yet" until S3-019.
+- Modify: root `package.json`, `.gitignore`.
+
+**Pass criteria:**
+1. `api-client.ts` sends the right requests (multipart for uploads, JSON for batches, the key in the header the API expects) and turns the API's error format into errors that carry the code and reference ID but never the key.
+2. A run of `tiny` against an in-process API (listening on 127.0.0.1, `--base-url` pointed at it) on throwaway databases: the orgs exist, the mappings are saved, the assets and their links are in the graph (origin `import`), every document is stored with status `stored`, and the answer key is written.
+3. A second run with the same seed and size adds nothing: pushes come back `duplicate: true`, uploads `duplicate: true`, and the graph and document counts don't change.
+4. The keys are revoked when the run ends, even when it fails part-way; no key value appears in the output, the files written or the logs.
+5. The output holds only org slugs, counts, batch and document counts and the answer-key path; no names or text from the data (D164).
+6. `data/generated/` is git-ignored.
+
+**Tests to write:** `packages/generators/tests/connector/api-client.unit.test.ts` (unit, with a fake `fetch`): criterion 1; `packages/generators/tests/connector/run-full.unit.test.ts` (unit, fake client): batch IDs and order; `packages/infra/tests/gen-data/gen-data.db.test.ts` (db, in-process API, throwaway databases and orgs only): criteria 2–6. Security-matrix rows: none. The run through the real door (`https://grc.localhost`) happens in S3-020's demo steps, not here.
+
+**Test command:** `pnpm --filter generators test -- connector` (the builder also runs `pnpm --filter infra test -- gen-data`)
+
+---
+
+Task: S3-019
+
+**Goal:** Fast-load mode (D42): the stress-size datasets written straight into Neo4j, Postgres and storage from the answer key, so search, chat, concurrency and isolation can be measured at scale without hours of Gemma.
+
+**Decisions:** D42 (fast load: written straight into Neo4j and Postgres from the answer key, with only the embedding step), D45.4, D45.5, D45.8, D48 (20 orgs; stretch 50), D56, D57, D170, D176, **D213 (7)**: fast load writes one audit entry per batch that lists every record ID it created, hash-chained as usual, not counts only; chunking and embedding come with S4. Read the S3 shared notes and S3-018's brief.
+
+**What it writes:**
+- Graph batches of at most 500 records (with their links) per Neo4j transaction, as `grc_writer` through `AuditOutbox.withAuditedWrite`: the records (origin `import`, numbers per org and type in one unbroken run, `sourceIds` from the answer key's keys) and one outbox entry `generator.loaded` with `actorType` `system`, `targetType` `org`, and `meta { recordIds: [every node ID created in this batch], counts: { records, links }, generatorVersion, seed }`. The relay copies it into the org's hash chain like any entry.
+- Document batches of at most 500 per Postgres transaction (as grc_app under the intake system context): the files into the org's bucket by content hash, the `documents` rows (status `stored`, `uploader_type` `system`, `uploader_id` `system:fast-load`), and one `generator.loaded` entry through `appendInTx` with `meta { documentIds: [every document ID created in this batch], counts: { documents }, generatorVersion, seed }`. No `processing.document-read` job is queued: S4 decides how these are chunked and embedded.
+- Nothing already there is written again, so a re-run makes no records, documents or entries.
+
+**Depends on:** S3-018 (`gen-data.ts`, which this task extends; S3-016's answer key and S3-003's tables come with it).
+
+**Hot files:** `packages/infra/scripts/gen-data.ts` (S3-018's file; this task fills in `--mode fast`).
+
+**Files:** create `packages/generators/src/fast-load/` (pure planning of the batches) and `packages/infra/scripts/fast-load.ts` (the writes, as `grc_writer` and grc_app through the existing services); modify `gen-data.ts`.
+
+**Pass criteria:**
+1. `--mode fast --size tiny` on throwaway databases writes exactly the answer key's records (with `AST…` etc. numbers per org), links and documents, with origin `import`.
+2. **Audit (D213 (7)):** one `generator.loaded` entry per batch transaction; together the entries' `recordIds` are exactly the IDs of the nodes created (none missing, none twice) and their `documentIds` exactly the documents created; the entries reach the Postgres audit trail and `verifyChain` passes for every org; a batch that fails keeps neither its writes nor its entry.
+3. No processing job is queued for fast-loaded documents; they stay `stored` with `uploader_type` `system`.
+4. A re-run adds nothing and writes no entries.
+5. The `stress` size (20 orgs) loads within a time the builder measures and reports (no bar set in S3); memory stays within one process.
+6. No values in logs or output (entries hold IDs and counts only, never names or text).
+
+**Tests to write:** `packages/generators/tests/fast-load/*.unit.test.ts` (unit, batch planning: at most 500 per batch, every ID in exactly one batch); `packages/infra/tests/fast-load/*.db.test.ts` (db, `tiny` and a 2-org custom size): criteria 1–4 and 6. Agreement (D174): M0-012's and M0-013's chain and outbox tests, D213 (7). Security-matrix rows: none.
+
+**Test command:** `pnpm --filter infra test -- fast-load`
+
+---
+
+Task: S3-020
+
+**Goal:** The S3 part of the combined S2+S3+S7 checkpoint (D182) can be demonstrated: the demo orgs have uploads, an imported asset list, evidence and audit findings; the steps are written out; browser tests walk the main journeys through the front door.
+
+**Decisions:** D114, D115, D172, D182, D45.5, D45.8, D170, D57, D164, D176, D213 (2)–(6). Read the S3 shared notes and S1-010's and S2-008's briefs (the demo seed and browser-test pattern).
+
+**Depends on:** S3-011, S3-012, S3-013, S3-014 and S3-018. It also assumes S1-010 is merged (the S1 checkpoint guarantees it).
+
+**Hot files:** `packages/infra/scripts/seed-demo.ts` (also S2-008's: one at a time).
+
+**Files:**
+- Modify: `packages/infra/scripts/seed-demo.ts`: after S1's records, per demo org: one asset list uploaded and imported through `storeUpload` and the import run (fixed file, fixed source `demo-cmdb`), two policy documents and one SOC ticket uploaded, evidence on at least two controls (on a control owned by the demo Control Owner: one item the Control Owner added and one the Admin added; one item expiring within 30 days), and three audit findings with every D213 (2) field filled (one `open` and overdue, one `risk_accepted`, one `closed` with its closed date), each created with its CONCERNS link to a control or risk; all through the services, so they're audited.
+- Create: `packages/infra/scripts/demo-intake/` (the fixed files and plain objects), `docs/demo/s3.md`.
+- Create (test writer): `packages/web/e2e/intake.e2e.ts`.
+
+**Pass criteria:**
+1. `pnpm seed:demo` adds the items above; running it twice adds nothing (same documents, assets, numbers and entries).
+2. Every demo change has its audit entry in Postgres.
+3. `docs/demo/s3.md` gives click-through steps: uploading a policy document and uploading it again (the repeat notice); uploading an asset list, mapping its columns, running it and seeing the new assets and their dependency map; a second upload from the same source importing by itself; adding evidence to a control as the Control Owner, and seeing the Admin's evidence on the same control without Edit or Retire; an Auditor adding an audit finding from a control page and from a risk page, and opening its page; downloading a document; the Auditor and Viewer seeing no Data intake access; the other org seeing none of it; and running `pnpm gen:data --mode full --size tiny` against `https://grc.localhost`. It names `pnpm seed:demo` as the source of the logins and prints no passwords.
+4. **Playwright** (`packages/web/e2e/intake.e2e.ts`, through `https://grc.localhost` with the seeded users): the journeys in criterion 3 except the generator run.
+
+**Tests to write:** `packages/api/tests/provision/seed-intake.db.test.ts` (db): criteria 1–2; `packages/infra/tests/demo/s3-demo-doc.unit.test.ts` (unit): criterion 3 and that no password appears; `packages/web/e2e/intake.e2e.ts` (e2e): criterion 4. Security-matrix rows: none.
+
+**Who runs the browser tests:** as in S1-010. The builder runs the db and unit tests; the **integrator**, after merging, rebuilds and recreates `grc-api`, `grc-worker` and `grc-caddy` with `--no-deps` from the main checkout, runs `pnpm seed:demo`, then `pnpm test:e2e` (D172).
+
+**Test command:** `pnpm --filter api test -- seed-intake` (the builder also runs `pnpm --filter infra test -- s3-demo-doc`; the integrator runs `pnpm test:e2e`)
+
+---
+
+Task: S3-021
+
+**Goal:** Someone allowed can accept or reject a piece of evidence, and the evidence then shows who reviewed it and when (D213 (2)).
+
+**Decisions:** D213 (2) (review status `pending`, `accepted`, `rejected`, and reviewer), D213 (3), D50, D51, D56, D59, D37 (version checks), D45.4, D163, D164, D175, D176, **D220 (4)** (S3-Q9: Admins and Compliance Managers accept or reject evidence, never on evidence they added themselves) and **D220 (5)** (S3-Q10: editing accepted or rejected evidence sends it back to pending). Read the S3 shared notes ("Evidence") and S3-009's brief.
+
+**Depends on:** S3-009 (the evidence routes and record; S3-002's model comes with it).
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`.
+
+**Files:**
+- Modify: `packages/shared/src/intake/evidence-rules.ts` (S3-002's): add `canReviewEvidence(caller, evidence: { label; createdBy }, supportedControlOwners): boolean` (D220 (4): `canSeeEvidence` and the role is Admin or Compliance Manager and `evidence.createdBy !== caller.userId`), exported from `index.ts`.
+- Modify: `packages/api/src/intake/evidence/evidence.service.ts`, `evidence.controller.ts`, `evidence-queries.ts` (S3-009's): the review route, `canReview` on each record answer, and the D220 (5) reset on PATCH.
+- Modify: `security-matrix.ts`.
+
+**Route:** `POST /api/v1/evidence/:id/review`, body strict `{ decision: 'accepted' | 'rejected', version }`. 404 when the evidence is hidden or missing; 403 when `canReviewEvidence` fails; 409 `stale_version`. One `withAuditedWrite` transaction sets `reviewStatus`, `reviewedBy` (the caller), `reviewedAt` (now), `version` + 1, and writes `record.updated` with those fields in `before`/`after` and `meta { number, label }`. A decision equal to the current one still records the new reviewer and time. Answers 200 with the evidence record. API keys are refused with 403 (a review is a person's judgement; planner's reading R16).
+
+**Pass criteria:**
+1. `canReviewEvidence` (unit, table-driven over every role × clearance × label, with evidence the caller added and didn't add) matches D220 (4): true only for an Admin or a Compliance Manager who can see the evidence and didn't add it; unknown values are false.
+2. The route sets the status, reviewer and time with its audit entry in one transaction; a stale `version` is 409 and changes nothing.
+3. **D220 (5):** editing accepted or rejected evidence sends it back to pending: after a review, a PATCH that changes any of its fields (name, dates, label or owner) returns it to `pending` with no reviewer and no review time, in the same transaction and the same `record.updated` entry; a PATCH on pending evidence leaves it pending.
+4. Record answers carry `canReview` for the caller.
+5. **D59:** every role cell (people), API keys refused, every org pair (404), every clearance × label pair (hidden evidence 404).
+6. No values in logs; the security-matrix row is there and the TEST-003 completeness test passes; S3-009's `evidence-api` tests still pass.
+
+**Tests to write:** `packages/shared/tests/evidence-review/rules.unit.test.ts` (unit): criterion 1; `packages/api/tests/evidence-review/*.db.test.ts` (db): criteria 2–6, generated from `ROLE_TABLE`, `ROLES`, `LABELS`. Agreement (D174): S3-002's and S3-009's evidence tests, D213 (2), D220 (4) and (5). New security-matrix row: `POST /api/v1/evidence/:id/review`.
+
+**Test command:** `pnpm --filter api test -- evidence-review` (the builder also runs `pnpm --filter shared test -- evidence-review`)
+
+---
+
+Task: S3-022
+
+**Goal:** Reviewers accept or reject evidence right on the control page, and everyone who sees the evidence sees the outcome.
+
+**Decisions:** D1, D7 (the web only hides buttons; the API decides), D213 (2), (4), **D220 (4)** (Admins and Compliance Managers accept or reject evidence, never on evidence they added themselves; the web follows the API's `canReview`) and **D220 (5)** (editing accepted or rejected evidence sends it back to pending). Read the S3 shared notes, S3-013's and S3-021's briefs.
+
+**Depends on:** S3-021 and S3-013.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated after S3-021 is on `main`).
+
+**Files:** create `packages/web/src/features/intake/evidence/ReviewButtons.tsx`; modify `EvidenceSection.tsx` and `useEvidence.ts` (S3-013's).
+
+**Pass criteria:**
+1. "Accept" and "Reject" show on an evidence row only when the API's `canReview` is true; each asks for confirmation, sends the row's `version`, and the row then shows "Accepted" or "Rejected" with the reviewer's name and date.
+2. **D220 (5):** after an edit, which the API puts back to pending, the row shows "Pending review" again with no reviewer.
+3. 403, 404 and 409 `stale_version` show clear messages; others show the message and reference ID.
+4. All calls go through the generated client with relative `/api/v1` URLs; S3-013's `evidence-ui` tests still pass.
+
+**Tests to write (kind `unit`):** `packages/web/tests/evidence-review-ui/*.unit.test.tsx`, criteria 1–4, with a Compliance Manager and an Admin as reviewers (D220 (4)), an Admin on evidence they added themselves (no buttons), a Control Owner and a Viewer. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- evidence-review-ui`
+
+---
+
+### S7 shared notes (every S7 brief includes these)
+S7 is slice 7, "Admin, grants, break-glass and the audit viewer" (D76). It runs in one workflow run with S2 and S3 (D181, D183), after the S1 checkpoint. The M0 and S1 shared notes above (layout, test ownership, throwaway databases, one test process, code style, graph reads, audit entries, no values in logs, 404 for anything hidden) still apply.
+
+- **Scope (planner's reading, D9, D27 #11 and #12, D49, D54–D56, D58, D72, D76, D134, D135, D186):**
+  - Screen 11, Admin: people, their roles and clearances (D51: the Admin sets clearance, new people start at Internal), cross-org grants (auditor grants and parent links), the break-glass log. Also on it (planner's reading R9): API keys (M0-011's routes, no screen yet), the failed-jobs list the Admin can re-run (D72), the org's SSO set-up (D54, D134), and a read-only view of the role table.
+  - Screen 12, the Audit trail viewer, with D186's rule.
+  - The cross-org mechanics of D55 as the user settled them in D214 (2)–(5): auditor grants (by email, up to 90 days, read-only, ending by themselves, revocable, a visible banner, a reminder before the end), parent links (the parent asks for a named group of its people, the subsidiary's Admin approves with a clearance and an end date, either side ends it, re-approval after the end), break-glass (a typed reason, a second operator's confirmation, read-only for 1 h, the org's Admins alerted in the app at once, the whole session logged, a review afterwards), and every cross-org switch and read logged in both orgs.
+  - A new person's first sign-in and a lost authenticator, through one-time set-up links (D214 (1), S7-024).
+  - In-app alerts for Admins: break-glass opened (D55), a broken audit chain from the nightly check (D56), and auditor access or a parent link ending soon (D214 (2)).
+  - SSO per org, OIDC and SAML (D49, D54, D134), tested against small stand-in providers that run locally; our TOTP code still follows every SSO sign-in (D214 (6)).
+  - Nightly encrypted backups kept 7 days, with a second copy in the user's Google Drive folder, and the monthly restore test (D58, D135, D214 (7), (8)).
+  - **Not in S7:** records, frameworks, intake and the generators (S1–S3); no Gemma or bge-m3 anywhere. Trusting an SSO provider's own MFA (`amr`/`acr`) instead of our TOTP is not built; it would be a new decision (D214 (6)).
+- **Folders S7 owns (D183):** `packages/api/src/admin/` (subfolders `people/`, `setup-links/`, `grants/`, `views/`, `break-glass/`, `audit-viewer/`, `notifications/`, `failed-jobs/`, `sso/`), `packages/shared/src/admin/`, `packages/web/src/features/admin/`, `packages/web/src/features/audit/`, `packages/web/src/features/org-view/`, `packages/infra/scripts/backup/`, `packages/infra/launchd/`, and the test folders each brief names. S7 is the only slice in this run that changes the M0 identity and org-wall files (`identity/session.guard.ts`, `identity/auth.ts`, `identity/auth-routes.ts`, `identity/schema.ts`, `identity/grants.schema.ts`, `db/org-context.ts`) and `packages/infra/scripts/setup-neo4j.ts`; each brief that does names them. S7 never changes `frameworks/`, `intake/` or `packages/generators/` (S2, S3).
+- **Each API feature is its own small Nest module** (`PeopleModule`, `SetupLinksModule`, `GrantsModule`, `ViewsModule`, `BreakGlassModule`, `AuditViewerModule`, `NotificationsModule`, `FailedJobsModule`, `SsoModule`) in its subfolder, added to `FEATURE_MODULES` in `packages/api/src/feature-modules.ts` (a hot file: one line per task).
+- **Routes and who may call them:**
+
+  | Route prefix | Access (`Requires`) | labels |
+  |---|---|---|
+  | `/api/v1/admin/*` (people, set-up links, auditor-grants, parent-links, break-glass, sso, failed-jobs) | `admin` `edit` | false |
+  | `/api/v1/notifications` | `admin` `edit` | false |
+  | `/api/v1/audit/entries` | `audit_trail` `view` | **true** (D186) |
+  | `/api/v1/views` | any signed-in | false |
+  | `/api/v1/account/setup` | public (no session), under the sign-in rate limit and lockout (D214 (1)) | false |
+
+  - **People only (planner's reading R1):** these routes refuse API keys with 403 `people_only`; a machine key never manages people, set-up links, grants, SSO or views, whatever its role.
+  - Anything the caller can't see (another org's person, link, grant, session, job or entry) is **404** `not_found`, the same as a missing one.
+- **Audit actions (D56 "permission and grant changes, cross-org reads, break-glass sessions", D214 "issuing and use are audited", "failed attempts are logged"; planner's names, reading R8):** `member.added`, `member.role_changed`, `member.clearance_changed`, `member.removed`, `setup_link.issued`, `setup_link.revoked`, `setup_link.used`, `auditor_grant.created`, `auditor_grant.claimed`, `auditor_grant.revoked`, `parent_link.requested`, `parent_link.approved`, `parent_link.declined`, `parent_link.ended`, `view.entered`, `view.left`, `cross_org.read`, `break_glass.opened`, `break_glass.open_refused`, `break_glass.confirmed`, `break_glass.confirm_refused`, `break_glass.ended`, `break_glass.reviewed`, `sso.configured`, `sso.enabled`, `sso.disabled`, `auth.sso_verified` (the SSO counterpart of D162's `auth.password_verified`), `job.retried`. `targetType` is `user`, `setup_link`, `auditor_grant`, `parent_link`, `org`, `break_glass`, `sso` or `job`, with the row's ID as `targetId`. `before`/`after` hold only the changed fields and never a secret, token, token hash, password, set-up link, reason text, review note or client secret. Entries about a crossing are written in **both** orgs' chains (D55).
+- **One-time set-up links (D214 (1), S7-024):**
+  - An Admin gets a link for a new person (S7-004) or for a person who lost their authenticator. It is shown once, valid 24 h and single use: it dies when the password is set. Only a SHA-256 of a random token of 32 bytes (256 bits, at least the 128 D214 asks) is stored; never the link or the token, and neither is ever logged. A new link cancels the person's open one, and the Admin can revoke it.
+  - The link is built on the fixed base URL `BETTER_AUTH_URL` (`https://grc.localhost`), never on a request's Host header. It carries the token after `#` (`/account/setup#token=…`), so the token never reaches Caddy's or the API's request logs or a Referer header (planner's reading R10). Every answer already sends `Referrer-Policy: no-referrer` (Caddy and `security-headers.ts`); S7-024 and S7-023 pin it for the set-up route and page.
+  - The set-up page asks for the person's email and the new password; the token check shares the sign-in rate limit and the 5-failure lockout, keyed on that email as sign-in is (R10).
+  - After the password step the session may only enrol TOTP, and must finish within 10 minutes; otherwise a new link is needed, and until TOTP is enrolled the account's password sign-in is refused.
+  - Only Admins of the person's home org issue links for them (`user.home_org_id`, added by S7-003; planner's reading R11): another org's Admin could otherwise take over an account that also belongs elsewhere.
+  - A lost-authenticator link works the same way: using it removes the old authenticator, sets a new password and ends the person's other sessions; in an org with SSO on it skips the password step (S7-009, planner's reading R15).
+- **Cross-org reading (D214 (2), (3), (5); S7-003, S7-005, S7-006, S7-007):**
+  - Everyone who reads another org has a home org. Outside auditors' accounts live in their own audit firm's org, where they are Auditors. A client's Admin grants access by email; that never creates an account and never says whether one exists. The grant is `pending` and gives nothing until the auditor signs in to that existing account; then it is claimed (S7-006) and bound to the account. Every grant has an end date, at most 90 days away (D55), and the granting org's Admins are reminded in the app 7 days before it ends (planner's reading R12).
+  - While viewing another org they read as the `auditor` role (every record type, changing nothing), at the lower of their own clearance and the clearance the Admin picked when granting or approving (default `internal`); break-glass reads at `restricted`.
+  - Parent links: the parent's Admin names a group of people in the parent org; the subsidiary's Admin approves that group (with a clearance and a number of days) or declines it; only those people may look. The link ends by itself at its end date and needs a new request and approval after that (re-approval); both sides' Admins are reminded 7 days before (R12). Days 1–365 and a group of 1–100 people (planner's reading R13); a changed group needs a new request.
+  - One org at a time (D214 (5)): the person switches into the other org, and its reads run in that org's own Neo4j database through the same 28 read-only accounts. No composite database and no combined view (against D22's first wording). The screen always shows which org they're in, and each switch is logged in both orgs.
+  - In Postgres, a viewing request's transactions carry the view (S7-006): `app.org_id` stays the person's home org and `app.user_id` the person, so Postgres itself re-checks the grant through `app_visible_org` (M0-009, updated by S7-003) and refuses every write into the viewed org.
+- **Break-glass (D214 (4), S7-007):** the operator runs `pnpm break-glass:open` on the Mac with the org, their email and a typed reason; a second operator confirms with `pnpm break-glass:confirm` while it is open, or the session shows "Unapproved" for review. It lasts 1 hour and ends early by the operator (`pnpm break-glass:end`) or the org's Admins. Refused attempts are logged. Every session gets a review afterwards: the org's Admins record it in the break-glass log (planner's reading R14). Any existing account may be an operator, and the second operator is a different existing account (R14).
+- **Backups (D214 (7), (8), S7-012, S7-013, S7-025):** `pnpm backup:run` nightly at 03:00 (a launchd job the user switches on once); Neo4j with `neo4j-admin database backup "*"` (`system` included), the backup port on 127.0.0.1 only, each backup checked with `neo4j-admin database check`; Postgres with `pg_dump -Fc` plus `pg_dumpall --globals-only`, run as a new read-only account that bypasses row security, not as the owner, because FORCE RLS applies to the owner too (D220 (6), S7-025); each org's files; a SHA-256 manifest each night; each archive encrypted with `age` to a public recipient, the private key kept outside `backups/` and the repo; 7 days kept; a second copy of the encrypted archives and the manifest in the user's Google Drive for desktop folder (a path in `.env`; the app calls no Google API). `pnpm backup:restore-test` monthly checks the manifest first. Nobody gets DROP DATABASE: one fixed Neo4j database `restore-test` is restored over each month by a restore-test account that holds only STOP and START on it; its password is kept in the backup scripts' own settings file, never in the API's `.env` (planner's reading R16). No other account may open `restore-test` (planner's reading R17: it holds a copy of an org's graph outside that org's own database).
+- **The audit viewer's rule (D186, S7-001's `maskAuditEntry`):** an entry whose `meta.label` is above the reader's clearance keeps who, when, the action, the target type, the record number (`meta.number`), the label, `seq`, `hash` and `prevHash`, and hides `before`, `after` and the rest of `meta`. An entry about a record, link, document or other labelled item with no `meta.label` is hidden the same way (fail safe, planner's reading R5). Entries about people, sign-ins, grants, SSO, jobs and the chain itself carry no record contents and show in full. Labels are applied in the API only: the nightly chain check has to read whole entries, so Postgres can't mask them (reading R5).
+- **Alerts (planner's reading R7):** in-app only (D93: no phone or email). The web checks for new ones every 15 s. Kinds: `break_glass_opened`, `audit_chain_broken`, `auditor_grant_expiring`, `parent_link_expiring`.
+- **Tests (D96, D171, D173, D174, D176, D177):** as in S1–S3. Name each file by what it needs (`*.unit.test.ts(x)`, `*.db.test.ts`, `*.stack.test.ts`, `e2e/*.e2e.ts`) and prefer `unit`. API route tests run an in-process Nest app against throwaway databases (kind `db`), with settings from `prepareEnv` / `appTestEnv` in `packages/api/tests/platform/helpers.ts` (S1-013). D59 for every new route: every role cell (generated from `ROLE_TABLE`), every ordered pair of 3 orgs, every clearance × label pair where labels apply, and an API key refused (R1). Never weaken live privileges, accounts, settings, the certificate or shared state to prove a test; prove red in the worktree's code or on throwaway copies.
+- **Security matrix (D175, D59, D186):** every new route gets its row in `packages/shared/src/access/security-matrix.ts` in the same task, with the access and labels in the table above. The security reviewer checks the rows and their D59 tests.
+- **Migrations (D183):** say "a new migration"; never pick its number (the integrator numbers it at merge, and `packages/api/src/db/migrations/meta/_journal.json` is a hot file). New org tables use `orgTablePolicySql` (ENABLE and FORCE RLS, grc_app only).
+- **Hot files (D183):** each brief lists its hot files; only one task at a time, across S2, S3 and S7, changes each.
+- **Git (D112, D159):** branch `task/<ID>` in its own worktree; commit messages start with the task ID and never mention Claude, Anthropic or AI tooling.
+
+---
+
+Task: S7-001
+
+**Goal:** One shared definition of the admin inputs, the cross-org limits and the audit viewer's hiding rule, used by the API and the web app, so both agree on fields, limits and exactly what a reader may see of an audit entry.
+
+**Decisions:** D10, D50 ("Users, roles, grants" and "Audit trail" rows), D51 (new people start at Internal; labels and clearance), D55 (90 days, 1 h, parent-link steps), D56, D186 (who, when, record number and action visible; contents hidden above the clearance), D214 (1)–(4) (set-up links, grants by email, parent links to a named group with an end date, break-glass confirmation and review), D30 (Zod), D45.7 (fail safe). Read the S7 shared notes.
+
+**Depends on:** none.
+
+**Hot files:** `packages/shared/src/index.ts`.
+
+**Files:**
+- Create: `packages/shared/src/admin/people.ts`, `setup-links.ts`, `cross-org.ts`, `audit-view.ts`, `notifications.ts`, `actions.ts` and `index.ts`.
+- Modify: `packages/shared/src/index.ts`, to export `./admin/index.js`.
+
+**Interfaces (produces), exact names:**
+- `addPersonSchema`: strict `{ email: string (trimmed, lowercased, a valid address, at most 254 characters), name: string (1–200, trimmed), role: Role, clearance: Label (default 'internal') }`.
+- `changePersonSchema`: strict `{ role?: Role, clearance?: Label }`, refusing an empty object.
+- Set-up links (D214 (1)): `SETUP_LINK_PURPOSES = ['setup', 'mfa_reset'] as const`, `SetupLinkPurpose`; `SETUP_LINK_HOURS = 24`, `SETUP_TOKEN_BYTES = 32`, `SETUP_TOTP_MINUTES = 10`; `setupLinkRequestSchema`: strict `{ purpose: SetupLinkPurpose }`; `accountSetupSchema`: strict `{ email (as in addPersonSchema), token: string (43 characters of base64url, exactly what `SETUP_TOKEN_BYTES` gives), password: string (12–128 characters, D49) }`.
+- `CROSS_ORG_KINDS = ['auditor_grant', 'parent_link', 'break_glass'] as const`, `CrossOrgKind`.
+- `AUDITOR_GRANT_MAX_DAYS = 90`, `CROSS_ORG_DEFAULT_CLEARANCE = 'internal'`, `PARENT_LINK_MAX_DAYS = 365`, `PARENT_LINK_MAX_PEOPLE = 100`, `EXPIRY_REMINDER_DAYS = 7`, `BREAK_GLASS_MINUTES = 60`, `BREAK_GLASS_REASON = { min: 10, max: 500 }`, `BREAK_GLASS_REVIEW_NOTE = { min: 10, max: 1000 }` (R12, R13, R14 in the shared notes).
+- `AUDITOR_GRANT_STATUSES = ['pending', 'active', 'expired', 'revoked'] as const` (pending: not yet claimed by the auditor's sign-in).
+- `PARENT_LINK_STATUSES = ['requested', 'approved', 'declined', 'ended', 'expired'] as const`, `ParentLinkStatus` (`expired` is worked out from the end date, never stored).
+- `BREAK_GLASS_APPROVALS = ['awaiting', 'confirmed', 'unapproved'] as const` (worked out: confirmed once a second operator confirms; `awaiting` while open and unconfirmed; `unapproved` once over without a confirmation).
+- `S7_AUDIT_ACTIONS`: the action names in the shared notes, `as const`.
+- `NOTIFICATION_KINDS = ['break_glass_opened', 'audit_chain_broken', 'auditor_grant_expiring', 'parent_link_expiring'] as const`, `NotificationKind`.
+- `LABELLED_TARGET_TYPES = ['asset', 'risk', 'control', 'policy', 'incident', 'evidence', 'audit_finding', 'framework', 'requirement', 'link', 'document', 'import'] as const`.
+- `auditEntrySchema` (an entry as stored: `seq`, `createdAt`, `actorType`, `actorId`, `action`, `targetType`, `targetId`, `before`, `after`, `meta`, `hash`, `prevHash`) and `auditEntryViewSchema` (the same plus `contentsHidden: boolean` and `actor: { type, id, name: string | null }`).
+- `maskAuditEntry(entry: AuditEntry, clearance: string): AuditEntryView`: the rule in the shared notes. Hidden when `meta.label` is a label above `clearance`; when `targetType` is in `LABELLED_TARGET_TYPES` and `meta.label` is missing or not one of `LABELS`; and when `clearance` is not one of `LABELS` (fail safe). A hidden entry keeps `seq`, `createdAt`, `actorType`, `actorId`, `action`, `targetType`, `targetId`, `hash`, `prevHash` and `meta` reduced to `{ number, label }` (each only if present), with `before` and `after` `null` and `contentsHidden: true`. `actor.name` is `null` here (the API fills it).
+
+**Pass criteria:**
+1. `addPersonSchema` accepts a valid person, gives `clearance: 'internal'` when it's left out, lowercases and trims the email, and refuses a bad email, an empty or 201-character name, an unknown role or label, and an unknown field, each with a field-named message.
+2. `changePersonSchema` accepts a role, a clearance or both, and refuses `{}`, unknown values and unknown fields.
+3. The limits and lists are exactly as above. `setupLinkRequestSchema` refuses an unknown purpose; `accountSetupSchema` refuses a token of the wrong length or alphabet, an 11-character password and unknown fields, each with a field-named message that never repeats the token or password.
+4. `maskAuditEntry`, table-driven over every clearance × label pair (from `LABELS`): contents hidden exactly when the label is above the clearance; who, when, action, target, number, label, `seq` and hashes always kept.
+5. `maskAuditEntry` fail-safe cases: a record-type entry with no label, a bad label or an unknown clearance is hidden; a `member.role_changed`, `auth.sign_in`, `auditor_grant.created` or `audit.chain_broken` entry with no label is shown in full at every clearance.
+6. Nothing in `packages/shared/src/admin/` imports from `packages/api` or `packages/web`, or touches the network, the filesystem or the environment. The existing `packages/shared/tests/access/` and `records/` tests still pass.
+
+**Tests to write (kind `unit`):** `packages/shared/tests/admin/people.unit.test.ts`, `setup-links.unit.test.ts`, `cross-org.unit.test.ts`, `audit-view.unit.test.ts`, `purity.unit.test.ts`. Agreement (D174): TEST-005's matrix label rows, S1-001's schema style. Security-matrix rows: none (no route).
+
+**Test command:** `pnpm --filter shared test -- admin`
+
+---
+
+Task: S7-002
+
+**Goal:** Admins learn at once, inside the app, when something needs them: a break-glass session opened on their org (D55), the nightly check finding a broken audit chain (D56), or an auditor grant or parent link about to end (D214 (2), sent by S7-005).
+
+**Decisions:** D55 ("notifies the org Admins in the app immediately"), D56 ("A nightly check verifies the chains and alerts the Admin if one breaks"), D214 (2) ("the Admin is reminded before it expires"), D93 (no phone or email), D50 (Admin only), D57, D73 (RLS on every org table), D45.4, D45.5 (re-runs are safe), D163, D164, D175, D176. Read the S7 shared notes and M0-012's `verify-chain.job.ts` and `audit.module.ts`.
+
+**Depends on:** S7-026 (`pnpm test:env` then accepts this task's own new migration, D220 (1)).
+
+**Hot files:** `packages/api/src/db/migrations/meta/_journal.json` (a new migration), `packages/api/src/feature-modules.ts`, `packages/shared/src/access/security-matrix.ts`, `packages/api/src/audit/audit.module.ts` (the worker's chain check gets the notifier).
+
+**Files:**
+- Create: a new migration: `notifications` (`id` uuid pk, `org_id` uuid not null, `kind` text (check: the four `NOTIFICATION_KINDS`: `break_glass_opened`, `audit_chain_broken`, `auditor_grant_expiring`, `parent_link_expiring`), `payload` jsonb (IDs, numbers and times only), `dedupe_key` text not null, `created_at`, `read_at` null, `read_by` text null; **unique (`org_id`, `kind`, `dedupe_key`)**); `orgTablePolicySql('notifications')`, with the SELECT and UPDATE policies also needing `current_setting('app.role', true) = 'admin'` (no role set: nothing).
+- Create: `packages/api/src/admin/notifications/notifications.schema.ts`, `notifications.service.ts`, `notifications.controller.ts`, `notifications.module.ts`.
+- Modify: `packages/api/src/audit/verify-chain.job.ts` (after appending `audit.chain_broken`, notify the org's Admins, `dedupe_key` `chain:<brokenAtSeq>`, so the nightly run doesn't alert again for the same break) and `audit.module.ts` (hand the notifier to the job).
+- Modify: `packages/api/src/feature-modules.ts`, `packages/shared/src/access/security-matrix.ts`.
+
+**Interfaces (produces):**
+- `NotificationsService.notifyAdminsInTx(tx: Tx, orgId: string, kind: NotificationKind, payload: Record<string, string | number>, dedupeKey: string): Promise<void>`: inserts one row, or nothing if the same `(org, kind, dedupeKey)` exists. The caller's transaction runs with the org's context and role `admin` (S7-007 uses it inside break-glass's transaction; a system context like `{ userId: 'system:break-glass', role: 'admin', clearance: 'restricted' }` is allowed).
+- `NotificationsService.notifyAdmins(orgId, kind, payload, dedupeKey)`: the same in its own system-context transaction (the nightly job).
+- Routes: `GET /api/v1/notifications` (paged, newest first; `{ items: [{ id, kind, payload, createdAt, readAt }], total, unreadCount }`) and `POST /api/v1/notifications/:id/read` (sets `read_at`, `read_by`; again is harmless; 404 for a missing or hidden one).
+- `NotificationsModule` exports `NotificationsService`.
+
+**Pass criteria:**
+1. The migration applies after the existing ones; the Drizzle table matches its columns.
+2. **Org wall and role (D59):** for each ordered pair of 3 orgs, org A's context can't see, add or change org B's notifications; within an org only a context with role `admin` sees or updates them (every other role, and no role, sees none); no org context sees nothing.
+3. `notifyAdminsInTx` in a transaction that rolls back leaves nothing; the same dedupe key twice gives one row.
+4. The routes: an Admin sees their org's notifications newest first with `unreadCount`, and marks one read; every other role gets 403 (from `ROLE_TABLE`); an API key gets 403 `people_only`; another org's ID is 404.
+5. The nightly check: with a broken chain in a throwaway org, `runVerifyChains` appends `audit.chain_broken` and adds one `audit_chain_broken` notification with `{ brokenAtSeq }`; a second run adds no second notification; a healthy org gets none. Its log line still holds only the org ID and seq (D163).
+6. Payloads hold IDs, numbers and times only; no record names, emails, reasons or audit contents (D164). The table accepts each of the four kinds and refuses any other.
+7. The existing `audit`, `outbox` and `org-wall` tests still pass.
+
+**Tests to write:**
+- `packages/api/tests/notifications/table.db.test.ts` (db): criteria 1–3.
+- `packages/api/tests/notifications/routes.db.test.ts` (db): criteria 4 and 6.
+- `packages/api/tests/notifications/chain-alert.db.test.ts` (db): criterion 5, breaking the chain only in a throwaway org's partition as the throwaway database's owner, the way M0-012's chain tests do.
+- Security-matrix rows: `GET /api/v1/notifications` and `POST /api/v1/notifications/:id/read`, access `admin` `edit`, orgWalled true, labels false.
+
+**Test command:** `pnpm --filter api test -- notifications` (the builder also runs `pnpm --filter api test -- audit outbox org-wall`)
+
+---
+
+Task: S7-003
+
+**Goal:** The Postgres side of cross-org access records who opened, approved and ended each crossing and what clearance it gives, lets a parent company ask for and end a link without breaking the org wall, and remembers which org a session is viewing.
+
+**Decisions:** D9, D55, D57, D73 (RLS on every org table), D45.3 (checked in the API and the database), D45.7, D176, D183, D214 (2) (grants by email, claimed at the auditor's sign-in, at most 90 days), D214 (3) (the lower clearance, default Internal; the parent's named group, an end date, re-approval), D214 (4) (a second operator, ended by the operator or the Admins, a review afterwards). Read the S7 shared notes, M0-009's migration `0002_identity_and_rls.sql` (`app_visible_org`, the grant tables) and `grants.schema.ts`.
+
+**Depends on:** S7-026 (`pnpm test:env` then accepts this task's own new migration, D220 (1)).
+
+**Hot files:** `packages/api/src/db/migrations/meta/_journal.json` (a new migration), `packages/api/src/identity/schema.ts` (the session and user columns), `packages/api/src/identity/grants.schema.ts`, `packages/api/src/identity/provision-org.ts`.
+
+**Files:**
+- Create: a new migration.
+- Modify: `packages/api/src/identity/grants.schema.ts` (the new columns and `parentLinkPeople`), `packages/api/src/identity/schema.ts` (Drizzle matches the new columns) and `packages/api/src/identity/provision-org.ts` (the first Admin's `home_org_id`).
+
+**What the migration adds:**
+- `auditor_grants` (D214 (2), (3)): `email text not null` (lowercased; the address the Admin granted), `user_id` becomes **nullable** (null while `pending`; set once when the auditor's account claims it), `claimed_at timestamptz`, `clearance text not null default 'internal'` (check: the four labels), `created_by text not null`, `revoked_by text`; a check that `expires_at <= created_at + interval '90 days'`; a partial unique index so an org has at most one unrevoked grant per email.
+- `parent_links` (D214 (3)): `clearance text not null default 'internal'` (check), `requested_by text`, `decided_by text`, `decided_at timestamptz`, `expires_at timestamptz` (set on approval; null while requested), `ended_by text`, `ended_at timestamptz`; the status check gains `declined`; a check that an `approved` link has an `expires_at`; a partial unique index so an org pair has at most one link in `requested` or `approved`.
+- `parent_link_people` (the named group, D214 (3)): `link_id uuid not null references parent_links`, `org_id uuid not null` (the subsidiary, for the org wall), `parent_org_id uuid not null`, `user_id text not null references "user"`, primary key (`link_id`, `user_id`). RLS ENABLE and FORCE; grc_app SELECT when `app_visible_org(org_id)` or `parent_org_id = app_org_id()`; no INSERT, UPDATE or DELETE for grc_app (rows are written only by `app_request_parent_link`).
+- A second SELECT policy on `parent_links` for grc_app: `parent_org_id = app_org_id()`, so the parent side sees its own requests and links (the subsidiary side already sees them through the org wall).
+- `app_request_parent_link(subsidiary_slug text, requester text, people text[]) RETURNS uuid`, SECURITY DEFINER, `search_path` pinned, EXECUTE for grc_app only: returns null unless `app_org_id()` is set and `current_setting('app.role', true) = 'admin'`; returns null for an unknown slug, the org itself, a pair that already has a requested or approved link, an empty group, more than 100 people, or anyone in `people` who isn't a member of `app_org_id()`; otherwise inserts `{ org_id: subsidiary, parent_org_id: app_org_id(), status: 'requested', requested_by: requester }` and one `parent_link_people` row per person, and returns the link's ID.
+- `app_end_parent_link(link uuid, ender text) RETURNS boolean`, SECURITY DEFINER, pinned, EXECUTE for grc_app only: ends a `requested` or `approved` link only when the caller's context org is its parent and role is `admin`; false otherwise. (The subsidiary side approves, declines and ends through the normal org-wall UPDATE policy.)
+- `app_claim_auditor_grants(claimant_email text) RETURNS SETOF uuid`, SECURITY DEFINER, pinned, EXECUTE for grc_app only: with `app.user_id` set, and only when that user's email equals `claimant_email` and their membership in `app_org_id()` (their home org) has role `auditor`, sets `user_id` and `claimed_at` on every unrevoked, unexpired, unclaimed grant for that email in **other** orgs, and returns their IDs; nothing otherwise.
+- `break_glass_sessions` (D214 (4)): `ended_by text`, `confirmed_by text`, `confirmed_at timestamptz` (a check that `confirmed_by` differs from `user_id`), `reviewed_by text`, `reviewed_at timestamptz`, `review_note text` (10–1000 characters; the Admins' review afterwards).
+- `app_visible_org(org uuid)` replaced (`CREATE OR REPLACE`, same owner, same grants): an auditor grant counts only when claimed by the context user (`user_id` equal to `app.user_id`, unchanged otherwise); a parent link counts only when `approved`, `expires_at > now()`, and the context user (`app.user_id`) is in its `parent_link_people`; break-glass unchanged (an unconfirmed session still gives access; it is only flagged, D214 (4)).
+- `session`: `view_org_id uuid null` (the org a session is viewing, S7-006). Better Auth's table, outside the org wall.
+- `user`: `home_org_id uuid null references organization` (D214 (2): everyone has a home org; outside auditors' is their firm's org). Filled for existing accounts from their earliest membership; set when an account is made (S7-024's `createAccountInTx`, M0-014's first Admin, the demo seed); used by S7-006, S7-007 and S7-024 (planner's reading R11).
+
+**Pass criteria:**
+1. The migration applies after the existing ones (existing grant rows keep their `user_id` and get `email` from the `user` table; every existing account gets the org of its earliest membership as `home_org_id`), and the Drizzle schemas match. M0-014's `provision` tests still pass, and its first Admin gets `home_org_id` (the builder sets it in `provision-org.ts`).
+2. **Org wall kept (D59):** the existing `org-wall` tests still pass; for each ordered pair of 3 orgs, the new columns, `parent_link_people` and the policies show org A nothing of grants and links it's not a side of.
+3. `app_request_parent_link`: from org P's admin context it creates a `requested` link to org S with its named people; refused (null, nothing written) with no context, a non-admin role, an unknown slug, P itself, a second request for the pair, an empty group, 101 people, or a person who isn't P's member; the same null for "unknown slug" and "already requested", so it says nothing about which orgs exist.
+4. The parent side (P's context) sees its own requested and approved links and their people; org C sees neither; only the subsidiary side (S's context) can approve or decline through UPDATE, and approving without `expires_at` is refused; P can't UPDATE the row directly; nobody inserts `parent_link_people` directly.
+5. `app_end_parent_link`: P's admin ends its link; S's context, C's context and non-admin roles can't use it on the link (false, unchanged).
+6. **Parent visibility:** an approved, unexpired link makes S visible through `app_visible_org` to P's named people only; another member of P sees nothing; after `expires_at` (a link approved with a past end date), or once ended or declined, no one in P sees S.
+7. **Auditor grants:** a pending grant (no `user_id`) makes nothing visible; `app_claim_auditor_grants` run as an Auditor of org F with the matching email claims it and S becomes visible to that person only; it claims nothing for a non-Auditor of F, for a different email, for a grant in the claimant's own org, or for a revoked or expired grant; a grant longer than 90 days is refused by the table.
+8. **Break-glass:** `confirmed_by` equal to the opener is refused; an unconfirmed open session still gives read visibility until it ends or expires.
+9. grc_app still can't turn RLS off, own the new functions or change them.
+
+**Tests to write:** `packages/api/tests/cross-org-tables/columns.db.test.ts`, `parent-link-functions.db.test.ts`, `claim-grants.db.test.ts`, `visibility.db.test.ts` (db, throwaway databases, 3 orgs plus an auditor firm org). Agreement (D174): M0-009's `org-wall` tests. Security-matrix rows: none (no route).
+
+**Test command:** `pnpm --filter api test -- cross-org-tables` (the builder also runs `pnpm --filter api test -- org-wall provision`)
+
+---
+
+Task: S7-004
+
+**Goal:** An org's Admin manages its people: adds someone (a new account or an existing one from another org), changes their role and clearance, and removes them, each change audited and felt on the person's next request.
+
+**Decisions:** D10, D49 (accounts are made by an org Admin; sign-up is off), D50 ("Users, roles, grants": Admin only), D51 (the Admin sets clearance; new people start at Internal), D54, D56 (permission changes audited), D57, D163, D164, D175, D176, D214 (1) (a new person's first sign-in goes through a one-time set-up link). Read the S7 shared notes, S7-024's brief (`SetupLinksService`), M0-010's `session.guard.ts` (membership is read again on every request) and S1-004's `people.controller.ts`.
+
+**Depends on:** S7-001, S7-024.
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/feature-modules.ts`.
+
+**Files:**
+- Create: `packages/api/src/admin/people/people-admin.service.ts`, `people-admin.controller.ts`, `people.module.ts` (imports S7-024's `SetupLinksModule`).
+- Modify: `feature-modules.ts`, `security-matrix.ts`. It doesn't change `auth.ts` or `auth-routes.ts`: making the account and its link is S7-024's `SetupLinksService`.
+
+**Routes (`admin` `edit`, people only):**
+
+| Route | Answer |
+|---|---|
+| `GET /api/v1/admin/people` | paged `{ userId, name, email, role, clearance, mfaEnrolled, setup: 'done' \| 'link_open' \| 'waiting', linkExpiresAt: string \| null, homeHere: boolean, addedAt }` (`setup` and `linkExpiresAt` from S7-024's table and `user.setup_pending`; `homeHere` says whether this org is the person's home org, so the screen knows whether it may offer set-up links), filter by role, search by name or email |
+| `POST /api/v1/admin/people` (`addPersonSchema`) | 201 `{ person, setupLink: string \| null }`. A new email: in **one** transaction, `SetupLinksService.createAccountInTx` (an account with no password, home org this org), the membership, `SetupLinksService.issueInTx(… 'setup' …)` and the audit entries; the answer carries the link once (`https://grc.localhost/account/setup#token=…`), and it is never stored or logged. An existing account from another org is just added (`setupLink: null`). Already a member here: 409 `already_member` |
+| `PATCH /api/v1/admin/people/:userId` (`changePersonSchema`) | the person; 409 `last_admin` if it would leave the org with no Admin |
+| `POST /api/v1/admin/people/:userId/remove` | 204; deletes the membership only (the account and its history stay; planner's reading R2); 409 `last_admin` |
+
+- Audit (in the org's chain): `member.added` (`after { role, clearance }`, `meta { newAccount }`), `member.role_changed` and `member.clearance_changed` (`before`/`after`), `member.removed` (`before { role, clearance }`). Never the token or link.
+- A changed role or clearance, or a removal, applies from the person's next request, because the guard reads the membership every time.
+
+**Pass criteria:**
+1. An Admin lists, adds, changes and removes people in their own org; the answers follow the table.
+2. Adding a new email answers a link built on `BETTER_AUTH_URL` with the token after `#`; S7-024's table holds one open `setup` link for the person, whose hash matches the token; `setup_link.issued` and `member.added` are written; the token and link appear in no log line, no audit entry and no later answer (the list shows only `setup: 'link_open'` and its expiry). If any step of the transaction fails, there is no account, membership or link. (How the link is used is S7-024's.)
+3. New people start at `internal` unless the Admin chose another clearance (D51).
+4. The last Admin can't be demoted or removed (409 `last_admin`); with two Admins, either may be.
+5. After a role change, clearance change or removal, the person's very next request uses the new role or clearance, or is refused (D54).
+6. **D59:** every role but Admin gets 403 on every route (from `ROLE_TABLE`); each ordered pair of 3 orgs: org A's Admin gets 404 for org B's people and can't change them; an API key with the admin role gets 403 `people_only`.
+7. Every change writes its entry, with no token, link or password in it (D164).
+
+**Tests to write:** `packages/api/tests/admin-people/routes.db.test.ts`, `new-account.db.test.ts` (criterion 2), `last-admin.db.test.ts`, `access.db.test.ts` (db); `packages/api/tests/admin-people/rules.unit.test.ts` (unit) for any pure rule the builder factors out (the test writer names it: `wouldLeaveNoAdmin(members, change): boolean`). Agreement (D174): M0-010's sign-in and lockout tests, S1-004's people route, S7-024's `setup-links` tests. Security-matrix rows: the four routes above.
+
+**Test command:** `pnpm --filter api test -- admin-people` (the builder also runs `pnpm --filter api test -- auth setup-links`)
+
+---
+
+Task: S7-005
+
+**Goal:** An org's Admin can let an outside auditor read the org for a while, and a parent company can ask to read a subsidiary, which the subsidiary's Admin approves; either can be ended, and every step shows in both orgs' audit trails.
+
+**Decisions:** D9, D50, D55 (auditor grants up to 90 days, read-only, ending by themselves, revocable; parent asks, subsidiary approves, either side ends; logged in both orgs), D56, D57, D45.7, D175, D176, D214 (2) (auditors' accounts live in their firm's org; grant by email, never making an account; it works only once the auditor signs in; an end date of at most 90 days; a reminder before it ends), D214 (3) (the clearance the Admin picks, default Internal; the parent's named group; an end date and re-approval). Read the S7 shared notes, S7-002's and S7-003's briefs, and M0-012's `audit.module.ts` and `verify-chain.job.ts` (how a worker job is registered and scheduled).
+
+**Depends on:** S7-001, S7-002 (`NotificationsService`, for the reminders), S7-003.
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/feature-modules.ts`.
+
+**Files:**
+- Create: `packages/api/src/admin/grants/auditor-grants.service.ts`, `parent-links.service.ts`, `grants.controller.ts`, `grants.module.ts`, `expiry-reminders.job.ts`; `packages/shared/src/admin/grant-schemas.ts` (exported from `packages/shared/src/admin/index.ts`): `auditorGrantInputSchema` strict `{ email, days: 1–90 (AUDITOR_GRANT_MAX_DAYS), clearance: Label (default 'internal') }`, `parentLinkRequestSchema` strict `{ subsidiarySlug, people: userId[] (1–PARENT_LINK_MAX_PEOPLE, no repeats) }`, `parentLinkApproveSchema` strict `{ clearance: Label (default 'internal'), days: 1–PARENT_LINK_MAX_DAYS }`.
+- Modify: `feature-modules.ts`, `security-matrix.ts`.
+
+**Routes (`admin` `edit`, people only):**
+
+| Route | Answer |
+|---|---|
+| `GET /api/v1/admin/auditor-grants` | this org's grants: `{ id, email, auditor: { name, homeOrgName } \| null (null until claimed), clearance, createdAt, expiresAt, claimedAt, status: 'pending'\|'active'\|'expired'\|'revoked' }` |
+| `POST /api/v1/admin/auditor-grants` | 201 `{ id, status: 'pending', expiresAt }` for **any** well-formed email: it never makes an account and never says whether one exists (D214 (2)). A member of this org: 409 `already_member`; an unrevoked, unexpired grant for that email already: 409 `grant_exists` |
+| `POST /api/v1/admin/auditor-grants/:id/revoke` | 204; works on pending and active grants |
+| `GET /api/v1/admin/parent-links` | `{ asParent: [...], asSubsidiary: [...] }` with each side's org name, status (`expired` worked out from `expiresAt`), clearance, dates, `expiresAt`, and the named people (name and email; the subsidiary's Admin sees whom they're approving) |
+| `POST /api/v1/admin/parent-links` (`parentLinkRequestSchema`) | 202 `{ status: 'sent' }` always, through `app_request_parent_link` with the named people (nothing tells the caller whether the slug exists); people who aren't members of this org: 422 with the field named, checked before the call |
+| `POST /api/v1/admin/parent-links/:id/approve` (`parentLinkApproveSchema`) | subsidiary side only, `requested` only; sets `clearance`, `expires_at` (now + days), `decided_by`, `decided_at` |
+| `POST /api/v1/admin/parent-links/:id/decline` | subsidiary side only, `requested` only |
+| `POST /api/v1/admin/parent-links/:id/end` | either side, through `app_end_parent_link` on the parent side |
+
+- Grants and links end by themselves at their end date (`app_visible_org`, updated by S7-003); the lists work out the status. After a parent link's end date, a new request and approval are needed (re-approval); there is no "extend" route.
+- A pending grant gives nothing; S7-006 claims it when the auditor signs in and switches views. This task never claims grants (its tests call S7-003's `app_claim_auditor_grants` directly where they need a claimed one).
+- **Reminders (D214 (2), planner's reading R12):** `expiry-reminders.job.ts`, a worker job scheduled daily at 06:00 UTC, registered in `GrantsModule` the way `AuditModule` registers the chain check (no change to `jobs.module.ts`). For every org, in a system context: each unrevoked grant (pending or active) ending within `EXPIRY_REMINDER_DAYS` gets one `auditor_grant_expiring` notification to the granting org's Admins (`{ grantId, expiresAt }`, dedupe key `grant:<id>`); each approved link ending within that time gets one `parent_link_expiring` notification to the Admins of **both** sides (`{ linkId, expiresAt }`, dedupe key `link:<id>`). A grant made for fewer than 7 days is reminded at the job's next run. Payloads hold IDs and times only.
+- Audit: `auditor_grant.created` (`after { days, clearance, expiresAt }`, `meta { emailDomain }`; granting org only, because a pending grant has no home org yet), `auditor_grant.revoked` (granting org, plus the auditor's home org once claimed), `parent_link.requested` (both orgs, only when a link was really made; `meta { peopleCount }`), `parent_link.approved` (`after { clearance, expiresAt }`), `parent_link.declined`, `parent_link.ended` (all in **both** orgs).
+
+**Pass criteria:**
+1. The routes behave as in the table; the day limits are 1–90 for grants (91 refused) and 1–365 for links (366 refused); the clearance is one of the four labels and defaults to `internal`.
+2. **No account and no hint (D214 (2)):** granting to an unknown email, to an Auditor of another org and to a non-Auditor of another org gives the same 201 and the same answer shape; no `user` row is made; the grant stays `pending`.
+3. **Claimed grants only:** a pending grant makes nothing visible; once claimed (through `app_claim_auditor_grants` run as the auditor), the org is visible to that auditor through `app_visible_org` until expiry or revocation, and not after (a clock the test controls, or a grant made with a past expiry); revoking a pending grant stops a later claim.
+4. The parent-link steps: request with named people → approve with a clearance and days → the subsidiary visible to those people only; another member of the parent sees nothing; decline, end and the end date make it invisible; a second request while one is open changes nothing and still answers 202.
+5. **Reminders:** with a clock the test controls, a grant 6 days from its end gives one `auditor_grant_expiring` notification to the granting org's Admins, and a second run gives none; a link 6 days from its end gives one `parent_link_expiring` to each side's Admins; a grant 30 days away, a revoked grant and an ended link give none.
+6. Each step writes its entries in the orgs named above, and the entries hold no names or emails beyond IDs in `targetId` and `meta` (`emailDomain` is the part after `@` only) (D164).
+7. **D59:** every role but Admin gets 403 on every route; each ordered pair of 3 orgs: org C's Admin gets 404 on A's grants and on the A–B link; an API key gets 403 `people_only`.
+8. The existing `org-wall`, `cross-org-tables` and `notifications` tests still pass.
+
+**Tests to write:** `packages/api/tests/cross-org-grants/auditor-grants.db.test.ts` (criteria 1–3), `parent-links.db.test.ts` (criterion 4), `reminders.db.test.ts` (criterion 5), `both-orgs-audit.db.test.ts`, `access.db.test.ts` (db); `packages/shared/tests/admin/grant-schemas.unit.test.ts` (unit); `packages/api/tests/cross-org-grants/reminder-window.unit.test.ts` (unit) for the pure choice of what to remind (the test writer names it: `dueReminders(items, now, days): Reminder[]`). Security-matrix rows: the eight routes above.
+
+**Test command:** `pnpm --filter api test -- cross-org-grants` (the builder also runs `pnpm --filter shared test -- admin` and `pnpm --filter api test -- org-wall cross-org-tables notifications`)
+
+---
+
+Task: S7-006
+
+**Goal:** Someone holding an auditor grant, an approved parent link or an open break-glass session can switch into that org, read what they're allowed to, change nothing, and have every read recorded in both orgs, with the database checking the access a second time.
+
+**Decisions:** D9, D22 (one org at a time, as D214 (5) settles it), D45.3 (checked in the API and again in the databases), D45.7 (fail safe), D51, D54, D55 ("read-only", "a visible banner", "Every cross-org read is logged in both orgs' audit trails"), D56, D57, D59, D73, D131, D144, D163, D164, D175, D176, D214 (2) (a grant works only once the auditor signs in to their existing account), D214 (3) (the Auditor role at the lower clearance, default Internal; break-glass at Restricted; parent links for the named people only), D214 (5) (one org at a time, the screen shows which, each switch logged in both orgs). Read the S7 shared notes, M0-009's `app_visible_org`, M0-010's `session.guard.ts` and `auth.ts`, M0-005's query accounts, and S7-003's brief.
+
+**Depends on:** S7-003.
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/identity/session.guard.ts`, `packages/api/src/identity/me.controller.ts`, `packages/api/src/identity/identity.module.ts`, `packages/api/src/identity/people.controller.ts`, `packages/api/src/db/org-context.ts`, `packages/api/src/records/owners.ts`, `packages/api/src/feature-modules.ts`.
+
+**Files:**
+- Create: `packages/api/src/admin/views/views.service.ts` (the person's available views and the active one), `views.controller.ts`, `views.module.ts`, `cross-org-read.interceptor.ts` (global, logs every viewing request).
+- Modify: `session.guard.ts` (resolve the view), `org-context.ts` (`OrgContext` takes an optional `view`), `me.controller.ts` (the `view` field), `people.controller.ts` and `records/owners.ts` (pass the principal, view included, to `withOrgContext`), `identity.module.ts`, `feature-modules.ts`, `security-matrix.ts`.
+
+**How it works:**
+- **Claiming auditor grants (D214 (2)):** before `GET /api/v1/views` and `POST /api/v1/views` look up access, the service calls S7-003's `app_claim_auditor_grants(<the signed-in person's email>)` in the person's home-org context; for each grant it claims it writes `auditor_grant.claimed` in the granting org and the auditor's home org. A grant is only ever claimed by a signed-in person (password plus TOTP, or SSO plus TOTP), never by the Admin's request.
+- `GET /api/v1/views` (any signed-in person, people only): `{ current: { orgId, kind } | null, available: [{ orgId, orgName, kind, accessId, clearance, endsAt | null }] }`: the orgs this person holds a claimed, active auditor grant, an approved, unexpired parent link that names them (their home org is the parent), or an open break-glass session for.
+- `POST /api/v1/views` `{ orgId: string | null }`: switches into one available org (else 404 `not_found`), or back home with `null`; one org at a time, so switching from one viewed org to another writes `view.left` for the first and `view.entered` for the second; stores it in `session.view_org_id`; writes `view.entered` / `view.left` in both orgs (D214 (5)).
+- `SessionGuard`: after resolving the home membership, if the session has a view, it looks up the access again (break-glass first, then an auditor grant, then a parent link). None left: it clears the view and answers 403 `view_ended`. Otherwise `request.principal = { orgId: <viewed org>, userId, role: 'auditor', clearance: <the lower of home clearance and the access's clearance; break-glass: 'restricted'>, view: { kind, accessId, homeOrgId } }` (D214 (3)), and `request.identity` to match.
+- While viewing, any method but GET and HEAD gets 403 `read_only_access`, except `POST /api/v1/views` (Better Auth's own routes, sign-out included, aren't Nest routes and are unaffected).
+- Graph reads need no change: every service reads `principal.orgId`'s database through `GraphService.readAs` as the `auditor` × clearance account, which is read-only in Neo4j itself.
+- `withOrgContext(db, ctx)`: when `ctx.view` is set, `app.org_id` is `ctx.view.homeOrgId` and `app.user_id` the person, so Postgres finds the viewed org's rows only through `app_visible_org` (the grant, checked again) and refuses any insert, update or delete in it. Existing callers that build their context from the principal pass the principal itself.
+- `CrossOrgReadInterceptor`: before a viewing request runs, append `cross_org.read` to the viewed org's chain and the home org's chain (`targetType: 'org'`, `meta { kind, accessId, method, route: <the route pattern, e.g. /api/v1/risks/:id>, params: <path IDs only> }`); if either append fails, the request is refused with 503 (fail safe). Never the query string, the body or any answer content.
+- `GET /api/v1/me` gains `view: null | { kind, orgId, orgName, homeOrgName, clearance, endsAt | null }`; `org` and `role` are the viewed org and `auditor` while viewing.
+
+**Pass criteria:**
+1. Each kind (auditor grant, parent link, break-glass): the person lists it, switches in, reads records of the viewed org at the right clearance (records above it are 404, D51; a grant or link at `internal` given to a `confidential` person reads at `internal`; break-glass at `restricted`), and switches back.
+1a. **Claim at sign-in (D214 (2)):** an Auditor of firm F with a pending grant to A sees nothing of A until they sign in and call `GET /api/v1/views`; then A is listed and `auditor_grant.claimed` is in A's and F's chains; when the granted email belongs to a non-Auditor of F or to a member of A itself, nothing is claimed, and nobody with a different email claims it.
+1b. **Parent links (D214 (3)):** a member of parent P named in the link lists S; a member of P not named sees nothing and gets 404 switching to S.
+2. **Read-only, generated from `SECURITY_MATRIX.routes`:** while viewing, every non-GET route in the matrix except `POST /api/v1/views` answers 403 `read_only_access` and changes nothing.
+3. **Postgres second check:** inside `withOrgContext` with a view, an insert, update or delete on the viewed org's `member` and `audit_events` rows is refused by RLS, and a read of an org with no access returns nothing, even when the API check is left out (a direct call in the test).
+4. Access ending mid-session (expiry, revocation, a parent link ended, break-glass ended): the next request answers 403 `view_ended`, the session's view is cleared, and the one after that runs at home.
+5. Every viewing request writes `cross_org.read` in both orgs before the handler runs, with the route pattern and path IDs and nothing else; `view.entered` and `view.left` are written in both orgs; a failing append refuses the request.
+6. **D59:** each ordered pair of 3 orgs: a person with access to B only can never switch into C (404) or read C through any route; a member with no grant sees an empty `available`; an API key gets 403 `people_only` on `/views`; people's home-org behaviour is unchanged when no view is set (the existing `records-api`, `links`, `org-wall` and `auth` tests still pass).
+7. `/api/v1/me` shows the view while viewing and `view: null` at home.
+
+**Tests to write:** `packages/api/tests/cross-org-view/switch.db.test.ts`, `claim.db.test.ts` (criteria 1a and 1b), `read-only.db.test.ts` (criterion 2, generated from the matrix), `postgres-check.db.test.ts`, `access-ends.db.test.ts`, `logging.db.test.ts`, `isolation.db.test.ts` (db); `packages/api/tests/cross-org-view/resolve.unit.test.ts` (unit) for the pure choice of kind and clearance (the test writer names it: `resolveView(home, accesses, now): ResolvedView | null`). Security-matrix rows: `GET /api/v1/views` and `POST /api/v1/views`, access any signed-in, orgWalled true, labels false.
+
+**Test command:** `pnpm --filter api test -- cross-org-view` (the builder also runs `pnpm --filter api test -- records-api links org-wall auth`)
+
+---
+
+Task: S7-007
+
+**Goal:** In an emergency the platform operator can read one org for an hour, with a typed reason and a second operator's confirmation; the org's Admins are alerted at once, the whole session and every refused attempt are logged, it ends by itself or early, and every session is reviewed afterwards.
+
+**Decisions:** D9 ("Platform operators: emergency break-glass only"), D55 (typed reason, read-only for 1 h, notifies the org Admins in the app immediately, logs the full session, both orgs), D133 (the operator works through command-line tools on the Mac), D170 (Mac scripts swap the database host), D29 and D45.4 (the row, its alert and its audit entry in one transaction), D57, D163, D164, D175, D176, D214 (3) (break-glass reads at Restricted), D214 (4) (the operator runs the command on the Mac with the org, their email and a typed reason; a second operator confirms or the session is flagged "unapproved"; 1 hour; ended early by the operator or the org's Admins; failed attempts logged; a review afterwards). Read the S7 shared notes, S7-002's and S7-003's briefs, S3-003's `AuditService.appendInTx`, and M0-014's `create-org.ts` and `org-script-env.ts`.
+
+**Depends on:** S7-002, S7-003, S3-003 (`AuditService.appendInTx`).
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/feature-modules.ts`, `package.json` (root; adds `break-glass:open`, `break-glass:confirm` and `break-glass:end`).
+
+**Files:**
+- Create: `packages/api/src/admin/break-glass/break-glass.service.ts` (`open`, `confirm`, `end`, `review`, `list`), `break-glass.controller.ts`, `break-glass.module.ts`; `packages/infra/scripts/break-glass.ts` (subcommands `open`, `confirm` and `end`).
+- Modify: `feature-modules.ts`, `security-matrix.ts`, root `package.json`.
+
+**What it does:**
+- `pnpm break-glass:open -- --org <slug> --email <operator email> --reason "<10–500 characters>"`: the operator's account must exist and have a home org (`user.home_org_id`, S7-003; planner's reading R14: any existing account may be an operator); one open session per person and org (a second is refused, exit code non-zero). In **one** Postgres transaction under the target org's system context (`{ userId: 'system:break-glass', role: 'admin', clearance: 'restricted' }`): the `break_glass_sessions` row (expires in `BREAK_GLASS_MINUTES`), `notifyAdminsInTx(tx, org, 'break_glass_opened', { sessionId }, sessionId)`, and `break_glass.opened` through `appendInTx` (`after { expiresAt }`, `meta { reasonLength }`; the reason itself is kept in the session row, shown to the org's Admins in the log, never in logs or script output). Then `break_glass.opened` in the operator's home org. It prints only the session ID, the org ID, the end time and a reminder that a second operator should confirm with `pnpm break-glass:confirm`.
+- **Refused attempts are logged (D214 (4)):** an `open` refused for an unknown org, an unknown operator, a reason of the wrong length or an already-open session exits non-zero and writes `break_glass.open_refused` (`meta { code }`: `unknown_org`, `unknown_operator`, `bad_reason` or `already_open`) in the target org's chain when the org exists and in the operator's home org when the account exists; with neither, only the exit code and the code on screen. The reason text is never written anywhere on a refusal.
+- **Second operator (D214 (4)):** `pnpm break-glass:confirm -- --id <session id> --email <second operator email>`: the account must exist, differ from the opener, and the session must still be open; it sets `confirmed_by` and `confirmed_at` and writes `break_glass.confirmed` in the target org and the confirmer's home org. Anything else is refused (non-zero exit) and writes `break_glass.confirm_refused` (`meta { code }`: `same_operator`, `unknown_operator`, `not_open`) in the target org. A session that ends or expires without a confirmation shows `approval: 'unapproved'` in the log (worked out, `BREAK_GLASS_APPROVALS`); it isn't cut short, because D214 (4) flags it for review instead.
+- `pnpm break-glass:end -- --id <session id> --email <operator email>` (the operator who opened it): sets `ended_at`, `ended_by`; `break_glass.ended` in both orgs.
+- `GET /api/v1/admin/break-glass` (paged, newest first): `{ id, operator: { name, email, homeOrgName }, confirmer: { name, email, homeOrgName } | null, reason, startedAt, expiresAt, endedAt, endedBy, status: 'open'|'ended'|'expired', approval: 'awaiting'|'confirmed'|'unapproved', review: { by, at, note } | null, needsReview: boolean }`.
+- `POST /api/v1/admin/break-glass/:id/end`: the org's Admin ends an open session early (D214 (4)); 409 `not_open` for one already over.
+- `POST /api/v1/admin/break-glass/:id/review` `{ note: 10–1000 characters }` (D214 (4) "every use gets a review afterwards", planner's reading R14): the org's Admin records the review of a session that is over; 409 `not_over` while open, 409 `already_reviewed` a second time; `break_glass.reviewed` in the org's chain (`meta { noteLength, approval }`; the note stays in the session row, never in the entry or a log line). `needsReview` is true for every session that is over and has no review.
+- The session's reads are logged by S7-006's `cross_org.read` entries, whose `meta.accessId` is the session ID.
+
+**Pass criteria:**
+1. `open` writes the session, the Admins' notification and the target org's entry together: a failure made to happen after the insert (a fixture) leaves none of them; the home org's entry follows.
+2. The session gives read access through `app_visible_org` at `restricted` until `expires_at` (1 h) or `ended_at`, and never write access, whether confirmed or not.
+3. `end`, from the script (by the opener only) or from the Admin route, closes it and writes `break_glass.ended` in both orgs; the Admin route refuses a closed one (409); the script refuses a different operator.
+4. **Second operator:** `confirm` by a different existing account while open sets `approval: 'confirmed'` and writes its entries; by the opener, an unknown account or after the end it is refused and logged; a session over without a confirmation lists as `unapproved`.
+5. **Refused opens:** each refusal code exits non-zero and writes `break_glass.open_refused` where the brief says, with no reason text.
+6. **Review:** the Admin reviews an ended session once (`needsReview` turns false); reviewing an open one or a second time is refused; the entry holds no note text.
+7. The log lists the org's sessions with the reason, status, approval and review; another org's Admin sees none of them (404 on end and review).
+8. Script output and log lines hold no reason or note text and no audit contents (D164); a failure prints the error type or code only; exit codes are 0 for success and non-zero otherwise; the D170 host swap works as in `create-org.ts`.
+9. **D59:** every role but Admin gets 403 on the three routes; each ordered pair of 3 orgs isolated; an API key gets 403 `people_only`.
+
+**Tests to write:** `packages/api/tests/break-glass/open-end.db.test.ts`, `confirm.db.test.ts`, `refusals.db.test.ts`, `review.db.test.ts`, `admin-routes.db.test.ts`, `access.db.test.ts` (db, a clock the test controls for the 1-hour end); `packages/api/tests/break-glass/approval.unit.test.ts` (unit) for the pure status and approval rule (the test writer names it: `breakGlassState(session, now): { status, approval, needsReview }`); `packages/infra/tests/break-glass-script/script.db.test.ts` (db, throwaway orgs only: open, confirm, end, and each refusal's exit code and output). Security-matrix rows: `GET /api/v1/admin/break-glass`, `POST /api/v1/admin/break-glass/:id/end` and `POST /api/v1/admin/break-glass/:id/review`.
+
+**Test command:** `pnpm --filter api test -- break-glass` (the builder also runs `pnpm --filter infra test -- break-glass-script`)
+
+---
+
+Task: S7-008
+
+**Goal:** Admins and Auditors can read their org's audit trail page by page and filter it; entries about records above their clearance still show that something happened, by whom, when and to which record, but not what changed.
+
+**Decisions:** D50 ("Audit trail": Admin and Auditor view), D51, D56 (add-only, hash-chained, kept forever), D59, D73, D175, D186 (and TEST-005's note: labels pinned on the audit_trail, uploads, review_queue and chat routes; every clearance × label pair tested), D48 (pages 95% under 300 ms), D163, D164, D176. Read the S7 shared notes, M0-012's `audit.schema.ts` and `audit.service.ts`, and S7-001's `maskAuditEntry`.
+
+**Depends on:** S7-001 and S7-026 (`pnpm test:env` then accepts this task's own new migration, D220 (1)).
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/api/src/feature-modules.ts`, `packages/api/src/db/migrations/meta/_journal.json` (a new migration for the filter indexes).
+
+**Files:**
+- Create: `packages/api/src/admin/audit-viewer/audit-viewer.service.ts`, `audit-viewer.controller.ts`, `audit-viewer.module.ts`; a new migration adding indexes on `audit_events` (`(org_id, action)`, `(org_id, target_id)`, `(org_id, (meta->>'number'))`, `(org_id, (meta->>'accessId'))`, `(org_id, created_at)`), made so they apply to every existing and future org partition.
+- Modify: `feature-modules.ts`, `security-matrix.ts`. It never changes `audit.service.ts` (S3-003's hot file).
+
+**Routes (`audit_trail` `view`, labels true, people only):**
+- `GET /api/v1/audit/entries`: paged (`pageQuerySchema`), newest first (`seq` descending). Filters: `action` (exact, or a prefix like `member.`), `actorId`, `targetType`, `targetId`, `number` (`meta.number`), `accessId` (`meta.accessId`, for a break-glass session's reads), `from` and `to` (ISO times). Items are `auditEntryViewSchema`, each passed through `maskAuditEntry(entry, principal.clearance)`, with `actor.name` filled from the `user` table (people) or the API key's name (keys), else `null`.
+- `GET /api/v1/audit/entries/:seq`: one entry, masked the same way; 404 for a missing one or another org's.
+- Reads run in `withOrgContext(principal)`, so the org wall applies in Postgres; filters are bound parameters from a fixed list.
+
+**Pass criteria:**
+1. Admin and Auditor list and open entries of their org, newest first, with every filter working alone and together, and paging totals right.
+2. **D186, every clearance × label pair (from `LABELS`):** an entry with that `meta.label` shows `before`/`after` exactly when the label is at or below the reader's clearance; otherwise `contentsHidden: true` with who, when, action, target, record number, label and hashes still there. A record-type entry with no label is hidden; a `member.*` or `auth.*` entry is shown.
+3. `hash` and `prevHash` are present on every item, masked or not, so a reader can follow the chain.
+4. **D59:** every role other than Admin and Auditor gets 403 (from `ROLE_TABLE`); each ordered pair of 3 orgs: org A never gets an entry of org B (list or `:seq`); an API key gets 403 `people_only`.
+5. **Matrix labels (D186):** a new unit test fails if any route whose access subject is `audit_trail`, `uploads`, `review_queue` or `chat` has `labels: false`.
+6. With 10,000 entries in a throwaway org, a filtered first page answers in under 300 ms on this Mac (D48; measured over 20 calls, 95th percentile).
+7. The migration applies after the existing ones, and the existing `audit`, `outbox` and `security-matrix` tests still pass.
+
+**Tests to write:** `packages/api/tests/audit-viewer/routes.db.test.ts`, `masking.db.test.ts` (criterion 2, generated from `LABELS`), `access.db.test.ts`, `speed.db.test.ts` (db); `packages/api/tests/audit-viewer/matrix-labels.unit.test.ts` (unit, criterion 5). Agreement (D174): TEST-003's and TEST-005's matrix tests, M0-012's chain tests. Security-matrix rows: `GET /api/v1/audit/entries` and `GET /api/v1/audit/entries/:seq`, access `audit_trail` `view`, orgWalled true, labels true.
+
+**Test command:** `pnpm --filter api test -- audit-viewer` (the builder also runs `pnpm --filter api test -- audit security-matrix`)
+
+---
+
+Task: S7-009
+
+**Goal:** An org's Admin can switch the org to single sign-on with its own OIDC provider; its people then sign in through that provider instead of a password, and only people the Admin has added get in.
+
+**Decisions:** D49 (Better Auth's SSO plugin), D54 (SSO per org, enabled by its Admin, replacing passwords; MFA for everyone), D63 (the API reaches the internet only for SSO), D134 (built in S7; tests use a small stand-in provider that runs locally), D57 (no secrets in logs or answers), D162 (a verified first step is audited at once), D163, D164, D175, D176, D214 (6) (SSO users still enter our TOTP; trusting the provider's MFA through `amr`/`acr` is not built, it would be a new decision), D214 (1) (a lost authenticator is reset through a set-up link). Read the S7 shared notes, S7-024's brief, M0-010's `auth.ts`, `auth-routes.ts` and `session.guard.ts`, and S1-013's `config/app-settings.ts`.
+
+**Depends on:** S7-024 (both change `auth.ts`, `auth-routes.ts` and the set-up route; this task adds the SSO case to S7-024's lost-authenticator link) and S7-026 (`pnpm test:env` then accepts this task's own new migration, D220 (1)).
+
+**Hot files:** `packages/api/package.json` and `pnpm-lock.yaml` (adds `@better-auth/sso`, exact version matching `better-auth`), `packages/api/src/identity/auth.ts`, `packages/api/src/identity/auth-routes.ts`, `packages/api/src/identity/schema.ts`, `packages/api/src/config/app-settings.ts` (the new test-only setting), `packages/api/src/db/migrations/meta/_journal.json` (a new migration), `packages/shared/src/access/security-matrix.ts`, `packages/api/src/feature-modules.ts`.
+
+**Files:**
+- Create: `packages/api/src/admin/sso/sso.service.ts`, `sso.controller.ts`, `sso.module.ts`, `sso-schemas.ts`; a new migration for the plugin's provider table (as the plugin's Drizzle schema expects, with `org_id uuid not null` unique and our `enabled boolean not null default false`).
+- Modify: `auth.ts` (the SSO plugin, with implicit sign-up off; the session that follows an SSO sign-in is not `mfaVerified`, so our TOTP code follows, D214 (6); the provider's `amr`/`acr` claims are ignored), `packages/api/src/admin/setup-links/setup-links.service.ts` and `account-setup.controller.ts` (S7-024's: for a person whose home org has SSO on, an `mfa_reset` link takes `{ email, token }` with no password; `issueInTx` returns `null` for a `setup` link, so S7-004's add-person answers `setupLink: null`, and the Admin route asking for one answers 409 `sso_on`), `auth-routes.ts` (password sign-in refused with 403 `sso_required` for anyone who belongs to an org with SSO on, planner's reading R6), `schema.ts` (the provider table), `app-settings.ts` (`SSO_ALLOW_INSECURE_LOCAL`, default off, set only by tests, allowing an `http://127.0.0.1` provider), `feature-modules.ts`, `security-matrix.ts`.
+
+**The provider table and the org wall (planner's reading R6):** sign-in happens before we know the person's org, so grc_app may SELECT every provider row (like Better Auth's `user` table), but may INSERT, UPDATE or DELETE only its context org's row (`org_id = app_org_id()`), with RLS forced. The client secret sits only in that row.
+
+**Routes (`admin` `edit`, people only):**
+- `GET /api/v1/admin/sso`: `{ type: 'oidc' | 'saml' | null, enabled, domain, issuer, clientId, callbackUrl, hasSecret }`; never the secret.
+- `PUT /api/v1/admin/sso` with `{ type: 'oidc', issuer (https URL), clientId, clientSecret?, domain }`: saves the set-up; a missing `clientSecret` keeps the saved one; the issuer's discovery document is fetched to check it (a clear 422 `sso_unreachable` if it can't be).
+- `POST /api/v1/admin/sso/enable` (409 `sso_not_configured` without a set-up) and `POST /api/v1/admin/sso/disable`.
+- Audit: `sso.configured` (`after { type, issuer, domain, clientId }`, never the secret), `sso.enabled`, `sso.disabled`. An SSO sign-in writes `auth.sso_verified` at once, then `auth.sign_in` when the second factor passes (as D162 does for passwords).
+- With SSO on, S7-004's add-person answers `setupLink: null` for new people (through `issueInTx` returning `null`; they sign in through the provider, then set up our TOTP at their first sign-in, as M0-010's flow does for anyone without it).
+- **Lost authenticator in an SSO org (D214 (1), planner's reading R15):** the Admin issues an `mfa_reset` link as usual; using it (email and token, no password) removes the old authenticator, ends the person's sessions and opens S7-024's set-up-only session, which may only enrol TOTP within 10 minutes. A `setup` link for an SSO org's person is refused (409 `sso_on`).
+
+**Pass criteria:**
+1. The Admin saves, reads, enables and disables the set-up; the secret never comes back and is in no log line or audit entry.
+2. Against the stand-in provider, a member whose email is in the org's domain signs in through it, then must pass our TOTP code (or set it up) before any route but `/me` works, even when the stand-in's ID token claims `amr: ["mfa"]` and a strong `acr` (D214 (6)).
+2a. In an org with SSO on, an `mfa_reset` link used with email and token only removes the old authenticator and opens the TOTP-only session, and no password is set; a `setup` link is refused (409 `sso_on`); with SSO off, S7-024's behaviour is unchanged.
+3. Refused, each with a clear code and an `auth.sign_in_failed` entry: someone the Admin hasn't added (`sso_no_account`), a wrong signature on the ID token, a wrong audience, a wrong or reused `state` or nonce, an expired token.
+4. With SSO on, the org's members get 403 `sso_required` on password sign-in; with it off, passwords work again.
+5. An `http://` provider is refused unless `SSO_ALLOW_INSECURE_LOCAL` is set, and only for `127.0.0.1`.
+6. **D59:** every role but Admin gets 403 on the admin routes; each ordered pair of 3 orgs: org A's Admin can't read or change B's set-up (the provider table's write policy refuses it in Postgres too); an API key gets 403 `people_only`.
+7. The existing `auth`, `api-keys` and `org-wall` tests still pass.
+
+**Tests to write:**
+- The stand-in provider, `packages/api/tests/fixtures/sso/oidc-stand-in.ts` (test writer): discovery, authorize, token, JWKS and userinfo on `127.0.0.1` at a free port, RS256 signing with `node:crypto`, and switches for each bad case in criterion 3. No new package.
+- `packages/api/tests/sso-oidc/admin-routes.db.test.ts`, `sign-in.db.test.ts` (criterion 2, including the `amr`/`acr` case), `mfa-reset.db.test.ts` (criterion 2a), `refusals.db.test.ts`, `password-refused.db.test.ts`, `access.db.test.ts` (db); `packages/api/tests/sso-oidc/schemas.unit.test.ts` (unit). Agreement (D174): S7-024's `setup-links` tests still pass.
+- Security-matrix rows: `GET /api/v1/admin/sso`, `PUT /api/v1/admin/sso`, `POST /api/v1/admin/sso/enable`, `POST /api/v1/admin/sso/disable` (the plugin's own routes sit under `/api/v1/auth/*`, already public in the matrix).
+
+**Test command:** `pnpm --filter api test -- sso-oidc` (the builder also runs `pnpm --filter api test -- auth api-keys org-wall setup-links`)
+
+---
+
+Task: S7-010
+
+**Goal:** An org whose provider speaks SAML can use single sign-on too, and a forged or stale SAML answer never signs anyone in.
+
+**Decisions:** D49, D54, D134, D57, D163, D164, D176, D214 (6) (our TOTP code still follows a SAML sign-in; the provider's own MFA statements are ignored). Read the S7 shared notes and S7-009's brief and code.
+
+**Depends on:** S7-009.
+
+**Hot files:** `packages/api/src/identity/auth.ts`.
+
+**Files:**
+- Modify: `packages/api/src/admin/sso/sso.service.ts`, `sso-schemas.ts` (the SAML set-up), `packages/api/src/identity/auth.ts` (SAML options of the same plugin).
+
+**What changes:**
+- `PUT /api/v1/admin/sso` also takes `{ type: 'saml', entryPoint (https URL), idpCertificate (PEM), domain }`; `GET` shows `{ type: 'saml', entryPoint, domain, spEntityId, acsUrl, certificateFingerprint }` (the fingerprint, not the certificate).
+- Sign-in answers must be signed with the saved certificate, meant for our service (audience), within their time window, and answer a request we made (`InResponseTo`, used once).
+- Everything else as in S7-009: only people the Admin added, our second factor afterwards, password sign-in refused while on, the same audit entries.
+
+**Pass criteria:**
+1. The Admin saves and reads a SAML set-up; a bad URL or a certificate that isn't PEM is refused with field-named messages.
+2. Against the stand-in, a member signs in and then must pass our TOTP code before any route but `/me` works, even when the assertion's `AuthnContextClassRef` says multi-factor (D214 (6)).
+3. Refused, each with a clear code and an `auth.sign_in_failed` entry: an unsigned answer, a wrong signature, a wrong audience, an expired answer, a replayed answer, an unknown person.
+4. The existing `sso-oidc` tests still pass.
+
+**Tests to write:** the stand-in `packages/api/tests/fixtures/sso/saml-stand-in.ts` (test writer): it signs a fixed, already-canonical assertion template with `node:crypto`, with switches for each bad case. No new package; if a signed SAML answer truly can't be made that way, the test writer hands in `blocked` and names the package it needs. `packages/api/tests/sso-saml/set-up.db.test.ts`, `sign-in.db.test.ts`, `refusals.db.test.ts` (db). Security-matrix rows: none new.
+
+**Test command:** `pnpm --filter api test -- sso-saml` (the builder also runs `pnpm --filter api test -- sso-oidc`)
+
+---
+
+Task: S7-011
+
+**Goal:** When a background job has used up its retries, the org's Admin sees it and can run it again, without seeing other orgs' jobs or the job's contents.
+
+**Decisions:** D72 ("parked in a failed-jobs list the Admin can re-run"), D29, D45.5, D50 (Admin), D56, D163 (error type only, never contents), D164, D175, D176. Read the S7 shared notes and M0-007's `jobs.module.ts`.
+
+**Depends on:** none.
+
+**Hot files:** `packages/api/src/jobs/jobs.module.ts` (S3-003 also changes it: one at a time), `packages/shared/src/access/security-matrix.ts`, `packages/api/src/feature-modules.ts`.
+
+**Files:**
+- Create: `packages/api/src/admin/failed-jobs/failed-jobs.controller.ts`, `failed-jobs.module.ts`.
+- Modify: `jobs.module.ts`: `JobsService.failedJobs(orgId, page): Promise<Paged<FailedJob>>` and `JobsService.retryFailed(orgId, jobId): Promise<boolean>` (pg-boss's own retry), both matching only jobs whose data has `orgId` equal to the caller's org (planner's reading R4: jobs with no `orgId`, like the nightly chain check, are platform jobs and never shown). `FailedJob = { id, queue, createdAt, failedAt, attempts, errorType }`, where `errorType` is the error's name or code only.
+- Modify: `feature-modules.ts`, `security-matrix.ts`.
+
+**Routes (`admin` `edit`, people only):** `GET /api/v1/admin/failed-jobs` (paged, newest failure first, filter by queue) and `POST /api/v1/admin/failed-jobs/:id/retry` (202 `{ jobId }`; 404 for a job that isn't this org's or isn't failed; a second click while it's queued again changes nothing). Audit: `job.retried` (`targetType: 'job'`, `meta { queue }`).
+
+**Pass criteria:**
+1. A job made to fail 4 times in a test queue (data `{ orgId }`) appears in its org's list with its attempts and error type, and not in any other org's.
+2. Retry queues it once; the list no longer shows it; the entry is written.
+3. No job data or error message appears in any answer or log line (D163).
+4. **D59:** every role but Admin gets 403; each ordered pair of 3 orgs: org A's Admin gets 404 retrying B's job; an API key gets 403 `people_only`; a platform job (no `orgId`) is never listed or retried.
+5. The existing `platform` and jobs tests still pass.
+
+**Tests to write:** `packages/api/tests/failed-jobs/list-retry.db.test.ts`, `access.db.test.ts` (db, with test queues in the throwaway database); `packages/api/tests/failed-jobs/error-type.unit.test.ts` (unit) for the error-type rule (the test writer names it: `errorTypeOf(output): string`). Security-matrix rows: the two routes.
+
+**Test command:** `pnpm --filter api test -- failed-jobs` (the builder also runs `pnpm --filter api test -- platform`)
+
+---
+
+Task: S7-012
+
+**Goal:** Every night the graphs and the files are saved on the Mac, checked, encrypted and listed in a manifest that proves what was saved; a second copy goes to the user's Google Drive folder; only the last 7 days are kept. (Postgres joins the same run in S7-025.)
+
+**Decisions:** D58 (nightly local backups of Postgres, each org's Neo4j database and the files, kept 7 days), D135 (S7), D214 (7) (the whole backup design, below), **D220 (2)** (the environment below; a file whose key isn't `sha256/<hex>` is skipped with a warning; the builder checks how `system` is backed up), D81 and `.gitignore` (backups never pushed; `backups/` is already ignored), D57 (no secrets in output), D98 and D106 (only our containers), D170, D163, D164, D176. Read the S7 shared notes, M0-006's `FileStore`, and the dev relay (D145).
+
+**Depends on:** none.
+
+**Hot files:** `package.json` (root; adds `backup:run`), `.env.example` (names only).
+
+**Environment (D220 (2)):** `age` 1.3.2 is installed (Homebrew), and `.env` has `NEO4J_DBMS_HOME` and `NEO4J_JAVA_HOME` (Neo4j Desktop's running DBMS and its Java; paths, not secrets).
+
+**Files:**
+- Create: `packages/infra/scripts/backup/run.ts` (the runner, with a list of parts), `parts.ts` (the `BackupPart` interface S7-025 adds Postgres to), `neo4j.ts`, `files.ts`, `encrypt.ts`, `manifest.ts`, `offsite.ts`, `retention.ts`, `settings.ts` (reads the backup settings: `.env`'s names below plus the backup-only settings file, R16); `packages/infra/launchd/com.grc.backup.plist` (a template: `StartCalendarInterval` 03:00 every night, running `pnpm backup:run` from the main checkout); `docs/operations/backups.md` (what is saved, where, how to install `age` and make the key pair, how to turn on the Neo4j backup listener on 127.0.0.1 only, how to pick the Google Drive folder, and the one-time `launchctl bootstrap` step the user runs).
+- Modify: root `package.json`, `.env.example` (names only: `NEO4J_DBMS_HOME` (the Neo4j Desktop DBMS folder), `NEO4J_JAVA_HOME`, `BACKUP_AGE_RECIPIENT` (the public key; not a secret), `BACKUP_OFFSITE_DIR` (a folder inside the user's Google Drive for desktop synced folder), `BACKUP_SETTINGS_FILE` (the backup-only settings file outside the repo, default `~/.config/grc-backup/backup.env`)).
+
+**Interfaces (produces):**
+- `interface BackupPart { name: string; run(ctx: BackupContext): Promise<PartResult> }`, where `BackupContext = { workDir: string; out: string; orgIds: string[]; now: Date }` and `PartResult = { archives: { file: string; sha256: string; bytes: number }[]; counts: Record<string, unknown> }`. `run.ts` runs every registered part; S7-025 registers `postgres`.
+- `buildManifest(parts, meta): Manifest` and `verifyManifest(dir): Promise<ManifestCheck>` (re-hashes every archive; S7-013 and S7-025 use it).
+
+**What `pnpm backup:run` does** (options for tests: `--out <dir>` default `backups/`, `--databases <names>` default `"*"`, `--orgs <ids>` default all, `--offsite <dir>` default `BACKUP_OFFSITE_DIR`):
+1. Refuses to start if another run holds its lock file.
+2. **Neo4j (D214 (7)):** `neo4j-admin database backup "*"` (every database, `system` included; tests pass their own names) with Desktop's `neo4j-admin` from `NEO4J_DBMS_HOME`, from the backup listener on `127.0.0.1:6362`. **`system` (D220 (2)):** the builder checks for itself whether `neo4j-admin database backup "*"` takes `system` with the default metadata setting (`--include-metadata`), by backing up from the running DBMS into a temporary folder it deletes at once (a backup only reads the DBMS; a `system` backup holds the accounts, so it never stays on disk unencrypted), and writes what it found in `docs/operations/backups.md` and its hand-off. Either way, every night's backup includes `system` (D214 (7)). Before it starts it reads the DBMS's `neo4j.conf`: if the backup listener is off or listens on anything but 127.0.0.1, it stops with a clear message; turning it on is the user's Desktop setting, never changed by the script. Each backup is then checked with `neo4j-admin database check`; a failed check fails the run. Node and relationship counts per org database go into the manifest (read through `grc_writer` in read transactions, the password from `.env` as the other Mac scripts do).
+3. **Files:** each org bucket's objects through the S3 API (the dev relay on 127.0.0.1:8333, D145), each checked against its `sha256/<hex>` key, packed into one archive per org. **A stored file whose key isn't `sha256/<hex>` (D220 (2))** is skipped: it goes into no archive and its key never becomes a file path; the run's output names it as a warning (its org and the key, printed as escaped text, D163, D164) and the manifest lists it under `warnings`. The rest of the backup still completes and the manifest's status stays `ok`: one odd key must not cost a night's backup.
+4. **Encryption (D214 (7)):** each archive is encrypted with the `age` command to `BACKUP_AGE_RECIPIENT`; the plain copy lives only in a temporary work folder inside the output folder and is deleted as soon as its encrypted copy is written. Only `.age` files stay. The private key is never read by `backup:run`; the script refuses to start if `BACKUP_SETTINGS_FILE` or the key's path sits inside the repo or inside the output folder. If `age` isn't installed, it stops with a clear message.
+5. **Manifest:** `backups/<YYYY-MM-DD>/manifest.json`: status, start and end times, each archive's name, size and SHA-256 (of the encrypted file), each part's counts, and any `warnings` (D220 (2)); no secrets and no record contents. `manifest.sha256` beside it holds the manifest's own SHA-256.
+6. **Second copy (D214 (7)):** after a successful run, the day's `.age` files, `manifest.json` and `manifest.sha256` are copied into `BACKUP_OFFSITE_DIR/<YYYY-MM-DD>/`, and the copies' hashes are checked against the manifest. The app calls no Google API: Google Drive for desktop syncs the folder. If the folder is missing or not writable, the local backup still counts, the manifest records `offsite: 'failed'` and the run exits non-zero so the user notices. Nothing unencrypted is ever written there.
+7. On any failure: status `failed`, older backups kept, exit code non-zero, the error type only in its output.
+8. **Retention:** 7 days, in the output folder and in the offsite folder: deletes dated folders older than 7 days, only names matching the date pattern, only folders holding a manifest this script wrote, never the newest successful one.
+
+**Pass criteria:**
+1. On throwaway Neo4j databases and buckets (via the options), with a throwaway `age` key pair made by `age-keygen` in a temporary folder, a run writes only `.age` archives and a manifest whose hashes match the files; decrypting with the throwaway key gives backups whose counts and file hashes match what was saved.
+2. Each Neo4j backup is checked with `neo4j-admin database check`; a backup that fails its check (a fixture) fails the run.
+3. A backup listener that is off or listens on `0.0.0.0` stops the run before anything is saved, with a clear message; the script never writes `neo4j.conf`.
+4. No plain archive remains anywhere after a run, successful or failed.
+5. The second copy lands in the `--offsite` folder with matching hashes; a missing offsite folder gives `offsite: 'failed'` and a non-zero exit while the local backup stays.
+6. A second run on the same day replaces that day's folder safely (the old one stays until the new one succeeds).
+7. Retention keeps 7 days and the newest success in both folders, and never touches anything else.
+8. A failure part-way leaves a `failed` manifest and all older backups; two runs at once: the second refuses.
+9. Output and logs hold no passwords, keys or record contents (D57, D164); settings files inside the repo or the output folder are refused.
+10. It names only `grc-*` containers and never stops or changes any container.
+11. The launchd template runs `pnpm backup:run` at 03:00 every night and nothing else; the doc gives the user's one-time `launchctl` step.
+12. **Odd file keys (D220 (2)):** a throwaway bucket holding objects whose keys aren't `sha256/<hex>` (for example `notes/readme.txt`, `sha256/xyz`, `sha256/../x`) beside good ones: the good files are saved and match; no odd one is in any archive or used as a path; each is listed under the manifest's `warnings` and named in the output; the manifest's status is `ok`.
+13. **`system` (D220 (2)):** a default run (no `--databases`) backs up `system` in the way the builder found works with the default metadata setting; `docs/operations/backups.md` and the builder's hand-off say what `neo4j-admin database backup "*"` does with `system` on this Mac.
+
+**Tests to write:** `packages/infra/tests/backups/retention.unit.test.ts`, `manifest.unit.test.ts`, `settings.unit.test.ts` (paths inside the repo or output refused), `neo4j-conf.unit.test.ts` (the listener check on sample `neo4j.conf` texts), `launchd.unit.test.ts` (unit; pure planning, manifest building and checks), plus unit tests for the key rule on sample keys (criterion 12) and for a default run including `system` (criterion 13); `packages/infra/tests/backups/run.db.test.ts`, `offsite.db.test.ts` (db; throwaway Neo4j databases and buckets, temporary output, offsite and key folders), with criterion 12's bucket case in `run.db.test.ts`. Never turn the live DBMS's backup listener on or off to prove a test (D176): if it's off, the db tests stop and the test writer reports it for the user. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter infra test -- backups`
+
+---
+
+Task: S7-013
+
+**Goal:** Once a month the newest backup is proven to restore: the manifest is checked first, each org's graph is restored over one fixed test database and checked, and every saved file is re-hashed, without anyone holding the right to drop a database. (Postgres joins in S7-025.)
+
+**Decisions:** D58 ("a monthly restore test"), D135, D214 (7) ("`pnpm backup:restore-test` monthly checks the manifest first"; the `age` key outside `backups/` and the repo), D214 (8) (no DROP DATABASE for the admin account; one fixed database `restore-test` made once; a restore-test account holding only STOP and START on it, its password only in the backup scripts' settings, not the API's `.env`; each month stopped, restored over with `--overwrite-destination`, started and checked), D57, D9 (the org wall), D176, D163, D164, D208 (the user reruns `pnpm setup:neo4j` if the auto-mode check refuses it). Read the S7 shared notes, S7-012's brief and `packages/infra/scripts/setup-neo4j.ts`.
+
+**Depends on:** S7-012.
+
+**Hot files:** `package.json` (root; adds `backup:restore-test`), `packages/infra/scripts/setup-neo4j.ts`.
+
+**Files:**
+- Create: `packages/infra/scripts/backup/restore-test.ts` (with a `RestorePart` interface like S7-012's `BackupPart`, so S7-025 adds Postgres), `restore-neo4j.ts`, `restore-files.ts`; `packages/infra/launchd/com.grc.restore-test.plist` (a template: the 1st of each month at 04:00); a section in `docs/operations/backups.md` (including the user's one-time `pnpm setup:neo4j` rerun).
+- Modify: root `package.json`; `packages/infra/scripts/setup-neo4j.ts`: once, `CREATE DATABASE \`restore-test\` IF NOT EXISTS` (as the Desktop account the script already uses); the account `grc_restore_test` with its own role holding only `GRANT STOP ON DATABASE \`restore-test\`` and `GRANT START ON DATABASE \`restore-test\``; its password generated once and written only to the backup settings file (`BACKUP_SETTINGS_FILE`, mode 600, outside the repo; never to `.env`); and `DENY ACCESS ON DATABASE \`restore-test\`` for `grc_writer` and the 28 query accounts, because the database holds a copy of one org's graph at a time outside that org's own database (planner's reading R17, from D9 and D57). `grc_admin` keeps only CREATE DATABASE: no DROP DATABASE for anyone.
+
+**What `pnpm backup:restore-test` does** (`--from <backup folder>`, default the newest successful one):
+1. **The manifest first (D214 (7)):** checks `manifest.sha256`, then every archive's SHA-256 against the manifest (S7-012's `verifyManifest`). Any mismatch fails the test before anything is decrypted or restored.
+2. Decrypts into a temporary work folder with the `age` identity file named in the backup settings file (outside the repo and `backups/`; refused otherwise); the plain copies are deleted when the test ends, pass or fail.
+3. **Neo4j (D214 (8)):** for each org's backup in turn: `STOP DATABASE \`restore-test\`` as `grc_restore_test`; `neo4j-admin database restore --from-path=<decrypted backup> --overwrite-destination=true restore-test` with Desktop's `neo4j-admin`; `neo4j-admin database check restore-test`; `START DATABASE \`restore-test\` WAIT` as `grc_restore_test`, which must report it online. After the last one it stops the database again. The code has one target name, the constant `RESTORE_TEST_DATABASE = 'restore-test'`, and refuses to run a restore command with any other name.
+4. **Files:** decrypts each org's files archive and re-hashes every file against the manifest and its `sha256/<hex>` key.
+5. Appends one line to `backups/restore-tests.jsonl` (`{ backup, when, result, failures: [part and error type] }`) and exits non-zero on any failure.
+It never writes to, drops or restores over a live database or bucket.
+
+**Pass criteria:**
+1. On a backup made by S7-012 from throwaway org databases and buckets (with a throwaway `age` key pair), the restore test checks the manifest, restores each graph over `restore-test`, checks it, sees it online, re-hashes the files, passes and leaves no plain copy.
+2. A tampered backup (a changed archive byte, a changed manifest, a missing archive; fixtures) fails at the manifest step, before any restore, with the part named.
+3. A restore aimed at any name but `restore-test` is refused before anything runs.
+4. `setup-neo4j.ts` (checked through its statement list, unit): `grc_restore_test` gets exactly STOP and START on `restore-test` and nothing else; nobody is granted DROP DATABASE; `grc_writer` and the 28 query accounts are denied access to `restore-test`; the password goes only to the backup settings file, never to `.env`.
+5. Output and logs hold no secrets, key paths' contents or record contents.
+
+**Tests to write:** `packages/infra/tests/restore-test/manifest-first.unit.test.ts`, `names.unit.test.ts`, `setup-statements.unit.test.ts` (criterion 4, from the statement list; the builder moves the list into an exported function if needed) (unit); `packages/infra/tests/restore-test/restore.db.test.ts`, `tampered.db.test.ts` (db). The db tests run against the live DBMS's `restore-test` database only after the user has rerun `pnpm setup:neo4j`; if it or its account is missing, they stop and the test writer reports it for the user. Never grant, create or drop anything on the live DBMS to prove a test (D176). Security-matrix rows: none.
+
+**Test command:** `pnpm --filter infra test -- restore-test`
+
+---
+
+Task: S7-014
+
+**Goal:** The Admin screen exists as a real workspace page with tabs, open only to Admins, and its first tab lets the Admin manage machine API keys.
+
+**Decisions:** D27 #11, D50 (Admin only), D54 (keys: one org and one role, expiry, revocable, shown once), D7 (the web hides, the API decides), D2 (ServiceNow look), D175. Read the S7 shared notes, M0-011's `api-keys.controller.ts` (the request and answer shapes), M0-015's shell and S1-006's records kit (tables, dialogs, `ApiProblem`).
+
+**Depends on:** none.
+
+**Hot files:** `packages/web/src/router.tsx`, `packages/web/src/api/client.ts` (regenerated with `pnpm gen:api-client` if the key routes are missing), `packages/web/src/app/screens.ts`, `packages/web/src/app/AppShell.tsx`.
+
+**Files:**
+- Create: `packages/web/src/features/admin/AdminPage.tsx` (header and tabs, the active tab in the `tab` search parameter), `admin-tabs.ts` (the tab list: `{ id, label, component }`; later S7 tasks add one entry each), `api-keys/ApiKeysTab.tsx`, `api-keys/NewKeyDialog.tsx`, `api-keys/useApiKeys.ts`.
+- Modify: `router.tsx` (`/admin` with `validateSearch` for `tab`; `/admin` leaves the generic screen list), `screens.ts` (an optional `visibleTo(role)` on a screen: Admin for `admin` only, Audit trail for `admin` and `auditor`, from `can` in `@grc/shared`), `AppShell.tsx` (the menu hides screens the role can't open).
+
+**Pass criteria:**
+1. An Admin opens `/admin` and sees the tabs, with API keys selected; the tab is kept in the address.
+2. Every other role sees neither menu entry it can't open, and gets the no-access state on `/admin` (a 403 from the API shows the same `ApiProblem` state as the records screens).
+3. API keys: the list (name, role, created, expires, last used if the API gives it, revoked); "New key" with name, role and expiry; the key is shown once with a copy button and a warning that it won't be shown again; revoke with a confirmation; refusals show the message and reference ID.
+4. No other network call than the generated client's (the M0-015 rule).
+
+**Tests to write:** `packages/web/tests/admin-screen/frame.unit.test.tsx`, `menu.unit.test.tsx`, `api-keys.unit.test.tsx` (unit, with the API mocked at the client). Security-matrix rows: none (no route).
+
+**Test command:** `pnpm --filter web test -- admin-screen`
+
+---
+
+Task: S7-015
+
+**Goal:** The Admin manages people on screen, and a newly added person can set up their account.
+
+**Decisions:** D27 #11, D10, D50, D51, D54, D7, D214 (1) (the one-time set-up link, shown once, 24 h, single use; TOTP within 10 minutes after the password; a new link cancels the old; the Admin can revoke it; a lost authenticator is reset the same way). Read the S7 shared notes, S7-004's and S7-024's briefs, S7-014's frame and M0-015's MFA set-up screens.
+
+**Depends on:** S7-014, S7-004 (which waits on S7-024, so both sets of routes are on `main`).
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated after S7-004 is on `main`), `packages/web/src/features/admin/admin-tabs.ts`, `packages/web/src/router.tsx` (the set-up page).
+
+**Files:**
+- Create: `packages/web/src/features/admin/people/PeopleTab.tsx`, `AddPersonDialog.tsx`, `ChangePersonDialog.tsx`, `RemovePersonDialog.tsx`, `SetupLinkDialog.tsx` (new set-up link, lost-authenticator reset, cancel an open link; the link shown once), `RoleTableView.tsx` (the D50 table, read-only, from `ROLE_TABLE`), `usePeople.ts`; `packages/web/src/features/auth/AccountSetupPage.tsx` (at `/account/setup`, signed out: the token read from the address's `#token=` part and then removed from the address bar with `history.replaceState`, never sent anywhere but `POST /api/v1/account/setup`; the person's email and a 12-character-minimum password twice; then M0-015's TOTP enrolment with a visible 10-minute countdown).
+- Modify: `admin-tabs.ts` (the People tab first), `router.tsx`.
+
+**Pass criteria:**
+1. The People tab lists people (name, email, role, clearance, MFA set up or not, set-up status: "Done", "Link open until <time>" or "Waiting for a new link"), with search and a role filter, paged.
+2. Add a person: name, email, role, clearance (Internal chosen by default); on success, the set-up link is shown once with a copy button, "valid for 24 hours, works once", and a note to pass it on privately; closing the dialog drops it from memory; an existing account is added with a message saying so; 409 `already_member` explained.
+3. For a person whose home org is this one: "New set-up link" and "Reset lost authenticator" (each with a confirmation that says an open link stops working), showing the new link once as in 2; "Cancel link" on an open one; 409 `sso_on` explained. For anyone else these actions aren't offered.
+4. Change role or clearance, and Remove, each with a confirmation; 409 `last_admin` shows "an organisation needs at least one Admin".
+5. "What each role can do" shows the D50 table, read-only.
+6. The set-up page: the token leaves the address bar at once; a short or mismatched password is refused before sending; `setup_link_invalid` shows one clear message ("This set-up link doesn't work any more. Ask your Admin for a new one.") for expired, used, revoked and made-up tokens alike; the locked answer shows the same wait message as sign-in; success leads straight to TOTP enrolment with the countdown; when the 10 minutes run out it shows "Ask your Admin for a new link".
+7. Refusals show the message and reference ID; no other network calls.
+
+**Tests to write:** `packages/web/tests/admin-people/people-tab.unit.test.tsx`, `dialogs.unit.test.tsx`, `setup-links.unit.test.tsx` (criterion 3), `role-table.unit.test.tsx`, `account-setup.unit.test.tsx` (criterion 6, fake timers for the countdown) (unit). Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- admin-people`
+
+---
+
+Task: S7-016
+
+**Goal:** The Admin grants and revokes outside auditors' access, and handles parent-company links from either side, on screen.
+
+**Decisions:** D27 #11, D55, D51, D7, D214 (2) (grant by email; no account made; works once the auditor signs in; an end date of at most 90 days; a reminder), D214 (3) (the clearance the Admin picks, default Internal; the parent's named group; an end date and re-approval). Read the S7 shared notes, S7-005's brief and S7-014's frame.
+
+**Depends on:** S7-014, S7-005.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated after S7-005 is on `main`), `packages/web/src/features/admin/admin-tabs.ts`.
+
+**Files:**
+- Create: `packages/web/src/features/admin/access/AccessTab.tsx`, `AuditorGrants.tsx`, `GrantAuditorDialog.tsx`, `ParentLinks.tsx`, `RequestParentLinkDialog.tsx` (the people pick list reads S1-004's existing `GET /api/v1/people`, so this task needs nothing from S7-004), `ApproveParentLinkDialog.tsx`, `useGrants.ts`.
+- Modify: `admin-tabs.ts` (a "Cross-org access" tab, selectable as `tab=access`, which the alerts bell's reminders (S7-021) link to).
+
+**Pass criteria:**
+1. Auditor grants: the list with the email, the auditor and their firm once claimed, clearance, expiry and status; "Grant access" with email, days (1–90) and clearance (Internal chosen by default); after granting, the same message whatever the email: "Access granted. It starts working when the auditor signs in to their own account."; revoke with a confirmation (pending grants too); 409 `grant_exists` and 409 `already_member` explained.
+2. Parent links: "Our parent companies" and "Our subsidiaries"; "Ask to link a subsidiary" by its short name, choosing the people in our org who may look (a searchable pick list of our members, 1–100), which always answers "request sent"; the subsidiary side sees the named people and approves (clearance, Internal by default, and days, 1–365) or declines; end a link from either side with a confirmation; an expired link says "Ended: ask again to renew".
+3. Statuses and dates are plain words ("Waiting for the auditor to sign in", "Active until 3 Nov", "Ends in 5 days", "Expired", "Revoked").
+4. Refusals show the message and reference ID; no other network calls.
+
+**Tests to write:** `packages/web/tests/admin-access/auditor-grants.unit.test.tsx`, `parent-links.unit.test.tsx` (unit). Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- admin-access`
+
+---
+
+Task: S7-017
+
+**Goal:** Two Admin tabs for things that happen to the org behind the scenes. Break-glass log: the Admin sees every break-glass session on their org, why it was opened, and can end an open one. Failed jobs: the Admin sees jobs that failed for their org and can run one again. (The Failed jobs tab was S7-019, folded in here under D215 (E) because it is two small files and one line in `admin-tabs.ts`, which this task already changes; S7-011 has no dependencies while S7-007 waits on S7-002, S7-003 and S3-003, so the fold doesn't make this task wait longer.)
+
+**Decisions:** D27 #11 ("break-glass log"; the failed-jobs tab by planner's reading R9), D55, D72 (failed jobs the Admin can re-run), D7, D214 (4) (a second operator confirms or the session is flagged "unapproved"; ended early by the operator or the org's Admins; every use reviewed afterwards), D215 (E). Read the S7 shared notes, S7-007's and S7-011's briefs and S7-014's frame.
+
+**Depends on:** S7-014, S7-007, S7-011.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated after S7-007 and S7-011 are on `main`), `packages/web/src/features/admin/admin-tabs.ts`.
+
+**Files:**
+- Create: `packages/web/src/features/admin/break-glass/BreakGlassTab.tsx`, `EndSessionDialog.tsx`, `ReviewSessionDialog.tsx`, `useBreakGlass.ts`.
+- Create: `packages/web/src/features/admin/failed-jobs/FailedJobsTab.tsx`, `useFailedJobs.ts`.
+- Modify: `admin-tabs.ts` (a "Break-glass log" tab, selectable as `tab=break-glass`, which the alerts bell (S7-021) links to; and a "Failed jobs" tab).
+
+**Pass criteria:**
+
+*Break-glass log:*
+1. The log lists sessions newest first: operator, their org, the reason, start, end time, status (open, ended, expired), who ended it, and the approval: "Confirmed by <name>", "Awaiting a second operator" or "Unapproved" (in a warning colour).
+2. An open session stands out and has "End now", with a confirmation; 409 `not_open` explained.
+3. A session that is over and not yet reviewed shows "Needs review" and a "Review" button (a note of 10–1000 characters, with a confirmation); once reviewed it shows who reviewed it, when, and the note; 409 `not_over` and `already_reviewed` explained.
+4. Each session links to `/audit?accessId=<id>`, the session's reads in the audit trail.
+5. Refusals show the message and reference ID; no other network calls.
+
+*Failed jobs (from S7-019):*
+6. The list: queue (in plain words where known, else the queue name), when it failed, attempts and error type, newest first, paged; an empty list says "No failed jobs".
+7. "Run again" queues it and shows "Queued again"; the row leaves the list on refresh; 404 explained.
+8. Refusals show the message and reference ID; no other network calls.
+
+**Tests to write (kind `unit`, API mocked at the client):** `packages/web/tests/admin-break-glass/log.unit.test.tsx`, `review.unit.test.tsx` (criteria 1–5); `packages/web/tests/admin-jobs/failed-jobs.unit.test.tsx` (criteria 6–8). Security-matrix rows: none (web only).
+
+**Test command:** `pnpm --filter web test -- admin-break-glass admin-jobs`
+
+---
+
+Task: S7-018
+
+**Goal:** The Admin sets up and switches single sign-on on screen, and people of an SSO org can start sign-in with their organisation.
+
+**Decisions:** D27 #11, D49, D54, D134, D7, D214 (6) (SSO users still enter our TOTP code). Read the S7 shared notes, S7-009's and S7-010's briefs, S7-014's frame and M0-015's sign-in page.
+
+**Depends on:** S7-014, S7-009, S7-010.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated after S7-010 is on `main`), `packages/web/src/features/admin/admin-tabs.ts`, `packages/web/src/features/auth/SignInPage.tsx`.
+
+**Files:**
+- Create: `packages/web/src/features/admin/sso/SsoTab.tsx`, `OidcForm.tsx`, `SamlForm.tsx`, `useSso.ts`.
+- Modify: `admin-tabs.ts` (a "Sign-in" tab), `SignInPage.tsx` ("Sign in with your organisation": the email, then Better Auth's SSO sign-in route, which sends the browser to the provider).
+
+**Pass criteria:**
+1. The Sign-in tab shows the current set-up (never a secret; "a secret is saved" instead), the callback address or SAML service details to give the provider, and a form for OIDC or SAML with field-named errors.
+2. Turn on and off with a confirmation that says password sign-in stops for everyone in the org while it's on, and that everyone still enters their authenticator code after the provider; 409 `sso_not_configured` and 422 `sso_unreachable` explained.
+3. The sign-in page offers "Sign in with your organisation"; a 403 `sso_required` on password sign-in points the person to it; after the provider, our TOTP check (or its set-up) always follows, as for passwords (D214 (6)).
+4. Refusals show the message and reference ID; no other network calls.
+
+**Tests to write:** `packages/web/tests/sso-ui/sso-tab.unit.test.tsx`, `sign-in.unit.test.tsx` (unit). Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- sso-ui`
+
+---
+
+Task: S7-020
+
+**Goal:** Admins and Auditors read the audit trail on screen: who did what, when, to which record, with the contents they're cleared for.
+
+**Decisions:** D27 #12, D50, D56, D186, D7, D2. Read the S7 shared notes, S7-008's brief and S1-006's records kit.
+
+**Depends on:** S7-008.
+
+**Hot files:** `packages/web/src/router.tsx`, `packages/web/src/api/client.ts` (regenerated after S7-008 is on `main`).
+
+**Files:**
+- Create: `packages/web/src/features/audit/AuditTrailPage.tsx`, `AuditFilters.tsx`, `AuditEntryDetail.tsx`, `useAuditEntries.ts`, `actions.ts` (plain words for each action, for example `member.role_changed` → "Role changed").
+- Modify: `router.tsx` (`/audit` with its filters in the search parameters, including `accessId`; `/audit` leaves the generic screen list).
+
+**Pass criteria:**
+1. The table: when, who (name, or "API key …", or "System"), action in plain words, record type and number, label; newest first; paged.
+2. Filters: action, person, record number, date range, and `accessId` from the break-glass log; kept in the address.
+3. An entry's detail shows before and after side by side; a masked entry says "Contents hidden: this record is above your clearance" and still shows who, when, action and number.
+4. The detail shows the entry's `seq`, `hash` and `prevHash` ("Chain position").
+5. Roles other than Admin and Auditor get the no-access state; refusals show the message and reference ID; no other network calls.
+
+**Tests to write:** `packages/web/tests/audit-screen/table.unit.test.tsx`, `filters.unit.test.tsx`, `detail.unit.test.tsx` (unit). Security-matrix rows: none.
+
+**Test command:** `pnpm --filter web test -- audit-screen`
+
+---
+
+Task: S7-021
+
+**Goal:** Two additions to the header. Viewing another org: a person with access to another org can switch into it from the header, always sees clearly that they're reading someone else's org and until when, can't try to change anything there, and gets a clear page when the access ends. Alerts bell: Admins see at once, from any screen, that a break-glass session was opened on their org, the audit chain broke, or an auditor grant or parent link is about to end. (The bell was S7-022, folded in here under D215 (E) because it is two small files and one line in `AppShell.tsx`, which this task already changes; S7-002 has no dependencies and S7-006 waits on S7-003, so the fold doesn't make this task wait longer, and `AppShell.tsx` now changes in one task instead of two.)
+
+**Decisions:** D55 ("a visible banner", read-only; the Admins alerted at once on break-glass), D56 (the audit chain check), D93 (alerts in-app only), D51, D7, D2, D214 (2) (the reminder before a grant ends), D214 (3) (read as an Auditor at the lower clearance), D214 (5) (one org at a time, no combined view; the screen always shows which org they are in; each switch logged in both orgs, by S7-006), D215 (E). Read the S7 shared notes ("Alerts"), S7-006's, S7-002's and S7-005's briefs (S7-005 for the reminder payloads), M0-015's `AppShell.tsx` and `session.ts`, and S1's `permissions.ts`.
+
+**Depends on:** S7-006, S7-002.
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerated after S7-006 and S7-002 are on `main`), `packages/web/src/app/AppShell.tsx`, `packages/web/src/features/records/permissions.ts`, `packages/web/src/features/auth/session.ts`.
+
+**Files:**
+- Create: `packages/web/src/features/org-view/ViewSwitcher.tsx`, `ViewBanner.tsx`, `ViewEndedPage.tsx`, `useViews.ts`.
+- Create: `packages/web/src/features/admin/notifications/NotificationsBell.tsx`, `useNotifications.ts`.
+- Modify: `AppShell.tsx` (the switcher next to the org name, the banner above the page, and the bell in the header for Admins only), `permissions.ts` (a `readOnly` flag on `Viewer`: while viewing, no edit, create, retire, link or remove is offered), `session.ts` (the `view` field of `/me`).
+
+**Pass criteria:**
+
+*Viewing another org:*
+1. The header's org name opens "View another organisation" with each available org, why (auditor access, parent company, break-glass) and until when; choosing one switches, clears the cached data and opens Home; choosing a second org while viewing one switches straight to it (one org at a time; there is no combined view); "Back to my organisation" returns.
+2. While viewing, a banner on every screen, including error and empty pages, says "You are viewing <org> as <kind>, read-only, until <time>" in a colour that stands out, and the header shows the viewed org; at home the header shows the home org and no banner.
+3. While viewing, no screen offers Edit, New, Retire, Add link or Remove (checked on the risk register and a risk page).
+4. A 403 `view_ended` anywhere shows "Your access to <org> has ended" with "Back to my organisation".
+5. People with nothing to view see no switcher; no other network calls.
+
+*Alerts bell (from S7-022):*
+6. The bell shows the unread count and checks every 15 s (planner's reading R7); a new break-glass alert appears without a reload.
+7. The list, newest first: "Break-glass access opened" linking to `/admin?tab=break-glass`, "Audit chain check failed" linking to `/audit`, "Auditor access ends on <date>" and "Parent company link ends on <date>" linking to `/admin?tab=access` (D214 (2)); opening one marks it read; an unknown kind shows "Something needs your attention" with no link.
+8. Only Admins see the bell; other roles make no notifications call.
+9. A failing call leaves the bell quiet with no error pop-up, and tries again next time; no other network calls.
+
+**Tests to write (kind `unit`, API mocked at the client):** `packages/web/tests/org-view/switcher.unit.test.tsx`, `banner.unit.test.tsx`, `read-only.unit.test.tsx`, `ended.unit.test.tsx` (criteria 1–5); `packages/web/tests/notifications-ui/bell.unit.test.tsx` (criteria 6–9, fake timers). Agreement (D174): S1-006's and S1-008's permission tests still pass. Security-matrix rows: none (web only).
+
+**Test command:** `pnpm --filter web test -- org-view notifications-ui` (the builder also runs `pnpm --filter web test -- records record-links`)
+
+---
+
+Task: S7-023
+
+**Goal:** The S7 part of the combined S2+S3+S7 checkpoint (D182) can be demonstrated: the demo has people to manage, an outside auditor and a parent company with access, a past break-glass session and its alert, and an audit trail with hidden contents; the steps are written out and browser tests walk them through the front door.
+
+**Decisions:** D114, D115, D172, D182, D45.5, D45.8, D170, D57, D164, D176, D214 (1)–(5) (what the demo shows). Read the S7 shared notes and S1-010's, S2-008's and S3-020's briefs (the demo seed and browser-test pattern).
+
+**Depends on:** S7-015, S7-016, S7-017, S7-020, S7-021 (S7-017 now holds the Failed jobs tab and S7-021 the alerts bell, D215 (E)). It also assumes S1-010 is merged (the S1 checkpoint guarantees it).
+
+**Hot files:** `packages/infra/scripts/seed-demo.ts` (also S2-008's and S3-020's: one at a time).
+
+**Files:**
+- Modify: `packages/infra/scripts/seed-demo.ts`: through the services, so everything is audited: an auditor firm org ("Northwind Audit") with one Auditor, holding a 30-day grant to Acme at `confidential` that the seed claims as that Auditor (as their sign-in would, D214 (2)); a second, pending Acme grant to an email with no account, showing "Waiting for the auditor to sign in"; a parent org ("Initech Group") with two members, an approved 60-day link to Globex at `internal` naming only one of them (D214 (3)); one ended break-glass session on Acme, opened and ended by a demo operator account in Initech Group, confirmed by a second demo operator, with its alert and a review by Acme's Admin (D214 (4)); one failed job example in Acme's test queue. Never a link between Acme and Globex, so the earlier "the other org sees none of it" journeys still hold. Every account the seed makes gets its `home_org_id`.
+- Create: `packages/infra/scripts/demo-admin.ts` (the fixed data), `docs/demo/s7.md`.
+- Create (test writer): `packages/web/e2e/admin.e2e.ts`.
+
+**Pass criteria:**
+1. `pnpm seed:demo` adds the items above; running it twice adds nothing; the earlier seed tests still pass.
+2. Every demo change has its audit entry in Postgres, in both orgs where it crosses.
+3. `docs/demo/s7.md` gives click-through steps: adding a person, opening their one-time set-up link in a private window, setting the password and enrolling TOTP, and seeing the same link refused a second time; resetting a lost authenticator; changing a clearance and seeing a restricted risk disappear for them; the pending grant waiting for its auditor; the Northwind Auditor switching into Acme, the banner, no edit buttons, and switching back; the named Initech user reading Globex while the other Initech user can't; Acme's Admin seeing the break-glass log (confirmed, reviewed) and the alert; the audit trail with a hidden entry for a low-clearance Auditor; revoking the grant and the auditor's next click showing "access ended"; the failed-jobs tab; and, for the operator, `pnpm break-glass:open`, `pnpm break-glass:confirm`, `pnpm backup:run` and `pnpm backup:restore-test` (once S7-012 and S7-013 are merged), with where the Google Drive copy lands. It names `pnpm seed:demo` as the source of the logins and prints no passwords.
+4. **Playwright** (`packages/web/e2e/admin.e2e.ts`, through `https://grc.localhost` with the seeded users): the journeys in criterion 3 except the command-line ones; the set-up journey also checks that the `/account/setup` page and `POST /api/v1/account/setup` answer with `Referrer-Policy: no-referrer` and that the token is gone from the address bar after the page loads (D214 (1)).
+
+**Tests to write:** `packages/api/tests/provision/seed-admin.db.test.ts` (db): criteria 1–2; `packages/infra/tests/demo/s7-demo-doc.unit.test.ts` (unit): criterion 3 and that no password appears; `packages/web/e2e/admin.e2e.ts` (e2e): criterion 4. Security-matrix rows: none.
+
+**Who runs the browser tests:** as in S1-010. The builder runs the db and unit tests; the **integrator**, after merging, rebuilds and recreates `grc-api`, `grc-worker` and `grc-caddy` with `--no-deps` from the main checkout, runs `pnpm seed:demo`, then `pnpm test:e2e` (D172).
+
+**Test command:** `pnpm --filter api test -- seed-admin` (the builder also runs `pnpm --filter infra test -- s7-demo-doc`; the integrator runs `pnpm test:e2e`)
+
+---
+
+Task: S7-024
+
+**Goal:** A new person, or one who lost their authenticator, gets in through a one-time link from their Admin. The link can't be reused, guessed, or leaked through logs or referrers, and it lets its holder do nothing but set a password and then enrol TOTP within 10 minutes.
+
+**Decisions:** D49 (accounts made by an org Admin, sign-up off, MFA for everyone, passwords of at least 12 characters), D54 (5 failures lock for 15 min), D64 (rate limits), D56 (audited), D57, D163, D164, D175, D176, D214 (1) (the whole design: shown once, valid 24 h, single use, dies when the password is set; only a SHA-256 of a random token of at least 128 bits stored; never logged; after the password step the session may only enrol TOTP, within 10 minutes, or a new link is needed; a new link cancels the old; the Admin can revoke it; issuing and use audited; `Referrer-Policy: no-referrer`; the fixed base URL; token checks share the rate limit and lockout; a lost authenticator is reset the same way). Read the S7 shared notes ("One-time set-up links"), S7-003's brief (`user.home_org_id`), M0-010's `auth.ts`, `auth-routes.ts`, `lockout.ts`, `session.guard.ts` and `common/rate-limit.ts`, and M0-012's `audit.service.ts`.
+
+**Depends on:** S7-001 (the limits and schemas), S7-003 (`user.home_org_id`), S7-026 (`pnpm test:env` then accepts this task's own new migration, D220 (1)).
+
+**Hot files:** `packages/api/src/db/migrations/meta/_journal.json` (a new migration), `packages/api/src/identity/schema.ts`, `packages/api/src/identity/auth.ts`, `packages/api/src/identity/auth-routes.ts`, `packages/api/src/identity/session.guard.ts`, `packages/shared/src/access/security-matrix.ts`, `packages/api/src/feature-modules.ts`.
+
+**Files:**
+- Create: a new migration:
+  - `setup_links`: `id uuid pk`, `org_id uuid not null` (the person's home org, whose Admin issued it), `user_id text not null references "user"`, `purpose text not null` (check: `setup`, `mfa_reset`), `token_hash bytea not null unique` (check: 32 bytes), `created_by text not null`, `created_at`, `expires_at timestamptz not null`, `used_at timestamptz`, `revoked_at timestamptz`, `revoked_by text`; a partial unique index so a person has at most one link with `used_at` and `revoked_at` both null; `orgTablePolicySql('setup_links')`.
+  - `app_use_setup_link(token_hash bytea, claimant_email text) RETURNS TABLE (link_id uuid, user_id text, org_id uuid, purpose text)`, SECURITY DEFINER, `search_path` pinned, EXECUTE for grc_app only: in one statement, sets `used_at = now()` on the link with that hash that is unused, unrevoked, unexpired and whose person's email equals `claimant_email`, and returns it; otherwise no row. This is the only way to find a link without the org's context.
+  - `user.setup_pending boolean not null default false` (true from the account's making, or a reset link's use, until TOTP is enrolled); `session.setup_until timestamptz null` (set only on the set-up-only session).
+- Create: `packages/api/src/admin/setup-links/token.ts` (`makeSetupToken(): { token: string; hash: Buffer }`: 32 bytes from `node:crypto` `randomBytes`, base64url without padding, SHA-256 hash; `hashSetupToken(token): Buffer`), `setup-links.service.ts`, `setup-links.controller.ts` (the Admin routes), `account-setup.controller.ts` (the public route), `setup-links.module.ts`.
+- Modify: `auth.ts` (the new `user` and `session` fields; a server-side way to hash a password with Better Auth's own hasher and to make a session, used only by `SetupLinksService`), `auth-routes.ts` (the set-up route counts in the same rate limiter and `SignInLockout` as `POST /api/v1/auth/sign-in/email`; a set-up-only session may use only Better Auth's two-factor enrol and verify routes and sign-out; a correct password for an account with `setup_pending` answers 403 `setup_incomplete`, while a wrong one is the usual failure), `session.guard.ts` (a session with `setup_until`: every Nest route but `GET /api/v1/me` answers 403 `setup_only`; once `setup_until` has passed, the session is deleted and the answer is 401 `setup_expired`), `schema.ts`, `feature-modules.ts`, `security-matrix.ts`.
+
+**Interfaces (produces):**
+- `SetupLinksService.createAccountInTx(tx: Tx, input: { orgId: string; email: string; name: string }): Promise<{ userId: string }>`: an account with no password, `home_org_id = orgId`, `setup_pending = true`. S7-004 calls it.
+- `SetupLinksService.issueInTx(tx: Tx, input: { orgId: string; userId: string; purpose: SetupLinkPurpose; issuedBy: string }): Promise<{ setupLink: string; expiresAt: Date } | null>`: revokes the person's open link (writing `setup_link.revoked` with `meta { replaced: true }`), stores the new hash with `expires_at = now + SETUP_LINK_HOURS`, writes `setup_link.issued` (`meta { purpose, expiresAt }`), and returns `${BETTER_AUTH_URL}/account/setup#token=<token>`. The token exists only in this return value. It returns `null` only in the SSO case S7-009 adds. S7-004 calls it.
+- Admin routes (`admin` `edit`, people only):
+  - `POST /api/v1/admin/people/:userId/setup-link` (`setupLinkRequestSchema`): 201 `{ setupLink, expiresAt }`; 404 for someone who isn't a member of this org; 409 `not_home_org` when the person's home org is another org (R11).
+  - `POST /api/v1/admin/people/:userId/setup-link/revoke`: 204; 409 `no_open_link`.
+  - Issuing a `mfa_reset` link changes nothing yet: the person's authenticator keeps working until the link is used.
+- Public route: `POST /api/v1/account/setup` (`accountSetupSchema`, no session needed; any session cookie sent is ignored):
+  1. The sign-in rate limiter, then `SignInLockout.begin(lockKey(email))`; while locked, the same answer as a locked sign-in.
+  2. `app_use_setup_link(hashSetupToken(token), email)`. No row: a failure for that email in the lockout, and 400 `setup_link_invalid`, one answer for a wrong, expired, used or revoked token and a wrong email.
+  3. In **one** transaction: the new password set with Better Auth's hasher (a credential account made if there is none); for `mfa_reset`, the old authenticator removed (`two_factor` row, `user.two_factor_enabled = false`) and all the person's sessions deleted; `setup_pending = true`; a new session with `setup_until = now + SETUP_TOTP_MINUTES` and `mfaVerified = false`; `setup_link.used` (`meta { purpose }`) in the link's org chain. Any failure leaves the link unused.
+  4. 200 `{ next: 'enrol_totp', until }` with the session cookie.
+- Finishing TOTP enrolment in that session (Better Auth's verify route, as M0-010 wires it) clears `setup_until`, sets `setup_pending = false`, and makes it an ordinary MFA-verified session.
+
+**Pass criteria:**
+1. The migration applies after the existing ones and the Drizzle schemas match. **Org wall (D59):** for each ordered pair of 3 orgs, org A's context can't see, add or change org B's links; no org context sees none; grc_app can't own or change `app_use_setup_link`.
+2. **Issuing:** the link starts with `BETTER_AUTH_URL` even when the request carries a different Host header; the token is 43 base64url characters; the table holds only its SHA-256 (no column holds or contains the token); it expires 24 h later; a second link cancels the first (the first no longer works); revoke works; 409 `not_home_org` and 404 as above.
+3. **Using:** a valid token with the right email and a 12-character password sets the password and opens the set-up-only session; the same token again, after 24 h (a clock the test controls), after revoking, made up, or with another email: 400 `setup_link_invalid`, the same body each time; 5 failures for an email lock it for 15 minutes, and a right token is then refused too; the set-up route and sign-in share one rate-limit count.
+4. **Set-up-only session:** every Nest route but `GET /api/v1/me` answers 403 `setup_only` (generated from `SECURITY_MATRIX.routes`); Better Auth routes other than two-factor enrol, verify and sign-out are refused; after 10 minutes, 401 `setup_expired` and the session is gone; enrolling TOTP within 10 minutes gives an ordinary session and `setup_pending = false`.
+5. Until TOTP is enrolled, password sign-in with the right password answers 403 `setup_incomplete`; once enrolled, sign-in works as before (M0-010's flow).
+6. **Lost authenticator:** before use, the old authenticator still works; using the link removes it, ends every other session of the person, sets the new password, and leads to TOTP enrolment as in 4.
+7. **No leaks (D164, D214 (1)):** `setup_link.issued`, `setup_link.revoked` and `setup_link.used` are written with purpose and times only; no audit entry, log line (pino captured during issue and use), error answer or later answer holds the token, the link or the hash; `POST /api/v1/account/setup` answers with `Referrer-Policy: no-referrer`.
+8. **D59:** every role but Admin gets 403 on the two Admin routes (from `ROLE_TABLE`); an API key gets 403 `people_only`; each ordered pair of 3 orgs: 404.
+9. The existing `auth`, `org-wall` and `api-keys` tests still pass.
+
+**Tests to write:** `packages/api/tests/setup-links/table.db.test.ts` (criterion 1), `issue.db.test.ts` (2), `use.db.test.ts` (3), `setup-session.db.test.ts` (4 and 5), `mfa-reset.db.test.ts` (6), `no-leaks.db.test.ts` (7), `access.db.test.ts` (8) (db); `packages/api/tests/setup-links/token.unit.test.ts` (unit: length, alphabet, `randomBytes` as the source, the hash). Agreement (D174): M0-010's sign-in, MFA and lockout tests; S7-001's `setup-links` schema tests. Security-matrix rows: `POST /api/v1/admin/people/:userId/setup-link` and `POST /api/v1/admin/people/:userId/setup-link/revoke` (access `admin` `edit`, orgWalled true, labels false), and `POST /api/v1/account/setup` (public, like the `/api/v1/auth/*` rows).
+
+**Test command:** `pnpm --filter api test -- setup-links` (the builder also runs `pnpm --filter api test -- auth org-wall api-keys`)
+
+---
+
+Task: S7-025
+
+**Goal:** The nightly backup also saves Postgres, through a read-only account that sees every org, and the monthly restore test proves the Postgres dump restores, with every org's audit chain intact. `pnpm graph:leftovers` reads the full org list through the same account.
+
+**Decisions:** D58, D135, D56 (the chain check), D214 (7) (`pg_dump -Fc` plus `pg_dumpall --globals-only`; encrypted with `age`; the Google Drive copy; the manifest checked first), **D220 (6)** (the account: SELECT only, bypasses row security, its own password in `.env`, used only by the nightly backup's `pg_dump` and by `pnpm graph:leftovers`, never by the API or the worker; it replaces "run as the owner account" in D214 (7), because FORCE RLS applies to the owner too, so an owner's dump would miss rows; making it on the live database is a setup step the user runs if the auto-mode check refuses it), D217 and Q-S1-014b (`graph:leftovers` stays fail-safe and now reads the full org list), D73 (FORCE RLS on every org table), D57 (restricted accounts; secrets only in `.env`), D170 (Mac-side scripts reach Postgres on 127.0.0.1:5433), D208 (a setup command the user reruns if the auto-mode check refuses it), D163, D164, D176. The user's answer to **S7-Q10**. Read the S7 shared notes ("Backups"), S7-012's and S7-013's briefs (`BackupPart`, `RestorePart`, `verifyManifest`), `packages/infra/postgres/init/01-roles.sql`, `packages/infra/scripts/setup-secrets.ts`, `packages/infra/scripts/leftover-org-databases.ts` (S1-014) and M0-012's chain-hash function.
+
+**Status:** blocked until S7-Q10 is answered: which Postgres account makes, restores into and drops the monthly restore test's throwaway copy. The D220 (6) account only reads and is used only by the dump and `graph:leftovers`, and `grc_migrator` can't make databases (NOCREATEDB). The restore half below is written to the recommendation and marked [S7-Q10]: (a) a restore-test account that may only create databases (Postgres lets an account drop only the databases it owns, so it can never drop `grc`), with its password only in the backup settings file, like Neo4j's `grc_restore_test` (D214 (8)). The other options: (b) the container's `postgres` superuser, with the code's `restore_test_` name check as the only limit; (c) one fixed database made once and restored over each month, like Neo4j's `restore-test`. The account, the dump and `graph:leftovers` are settled (D220 (6)).
+
+**Depends on:** S7-012, S7-013.
+
+**Hot files:** root `package.json` (adds `setup:postgres`), `.env.example` (one name), `packages/infra/scripts/setup-secrets.ts` (the new URL), `packages/infra/scripts/test-env-checks.ts` (`REQUIRED_ENV_KEYS` holds every `.env.example` name, TEST-002).
+
+**The account (D220 (6); its names and `setup:postgres` are planner's reading R18):** `grc_ops_reader`, with `DATABASE_URL_OPS_READER=postgres://grc_ops_reader:<password>@grc-postgres:5432/grc` in `.env` (filled by `pnpm setup:secrets` like the other two URLs; Mac-side scripts swap the host, D170).
+- `LOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`. It can read every table and sequence of the app database, in every schema (`public`, `drizzle`, `pgboss` and any a later migration adds), including tables and partitions made later (a new org's partitions, a new queue). Nothing else: no INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER or CREATE anywhere, no membership in a role that gives more, and not the role passwords (`pg_authid`).
+- Used only by the nightly backup's `pg_dump` and `pg_dumpall --globals-only --no-role-passwords`, and by `pnpm graph:leftovers`. Never by the API or the worker: compose passes its URL to no container, and nothing in `packages/api/src` reads it.
+- Made by a new root command, `pnpm setup:postgres` (`packages/infra/scripts/setup-postgres.ts`), run as the Postgres superuser (`POSTGRES_PASSWORD`, through the dev relay, D170): it creates the account if it's missing, sets its password from `.env`, gives exactly the rights above, and says what it did without printing a secret; running it again changes nothing. It works the same on the live database and on a fresh volume (after the migrations). `01-roles.sql` and compose stay unchanged. Running it on the live database is a setup step for the main session, or for the user if the auto-mode check refuses it (D220 (6), D208); no agent in this task runs it there.
+- **No migration:** a migration that names the account would fail wherever it doesn't exist yet, including every throwaway test database until the setup step has run.
+
+**Files:**
+- Create: `packages/infra/scripts/setup-postgres.ts`; `packages/infra/scripts/backup/postgres.ts` (a `BackupPart`), `restore-postgres.ts` (a `RestorePart`).
+- Modify: root `package.json`, `.env.example`, `packages/infra/scripts/setup-secrets.ts`, `packages/infra/scripts/test-env-checks.ts`, `packages/infra/scripts/leftover-org-databases.ts`, `packages/infra/scripts/backup/run.ts` and `restore-test.ts` (register the parts), `docs/operations/backups.md` (the account, `setup:postgres` and when to run it).
+
+**What it does:**
+- **Backup (a `BackupPart` named `postgres`):** `pg_dump -Fc` of the app database and `pg_dumpall --globals-only --no-role-passwords`, both as `grc_ops_reader`, run inside `grc-postgres` with `docker exec`; its password never appears on a command line, in output or in a log. Into the manifest: row counts per table, and per org the last audit `seq` and `hash`. Both files are encrypted and copied to Google Drive exactly as S7-012's parts are.
+- **`pnpm graph:leftovers` (Q-S1-014b):** reads the live org list as `grc_ops_reader` instead of the migration account, still in a READ ONLY transaction. Its fail-safe check stays: it refuses and exits 1 if row security would hide any org from the account it uses. Everything else stays as S1-014 left it.
+- **Restore test (a `RestorePart`) [S7-Q10]:** after S7-013's manifest check, a restore-test account (`grc_pg_restore_test`: LOGIN and CREATEDB only; its password made by `pnpm setup:postgres` and written only to the backup settings file, `BACKUP_SETTINGS_FILE`, never `.env`) creates `restore_test_<date>` and restores the dump into it without owners or grants, so it owns everything in the copy. It turns off FORCE row security on the copy's tables so it reads every row, compares row counts with the manifest, re-checks every org's audit chain on the copy with M0-012's chain-hash function, compares its last `seq` and `hash` with the manifest, then drops the copy. The code refuses any database name that doesn't start with `restore_test_`, and Postgres itself refuses the account any database it doesn't own.
+
+**Pass criteria:**
+1. **The account (D220 (6)):** `setup:postgres`'s statements (unit) give `grc_ops_reader` exactly the attributes and rights above. On a throwaway database (db) it reads every org's rows past FORCE RLS, including a partition made after its rights were given (a new org); every INSERT, UPDATE, DELETE, TRUNCATE and CREATE it tries is refused; it can't read `pg_authid`. A second `setup:postgres` run changes nothing and prints no secret.
+2. **Only for the scripts:** compose passes `DATABASE_URL_OPS_READER` to no container; nothing in `packages/api/src` reads it, and it isn't in the API's settings list (`APP_SETTINGS`, S1-013). `.env.example` and `setup:secrets` know the name (a URL like the other two), and `REQUIRED_ENV_KEYS` holds it.
+3. **The dump:** on throwaway databases, it holds every org's rows (counts equal to the source's), and the manifest's counts, `seq`s and hashes match; the globals file holds no role passwords.
+4. **`graph:leftovers`:** reads the org list as `grc_ops_reader`, never through `DATABASE_URL_MIGRATE`; with the account in place it lists the leftovers and exits 0; it still refuses (exit 1) when row security hides orgs from the account it uses; S1-014's `leftover-org-databases` tests still pass.
+5. [S7-Q10] The restore test passes on a good backup and fails, naming the part, on a broken audit entry or a changed row count (fixtures); the copy is dropped either way; the restore-test account can't drop or change a database it doesn't own.
+6. A name outside `restore_test_` is refused before anything runs; the live `grc` database is never written, dropped or restored over.
+7. Output and logs hold no passwords or record contents (D57, D163, D164).
+8. S7-012's and S7-013's tests still pass.
+
+**Tests to write:** `packages/infra/tests/backups-postgres/setup-statements.unit.test.ts` (criteria 1's statements and 2) and `names.unit.test.ts` (6) (unit); `packages/infra/tests/backups-postgres/account.db.test.ts` (1), `dump.db.test.ts` (3) and `restore.db.test.ts` (5, 6) (db, throwaway databases only); the `graph:leftovers` change in `packages/infra/tests/leftover-org-databases/` (4). The db tests need `grc_ops_reader` (and the [S7-Q10] account) to exist already. They give it its rights only inside their own throwaway databases, with the same code `setup:postgres` runs, and never create, change or drop an account or grant anything on the live `grc` database (D176). If an account is missing, they stop and the test writer reports it for the main session (`pnpm setup:postgres`). Security-matrix rows: none.
+
+**Test command:** `pnpm --filter infra test -- backups-postgres leftover-org-databases` (the builder also runs `pnpm --filter infra test -- backups restore-test test-env`)
+
+---
+
+Task: S7-026
+
+**Goal:** A task that adds a Postgres migration can run its database tests, because those tests migrate their own throwaway databases, while the shared dev database only ever gets migrations that are on `main`. `pnpm test:env` requires only `main`'s migrations, and a new `pnpm db:migrate` applies them after a merge.
+
+**Decisions:** **D220 (1)** (this task), D57 (migrations run only as grc_migrator, through `DATABASE_URL_MIGRATE`, which the apps never read), D170 (Mac-side scripts swap the container host for 127.0.0.1:5433 themselves; `.env` keeps one set of addresses), D176 (a task worktree never puts unmerged work into the shared database; never weaken live privileges or shared state to prove a test), D180 (`pnpm test:env` checks and changes nothing), D183 (the integrator numbers migrations at merge), D45.5 (re-runs are safe), D45.7 (fail safe), D61 and D132 (127.0.0.1 only; the dev switch opens 5433), D163 and D164 (tags and error types only in output). Read the S7 shared notes, TEST-002's brief, `packages/infra/scripts/test-env.ts`, `test-env-checks.ts` and `host-address.ts`, and `packages/api/drizzle.config.ts`.
+
+**Depends on:** none.
+
+**Hot files:** root `package.json` (adds `db:migrate`), `packages/infra/scripts/test-env-checks.ts` (S7-025 changes it too).
+
+**Files:**
+- Modify: `packages/infra/scripts/test-env-checks.ts` (the `migrations` item's rule) and `test-env.ts` (reads `main`'s journal as well as the checkout's).
+- Create: `packages/infra/scripts/db-migrate.ts`; root `package.json` gets `db:migrate`.
+- TEST-002's `packages/infra/tests/test-env/test-env-checks.unit.test.ts` drives the rule through fake probes. If the builder changes the probes, those tests go to the test writer (D219).
+
+**What it does:**
+- **`pnpm test:env`, the `migrations` item (D220 (1)):**
+  - Required: every entry of `main`'s `packages/api/src/db/migrations/meta/_journal.json`, read from the local `main` branch with git, so the check is the same from the main checkout and from any task worktree. Each must be in the live dev database's `drizzle.__drizzle_migrations`, read-only, as today.
+  - An entry in the checkout's journal that `main` doesn't have is listed on the item's OK line as "this branch only, not required: <tags>" and never fails the item: the task's own tests migrate their throwaway databases (D176, D180).
+  - A `main` migration the live database lacks still fails the item, named by its tag.
+  - If `main`'s journal can't be read (no `main` branch, no git, bad JSON), the item is `missing` with the error's type only (fail safe).
+  - The other items don't change, and the command still changes nothing.
+- **`pnpm db:migrate` (new):** applies `main`'s migrations to the live dev database with drizzle-kit (`migrate` only) as grc_migrator. `DATABASE_URL_MIGRATE`'s host is swapped to 127.0.0.1:5433 with `toHostAddress` (D170), and the URL reaches drizzle-kit only through its environment: never printed, never on a command line.
+  1. Before it connects, it compares the checkout's migrations with `main`'s: the same journal entries and the same SQL files. If the checkout has a migration that isn't on `main` (an entry `main` lacks, or a file whose SQL differs from `main`'s copy), it refuses, naming each by tag, exits non-zero and changes nothing, so a task worktree can't put its unmerged migration into the shared database (D176). A checkout that lacks some of `main`'s migrations is refused the same way, naming them, so a run always applies exactly `main`'s set (planner's reading).
+  2. Otherwise it applies what the database lacks and prints each migration it applied by tag, or that none was needed. Then it checks that every `main` migration is in `drizzle.__drizzle_migrations`, and exits non-zero naming any that isn't.
+  3. Safe to rerun: a second run applies nothing and exits 0.
+  4. If nothing answers on 127.0.0.1:5433 (the dev switch is off, D132), it stops at once with a clear message. Errors print their type or code only.
+  - For tests: an option naming the target database (default: the one in `DATABASE_URL_MIGRATE`), so tests run it against throwaway databases only; the checkout and `main` come from the working folder's git repository, so a test can run it inside a temporary repository.
+- Running `pnpm db:migrate` after a merge that adds a migration is the integrator's step (D220 (1)), not part of this task.
+
+**Pass criteria:**
+1. **`test:env`'s rule (unit, fake probes):** OK when every `main` migration is applied, and the OK line lists the checkout's extra migrations as "this branch only, not required"; `missing`, naming the tag, when a `main` migration isn't applied, whether or not the checkout has it; `missing`, with the error's type only, when `main`'s journal can't be read; a `drizzle.__drizzle_migrations` row that no journal lists still doesn't matter.
+2. **`test:env` on the running stack:** from the main checkout it still exits 0 with every item OK and changes nothing (TEST-002's stack test).
+3. **`db:migrate` applies (db):** in a temporary git repository against a throwaway database, it applies `main`'s migrations and prints their tags; afterwards every `main` migration is recorded; a second run applies nothing and exits 0.
+4. **`db:migrate` refuses (db):** from a checkout with an extra migration, a changed migration file, an entry whose `when` differs, or a missing migration, it exits non-zero naming the tags, before connecting, and the target database is unchanged (no new `drizzle.__drizzle_migrations` row, no new table).
+5. **No secrets (D57, D164):** its output holds no URL, password or SQL text; a closed 127.0.0.1:5433 gives the clear message and a non-zero exit.
+6. No test touches the live `grc` database (D176). The existing `test-env` and `org-script-env` tests still pass.
+
+**Tests to write:**
+- `packages/infra/tests/test-env/test-env-checks.unit.test.ts` (unit; TEST-002's file, updated): criterion 1.
+- `packages/infra/tests/db-migrate/refusal.unit.test.ts` (unit): the refusal rule on sample journals and SQL files, with no database (criterion 4's cases).
+- `packages/infra/tests/db-migrate/db-migrate.db.test.ts` (db): criteria 3–5, in temporary git repositories against throwaway databases.
+- Agreement (D174): TEST-002's `test-env` tests and the `org-script-env` host-swap tests (D170). Security-matrix rows: none (no route).
+
+**Test command:** `pnpm --filter infra test -- test-env db-migrate`
+
+---
+
+Task: S7-027
+
+**Goal:** Two tests that failed once under load give the same result every time, and still prove exactly what they prove today (D171: a test that fails and then passes is a bug for the test writer).
+
+**Decisions:** **D220 (3)** (this task), D171 (no retries anywhere), D173 (no skips), D219 (the builder goes first, then the test writer, who hands in through the D167 fix path), D174, D176, D177. What the tests prove: D36 and D46 (one codebase, two programs; the 11 modules, each a folder with a module file that exports its module class), D200, D201 and D207 (S1-011 criterion 2: an `ai` link can't be removed through `POST /api/v1/links/remove`), and D48 ("Postgres catching up within 5 s", the audit relay's target). Read the S1 shared notes, S1-011's brief, `packages/api/tests/link-removal/helpers.ts` (`relayed` waits up to 5 s for an entry), and M0-013's audit relay (`packages/api/src/audit/outbox.ts` and `outbox-relay.job.ts`).
+
+**What failed** (`logs/build-errors.md` items 35 and 36):
+- `packages/api/tests/platform/modules.unit.test.ts` > "D46 module layout" > "src/identity has a module file that exports its module class" went over its 5 s limit once, in a full suite run while the S2 + S3 + S7 build ran (the `s1` tag step). It passed in all 6 S1 checkpoint runs. The test imports each module file.
+- `packages/api/tests/link-removal/ai-link-refused.db.test.ts`: `relayed` waited more than 5 s for the audit relay to copy an entry to Postgres while S3-001 merged. It passed in all 3 runs at the S1 checkpoint.
+
+**Depends on:** none.
+
+**Hot files:** none.
+
+**Who does what (D219):**
+- **Builder:** first finds out whether the code under test is at fault: the module layout (what importing each module file loads, and how long a cold import takes) and the audit relay (how often it copies entries and how long a copy takes, against D48's 5 s). It changes code only if the code is at fault, with the smallest change that fixes it. Otherwise it commits nothing and hands off saying why, with what it measured.
+- **Test writer:** makes both tests give the same result every time under load, keeping what each proves: no retries, no sleeps used as waits, no skips (D171, D173). If it changes the shared `link-removal/helpers.ts`, every test that uses it must still pass.
+
+**Files:** `packages/api/tests/platform/modules.unit.test.ts`, `packages/api/tests/link-removal/ai-link-refused.db.test.ts` and, if the wait is fixed there, `packages/api/tests/link-removal/helpers.ts` (test writer); code under `packages/api/src/` only where the builder finds it at fault.
+
+**Pass criteria:**
+1. The builder's hand-off says whether the module layout or the relay is at fault, with what it measured. Code changes only where it is at fault, and then M0-013's `outbox` tests and the `modules` layout test still pass.
+2. `modules.unit.test.ts` still checks each of the 11 module folders (`src/<name>/<name>.module.ts` exists and exports `<Name>Module`) and the two programs (`main.api.ts`, `main.worker.ts`, `app.module.ts`, `worker.module.ts` and their exports), and its result no longer depends on how busy the machine is.
+3. `ai-link-refused.db.test.ts` still checks every case it checks today (S1-011 criterion 2: 404, then 403, then 409 `ai_link_review_only` with the exact message, for people and keys across every role and link type; the link and both records unchanged; no `link.removed` entry in Postgres for a refused link; an `import` link removed with exactly one entry whose `before.origin` is `import`). A slow relay no longer fails it; a relay that never copies an entry still fails it, naming what it waited for.
+4. No retry options, no sleeps used as waits, no skips, and no case removed or weakened (D171, D173).
+5. Both pass the finish check's 3 runs; if `link-removal/helpers.ts` changed, `pnpm --filter api test -- link-removal` passes too.
+
+**Tests to write:** changes to the two files above (kinds unchanged: `unit` and `db`) and, if needed, `link-removal/helpers.ts`. Agreement (D174): S1-011's `link-removal` tests, M0-007's layout test and M0-013's `outbox` tests. Security-matrix rows: none.
+
+**Test command:** `pnpm --filter api test -- modules ai-link-refused`

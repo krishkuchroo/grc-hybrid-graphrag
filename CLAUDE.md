@@ -26,17 +26,20 @@ It's a portfolio project and research prototype. It **must look like a finished 
 6. **Data structures.** ✅ Locked 2026-09-25 (D66–D73).
 7. **Stress test and benchmark.** Run against datasets. Targets: consistent, concurrent, scalable, durable. ⏸ **Deferred by the user on 2026-09-25.** Resume later from the Q73 proposal in memory.md ("Deferred phases").
 8. **Orchestration layer.** A multi-agent setup that is configured from the finished plan. ✅ Decisions locked 2026-09-26 (D74–D107). ✅ Done 2026-09-27: 9 agents, the hooks, the monitor and the board, verified by smoke tests, with the review's findings fixed (D119).
-9. **Workflow generation.** Build workflows that support the orchestration layer and build out the solid project layer. Decided 2026-09-27 (D109–D121). The milestone workflow is written, and gets a real test after setup. ← *current phase*
+9. **Workflow generation.** Build workflows that support the orchestration layer and build out the solid project layer. Decided 2026-09-27 (D109–D121). The milestone workflow is written, and gets a real test after setup.
+10. **Build the MVP (fast mode, D222).** Builder → integrator per task until the demo works end to end; then test. ← *current phase*
 
-## Current state (saved 2026-10-06, before a PC restart; resume from here)
-- **M0 and S1 are done, approved and tagged** `m0` (D193) and `s1` (D218). Reports: `docs/checkpoints/m0.md`, `docs/checkpoints/s1.md`. The D160 history rewrite is done: old task branches and worktrees carry the pre-rewrite history, so never merge them as they are.
-- **Save point (2026-10-06):** branch `save/2026-10-06-restart` and local tag `checkpoint-2026-10-06` hold everything, including the uncommitted `TASKS.md` (the whole S2/S3/S7 plan) and `SECURITY-FINDINGS.md`. `RoughWork.md` is the user's and never committed. Local `main` is 10 commits ahead of GitHub (D219–D221, S2-001, this note); only an integrator may push.
-- **After the restart:** start Docker Desktop (the `grc-*` containers come back on their own); start the GRC DBMS **from Neo4j Desktop** (started from its own command it prints a licence notice); `pnpm test:env` must be all OK; start the monitor with `node .claude/monitor/server.mjs`. If `TASKS.md` in the main checkout ever loses the S2/S3/S7 briefs, restore it with `git checkout save/2026-10-06-restart -- TASKS.md`.
-- **Slices run one at a time (D221): S2 → S3 → S7 → S4 → S5 → S6 → S8. S2 is paused (run `wf_e4b0298a-bbf` ended):** S2-001 is built, tested, approved, and merged into local `main` (5440bf9) but **not pushed**: the integrator's full suite hit the Neo4j fault (a new throwaway database "locked by another process"; about 1 in 630 creates, so about 1 full run in 3–4; `logs/build-errors.md` item 37). S2-002 to S2-008 wait on S2-001. **Waiting on the user's choice of fix:** (a) tests replace a database Neo4j fails to start, once, under a new name (recommended); (b) tests reuse a few databases; (c) upgrade Neo4j. The fix goes into S7-027, run first as `{milestone: "s7", step: "build", only: ["S7-027"]}`; then S2 resumes with `{milestone: "s2", step: "build", from: {"S2-001": "merge"}, notes: {"S2-001": "Already merged into local main (5440bf9); run the full suite once and push if clean."}}`. The failed database `org-e60975e8…` is still in Neo4j; deleting it needs the user's OK.
-- **Waiting on the user:** the Neo4j fix (above); committing `TASKS.md` and `SECURITY-FINDINGS.md` to `main` and an integrator pushing what's safe; the two D219 hook changes (`BUILDER_RUNS` 3 → 1; the integrator's finish check without its full suite); whether to drop the test-driven-development skill (D219); before S3, whether an owner-only change resets reviewed evidence; before S7, S7-Q10 (the restore-test account; recommended: one that may only create databases) and where the off-site backup copy goes (Google Drive for desktop isn't installed; recommended: a local folder for now).
-- **How a build runs:** if a run dies, start a fresh one with the same args. A task stuck mid-stage restarts with `from: {"<ID>": "build" | "test" | "review" | "merge"}` and a note in `notes`. Watch it in the monitor (http://127.0.0.1:4800, Overview → "Tasks now"), `/workflows`, or the main session's watcher (scratchpad `wait-event.mjs` on the run's `journal.jsonl`).
-- **Then:** the S2 checkpoint (suite 3×, browser tests, `/insecure-defaults:audit`, an easy-to-read report, the user's approval, tag `s2`). Then S7-026 and S7-027 as a small S7 run (`only`), because S3-003 needs S7-026; then S3, S7, S4, S5, S6 and S8, each built and checkpointed on its own (D221).
-- **Workflow:** `milestone.js` builds one slice per run (D221); it still accepts a list of slices (D183), unused since D221. 4 agents at once; hot-file locks from build to merge; one integrator at a time, merging waiting tasks as one batch (D215); migration numbers given at merge.
+## Current state (updated 2026-10-15; resume from here)
+- **FAST MODE (D222, 2026-10-15): build a working MVP demo first, test after.** Each task goes builder → integrator, up to 4 builders at once. No new tests, no test writer, no reviewers, no 3× runs, no full suite before a push. The finish check is lint + type checks only (`FAST_MODE` in `.claude/hooks/lib/checks.mjs`). The integrator merges, runs lint and type checks, rebuilds the stack, checks the app starts, and pushes after each merge. Existing tests stay in the repo. The other guard rails and the security decisions (D49–D59) still apply. Run with `{milestone: "s2", step: "build"}`; `fast: false` brings back the full chain.
+- **MVP order:** S2 frameworks → S3 uploads + generators → S4 processing → S5 Analyst review → S6 search + chat → S8 dashboard + benchmark. **S7 waits until after the MVP.** S4, S5, S6 and S8 still need their plan step (fast-mode briefs: behaviour only, no tests). Then testing and the checkpoints (D114) on the finished MVP.
+- **M0 and S1 are done, approved and tagged** `m0` (D193) and `s1` (D218). Reports: `docs/checkpoints/m0.md`, `docs/checkpoints/s1.md`. The D160 history rewrite is done: old task branches carry the pre-rewrite history, so never merge them as they are.
+- **S2:** S2-001 is merged into local `main` (5440bf9), not pushed. S2-002 to S2-008 are to do. The Neo4j test-database fault (`logs/build-errors.md` item 37) only hits test runs, so it waits with the tests (D222); S7-027 is not run first. The failed database `org-e60975e8…` is still in Neo4j; deleting it needs the user's OK.
+- **Save point (2026-10-06):** branch `save/2026-10-06-restart` and local tag `checkpoint-2026-10-06`. `RoughWork.md` is the user's and never committed. If `TASKS.md` loses the S2/S3/S7 briefs, restore it with `git checkout save/2026-10-06-restart -- TASKS.md`.
+- **Cleanup (2026-10-09):** 88 old worktrees (Sep 27–29) removed; each one's last commit is kept as a local ref `refs/archive/worktrees/<name>`. The Mac hadn't restarted in weeks and swap was nearly full, which is what made builds crawl: restart it when it slows down.
+- **Starting up:** start Docker Desktop (the `grc-*` containers come back on their own); start the GRC DBMS **from Neo4j Desktop**; `pnpm test:env` should be all OK; the monitor is `node .claude/monitor/server.mjs`.
+- **How a build runs:** if a run dies, start a fresh one with the same args. A task stuck mid-stage restarts with `from: {"<ID>": "build" | "merge"}` and a note in `notes`. Watch it in the monitor (http://127.0.0.1:4800), `/workflows`, or the run's `journal.jsonl`.
+- **Workflow:** `milestone.js` builds one slice per run (D221). Hot-file locks from build to merge; one integrator at a time, merging waiting tasks as one batch (D215); migration numbers given at merge.
+- **Waiting on the user, not blocking the MVP:** before S7, S7-Q10 (the restore-test account) and where the off-site backup copy goes; whether an owner-only change resets reviewed evidence (S3).
 - **Open, not blocking:**
   - The planner's S1 readings to confirm: the S1-Q6 split into S1-011/S1-012; names `POST /api/v1/links/remove`, `canLinkRecords`, `linkRemovedAudit`, `FIRST_NUMBER`, `MAP_*`; values stored lowercase with `_`.
   - Q39's context hand-off part.
@@ -256,7 +259,7 @@ Consistent · Concurrent · Scalable · Durable · Follows good design principle
     8. The dashboard and the benchmark.
   - **One slice at a time (D221):** S1 → S2 → S3 → S7 → S4 → S5 → S6 → S8, each built in its own run. (D181's parallel groups were dropped on 2026-10-02.)
   - The user approves at the end of each milestone, with one checkpoint per slice (D114, D221). Each checkpoint has a demo and test results.
-- **Done means:**
+- **Done means** (paused by fast mode, D222: until the MVP works, done = lint + type checks pass and the integrator merged it):
   - The test writer's tests pass.
   - The code and security reviewers approve. After 3 send-backs, it goes to the user.
   - Lint, type checks, the secret scan and the dependency scan are clean.
@@ -319,6 +322,7 @@ Every agent ends its report with one hand-off block (D91). The hooks read it at 
 - **Workflows:** a workflow that runs our agents gives them this object as their output schema.
 
 ## Testing (locked 2026-09-28; details in memory.md D167, D168, D170–D180)
+> **Paused by fast mode (D222, 2026-10-15):** no new tests and no test runs gate a task until the MVP demo works. The rules below apply again when testing starts.
 - **Test kinds, named by what they need (D177):**
   - `*.unit.test.ts`: nothing. The default kind.
   - `*.db.test.ts`: Postgres, Neo4j or SeaweedFS, through throwaway databases.

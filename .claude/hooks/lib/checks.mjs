@@ -17,6 +17,27 @@ export const LIMITS_MS = {
 // A builder's tests run this many times, and must pass every time (D171).
 export const BUILDER_RUNS = 3;
 
+// Fast mode (D222): build to a working MVP first, test after. Builders and
+// the integrator finish on lint and type checks only; no test runs.
+export const FAST_MODE = true;
+
+export function evaluateFast(finishCheck, handoff, repo, run = runCommand) {
+  const scripts = packageScripts(repo);
+  if (!scripts) return { ok: true, lines: ['checks skipped: no package.json yet, so no code (D97)'], failures: [] };
+  const lines = ['fast mode (D222): lint and type checks only'];
+  const failures = [];
+  for (const [label, script] of [['lint', 'lint'], ['typecheck', 'typecheck']]) {
+    if (!scripts[script]) {
+      lines.push(`${label}: skipped (no ${script} script yet)`);
+      continue;
+    }
+    const r = run(['pnpm', script], repo, LIMITS_MS[label]);
+    lines.push(`${label}: ${r.ok ? 'pass' : r.timedOut ? 'timed out' : 'fail'}`);
+    if (!r.ok) failures.push({ label, message: r.timedOut ? `${label} took too long and was stopped` : `${label} failed`, output: r.output });
+  }
+  return { ok: failures.length === 0, lines, failures };
+}
+
 // null when there's no package.json yet: no code, so no checks (D97).
 export function packageScripts(repo) {
   try {

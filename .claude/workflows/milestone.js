@@ -20,6 +20,15 @@ const BUILDERS = ['builder-platform', 'builder-backend', 'builder-frontend', 'bu
 const MAX_AT_ONCE = 4 // agents at once, shared by every slice in the run (D183, D219)
 const MAX_ROUNDS = 3 // builder ↔ test-writer rounds, and reviewer send-backs (D78, D86)
 const STAGES = ['build', 'test', 'review', 'merge']
+// Fast mode (D222): MVP first, test after. Each task is builder → integrator;
+// no test writer, no reviewers, no full suite. Pass `fast: false` for the
+// full chain.
+const FAST = (typeof args === 'object' && args && !Array.isArray(args) && args.fast === false) ? false : true
+const FAST_RULES = [
+  'FAST MODE (D222): we are building a working MVP demo first and testing after. Do not write new tests and do not run the test suites. Skip any "Tests to write" or test-command parts of the brief.',
+  'Still: the code must be complete and working end to end (API, worker and screens wired together, no stubs, no TODOs), it must pass `pnpm lint` and `pnpm typecheck`, and security decisions (org wall, roles, labels, audit) still apply.',
+  'In `tests.run`, put "none (fast mode)".',
+]
 
 // Effort per agent (D219): xhigh where the work is judgement (building,
 // testing, security), high everywhere else.
