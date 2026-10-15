@@ -7,6 +7,9 @@
 // and /api/v1/import-mappings, and the asset-list reader, which only the worker program registers.
 // Uploads (S3-004): the UploadsService and POST /api/v1/uploads; the multipart body and the upload
 // rate limit are registered on Fastify by the API program (src/main.api.ts).
+// Evidence (S3-009): the EvidenceService and its routes under /api/v1/evidence and
+// /api/v1/controls/:id/evidence; evidence files are stored through storeUpload under the intake
+// system context (R12), and POST /api/v1/evidence counts toward the upload rate limit.
 // Import runs (S3-007): the ImportRunService and POST /api/v1/imports/:id/run, and the asset import
 // job, which only the worker program registers; the reader starts a run by itself for a source with
 // a saved mapping that fits.
@@ -29,6 +32,8 @@ import {
 import { FindingsService } from './audit-findings/findings.service.js';
 import { DocumentsController } from './documents/documents.controller.js';
 import { DocumentsService } from './documents/documents.service.js';
+import { ControlEvidenceController, EvidenceController } from './evidence/evidence.controller.js';
+import { EvidenceService } from './evidence/evidence.service.js';
 import { AssetImportJob } from './imports/asset-import.job.js';
 import { AssetListReaderJob } from './imports/asset-list-reader.job.js';
 import { ImportsController } from './imports/imports.controller.js';
@@ -48,6 +53,8 @@ Module({
     ControlAuditFindingsController,
     RiskAuditFindingsController,
     DocumentsController,
+    EvidenceController,
+    ControlEvidenceController,
     ImportsController,
     ImportRunController,
     MappingsController,
@@ -58,6 +65,12 @@ Module({
       provide: FindingsService,
       useFactory: (graph: GraphService, outbox: AuditOutbox, db: Db) => new FindingsService({ graph, outbox, db }),
       inject: [GRAPH, AuditOutbox, DB],
+    },
+    {
+      provide: EvidenceService,
+      useFactory: (graph: GraphService, outbox: AuditOutbox, db: Db, audit: AuditService, files: FileStore) =>
+        new EvidenceService({ graph, outbox, db, audit, files }),
+      inject: [GRAPH, AuditOutbox, DB, AuditService, FILE_STORE],
     },
     {
       provide: DocumentsService,
@@ -100,5 +113,13 @@ Module({
       inject: [JobsService, DB, GRAPH, AuditOutbox, AuditService, FILE_STORE],
     },
   ],
-  exports: [FindingsService, DocumentsService, ImportsService, ImportRunService, MappingsService, UploadsService],
+  exports: [
+    FindingsService,
+    EvidenceService,
+    DocumentsService,
+    ImportsService,
+    ImportRunService,
+    MappingsService,
+    UploadsService,
+  ],
 })(IntakeModule);
