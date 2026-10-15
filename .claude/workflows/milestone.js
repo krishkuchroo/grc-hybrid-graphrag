@@ -421,6 +421,10 @@ async function pushSlice(m, testCommand = '') {
 // SLICE_ROUNDS times. The test writer's branch is merged last. Returns
 // { status, findings, testCommand }.
 const SLICE_ROUNDS = 3
+// D227: from S3 on, no test writer during the MVP; testing comes at the end.
+// The two reviewers still check each slice. `sliceTests: true` brings the
+// test writer back.
+const SLICE_TESTS = given.sliceTests === true
 const RT = 'Review and test'
 async function reviewAndTestSlice(m, built) {
   const M = m.toUpperCase()
@@ -430,7 +434,9 @@ async function reviewAndTestSlice(m, built) {
   let testCommand = ''
   let lastFixes = ''
   for (let round = 1; round <= SLICE_ROUNDS; round++) {
-    const twRun = handIn(
+    const twRun = !SLICE_TESTS
+      ? Promise.resolve({ taskId: `${M}-TEST`, status: 'done', findings: 'no slice tests during the MVP (D227)' })
+      : handIn(
       `${M}-TEST`,
       'test-writer',
       [
@@ -468,6 +474,7 @@ async function reviewAndTestSlice(m, built) {
     const issues = []
     if (tw.codeProblem) issues.push({ owner: tw.fixOwner, text: `Failing tests (on \`${testBranch}\`):\n${tw.findings}` })
     for (const h of [code, security]) if (h.status === 'sent-back') issues.push({ owner: h.fixOwner, text: h.builderFixes || h.findings })
+    if (!issues.length && !SLICE_TESTS) return { status: 'done', findings: `round ${round}: both reviewers approved (no slice tests, D227)`, testCommand }
     if (!issues.length) {
       const merged = await queueMerge({ id: `${M}-TEST`, branch: testBranch, worktrees: tw.worktree ? [tw.worktree] : [], note: `This branch holds only the ${M} tests (D224); the reviewers approved the slice.` })
       if (merged.status !== 'done') return { status: 'blocked', findings: `merging the tests: ${merged.findings}`, testCommand }
