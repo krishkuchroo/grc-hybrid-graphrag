@@ -360,5 +360,29 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // The push API (S3-008, D47, D54, D64, D213 (5)): pushing is for API keys only (a signed-in
+    // person gets 403 `api_key_required` first), then the `uploads` cell at the guard, then
+    // `canImportAssets` for the key's one role in the service (Admin, Risk Manager, Compliance
+    // Manager and Analyst keys push; Control Owner, Auditor and Viewer keys get 403). The org comes
+    // from the key only; the batch is stored in that org's bucket and imported into its own graph,
+    // labelled `internal` (never above the key's clearance), with every import entry carrying
+    // `meta.importId` and `meta.pushBatchId`. A repeat batch gets the first answer. 60 batches a
+    // minute per key; 1 MB. The list (people and keys) shows a batch only when its document's record
+    // type is one the role views and its label is at or below the caller's clearance (checked by
+    // the service and again by RLS).
+    {
+      method: 'POST',
+      path: '/api/v1/push/batches',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/push/batches',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };

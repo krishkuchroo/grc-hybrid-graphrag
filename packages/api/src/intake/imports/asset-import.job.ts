@@ -28,7 +28,7 @@ import { randomUUID } from 'node:crypto';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import neo4j, { type ManagedTransaction } from 'neo4j-driver';
 import { canImportAssets, isLabel, LABELS, type ImportMapping, type Label } from '@grc/shared';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import type { AuditService } from '../../audit/audit.service.js';
 import type { AuditOutbox, OutboxAudit } from '../../audit/outbox.js';
@@ -533,10 +533,13 @@ async function importRows(
   const lookups = await withOrgContext(deps.db, sys, async (tx) => {
     const owners = await ownersByEmail(tx, data.orgId, ownerEmailsNamed({ mapping, rows }));
     const ownerId = await fallbackOwner(tx, data.orgId, data.runner);
+    // The batch that brought the file is the first one recorded against its import (a later batch
+    // with the same rows is recorded against the same import, S3-008).
     const [batch] = await tx
       .select({ batchId: pushBatches.batchId })
       .from(pushBatches)
       .where(and(eq(pushBatches.orgId, data.orgId), eq(pushBatches.importId, imp.id)))
+      .orderBy(asc(pushBatches.createdAt), asc(pushBatches.id))
       .limit(1);
     return { owners, ownerId, pushBatchId: batch?.batchId ?? null };
   });
