@@ -5,6 +5,8 @@
 // download from the org's own bucket).
 // Imports (S3-006): the ImportsService and MappingsService with their routes under /api/v1/imports
 // and /api/v1/import-mappings, and the asset-list reader, which only the worker program registers.
+// Uploads (S3-004): the UploadsService and POST /api/v1/uploads; the multipart body and the upload
+// rate limit are registered on Fastify by the API program (src/main.api.ts).
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -29,6 +31,8 @@ import { ImportsController } from './imports/imports.controller.js';
 import { ImportsService } from './imports/imports.service.js';
 import { MappingsController } from './imports/mappings.controller.js';
 import { MappingsService } from './imports/mappings.service.js';
+import { UploadsController } from './uploads/uploads.controller.js';
+import { UploadsService } from './uploads/uploads.service.js';
 
 export class IntakeModule {}
 Module({
@@ -40,6 +44,7 @@ Module({
     DocumentsController,
     ImportsController,
     MappingsController,
+    UploadsController,
   ],
   providers: [
     {
@@ -59,10 +64,16 @@ Module({
       inject: [DB, AuditService],
     },
     {
+      provide: UploadsService,
+      useFactory: (db: Db, audit: AuditService, files: FileStore, jobs: JobsService) =>
+        new UploadsService({ db, audit, files, jobs }),
+      inject: [DB, AuditService, FILE_STORE, JobsService],
+    },
+    {
       provide: AssetListReaderJob,
       useFactory: (jobs: JobsService, db: Db, files: FileStore) => new AssetListReaderJob(jobs, db, files),
       inject: [JobsService, DB, FILE_STORE],
     },
   ],
-  exports: [FindingsService, DocumentsService, ImportsService, MappingsService],
+  exports: [FindingsService, DocumentsService, ImportsService, MappingsService, UploadsService],
 })(IntakeModule);
