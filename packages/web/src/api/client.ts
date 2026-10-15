@@ -475,6 +475,22 @@ export type GetControlsIdLinksResponse = {
   }>;
 };
 
+/** GET /api/v1/controls/{id}/requirements response. */
+export type GetControlsIdRequirementsResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    code: string;
+    title: string;
+    framework: string;
+    group: string;
+    status: string;
+    origin: 'manual' | 'import' | 'ai';
+    createdAt: string;
+    createdBy: string;
+  }>;
+};
+
 /** POST /api/v1/controls/{id}/retire response. */
 export type PostControlsIdRetireResponse = {
   id: string;
@@ -499,6 +515,88 @@ export type PostControlsIdRetireResponse = {
 /** POST /api/v1/controls/{id}/retire request body. */
 export type PostControlsIdRetireBody = {
   version: number;
+};
+
+/** GET /api/v1/frameworks response. */
+export type GetFrameworksResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    key: 'nist_800_53' | 'nist_csf_2' | 'iso_27001' | 'soc_2';
+    frameworkVersion: string;
+    publisher: string;
+    description: string;
+    requirementCount: number;
+    coveredCount: number;
+    implementedCount: number;
+  }>;
+};
+
+/** GET /api/v1/frameworks/{id} response. */
+export type GetFrameworksIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  key: 'nist_800_53' | 'nist_csf_2' | 'iso_27001' | 'soc_2';
+  frameworkVersion: string;
+  publisher: string;
+  description: string;
+  requirementCount: number;
+  coveredCount: number;
+  implementedCount: number;
+};
+
+/** GET /api/v1/frameworks/{id}/requirements response. */
+export type GetFrameworksIdRequirementsResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    code: string;
+    title: string;
+    description: string;
+    framework: 'nist_800_53' | 'nist_csf_2' | 'iso_27001' | 'soc_2';
+    group: string;
+    parentCode: unknown;
+    sortKey: string;
+    covered: boolean;
+    implemented: boolean;
+    controlCount: number;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
 };
 
 /** GET /api/v1/health response. */
@@ -860,6 +958,50 @@ export type PostPoliciesIdRetireBody = {
   version: number;
 };
 
+/** GET /api/v1/requirements/{id} response. */
+export type GetRequirementsIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  code: string;
+  title: string;
+  description: string;
+  framework: 'nist_800_53' | 'nist_csf_2' | 'iso_27001' | 'soc_2';
+  group: string;
+  parentCode: unknown;
+  sortKey: string;
+  controls: Array<{
+    id: string;
+    number: string;
+    name: string;
+    code: string;
+    controlStatus: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: string;
+    origin: 'manual' | 'import' | 'ai';
+    createdAt: string;
+    createdBy: string;
+  }>;
+  mapsTo: Array<{
+    direction: 'out' | 'in';
+    id: string;
+    number: string;
+    code: string;
+    title: string;
+    framework: string;
+  }>;
+};
+
 /** GET /api/v1/risks response. */
 export type GetRisksResponse = {
   items: Array<{
@@ -1089,9 +1231,26 @@ export const api = {
   /** The control's links whose other end the caller can see */
   getControlsIdLinks: (path: { id: string }): Promise<GetControlsIdLinksResponse> =>
     request<GetControlsIdLinksResponse>('GET', `/api/v1/controls/${encodeURIComponent(path.id)}/links`),
+  /** The requirements a control satisfies, in framework then natural code order */
+  getControlsIdRequirements: (path: { id: string }): Promise<GetControlsIdRequirementsResponse> =>
+    request<GetControlsIdRequirementsResponse>('GET', `/api/v1/controls/${encodeURIComponent(path.id)}/requirements`),
   /** Retire a control; it is kept, never deleted */
   postControlsIdRetire: (path: { id: string }, body: PostControlsIdRetireBody): Promise<PostControlsIdRetireResponse> =>
     request<PostControlsIdRetireResponse>('POST', `/api/v1/controls/${encodeURIComponent(path.id)}/retire`, body),
+  /** The active frameworks, each with its requirement, covered and implemented counts for the caller */
+  getFrameworks: (): Promise<GetFrameworksResponse> => request<GetFrameworksResponse>('GET', '/api/v1/frameworks'),
+  /** One framework with its counts for the caller; 404 when missing or hidden */
+  getFrameworksId: (path: { id: string }): Promise<GetFrameworksIdResponse> =>
+    request<GetFrameworksIdResponse>('GET', `/api/v1/frameworks/${encodeURIComponent(path.id)}`),
+  /** A framework's requirements, paged in natural code order, with group, coverage, status and search filters; each row carries its coverage for the caller */
+  getFrameworksIdRequirements: (
+    path: { id: string },
+    query?: ListQuery,
+  ): Promise<GetFrameworksIdRequirementsResponse> =>
+    request<GetFrameworksIdRequirementsResponse>(
+      'GET',
+      `/api/v1/frameworks/${encodeURIComponent(path.id)}/requirements${queryString(query)}`,
+    ),
   /** Whether the API can reach Postgres and Neo4j */
   getHealth: (): Promise<GetHealthResponse> => request<GetHealthResponse>('GET', '/api/v1/health'),
   /** List incidents, paged */
@@ -1144,6 +1303,9 @@ export const api = {
   /** Retire a policy; it is kept, never deleted */
   postPoliciesIdRetire: (path: { id: string }, body: PostPoliciesIdRetireBody): Promise<PostPoliciesIdRetireResponse> =>
     request<PostPoliciesIdRetireResponse>('POST', `/api/v1/policies/${encodeURIComponent(path.id)}/retire`, body),
+  /** One requirement, the controls that satisfy it, and its links to other frameworks in both directions */
+  getRequirementsId: (path: { id: string }): Promise<GetRequirementsIdResponse> =>
+    request<GetRequirementsIdResponse>('GET', `/api/v1/requirements/${encodeURIComponent(path.id)}`),
   /** List risks, paged */
   getRisks: (query?: ListQuery): Promise<GetRisksResponse> =>
     request<GetRisksResponse>('GET', `/api/v1/risks${queryString(query)}`),
