@@ -9,6 +9,10 @@
 // The update only applies while the import is still `reading`, so a second run of the same job
 // changes nothing more. Log lines hold only codes, counts and IDs, never a cell value, a column name
 // or a file name (D163, D164).
+// Repeat uploads map automatically (S3-007, D44): when the source has a saved mapping that fits the
+// columns and the uploader passes `canImportAssets` (a member's role, or an API key's one role while
+// it works), the same transaction queues the run with that mapping (`startImportRunInTx`), so the
+// import goes straight on to `queued`. Otherwise it waits in `needs_mapping`.
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
@@ -17,11 +21,13 @@ import { errorKind } from '../../common/errors.js';
 import { createLogger } from '../../common/logger.js';
 import type { Db } from '../../db/client.js';
 import { withOrgContext } from '../../db/org-context.js';
+import type { AuditService } from '../../audit/audit.service.js';
 import type { JobsService } from '../../jobs/jobs.module.js';
 import type { FileStore } from '../../storage/file-store.js';
 import {
   MAX_IMPORT_SAMPLE_ROWS,
   documents,
+  importMappings,
   imports,
   type DocumentRow,
   type ImportRow,
@@ -31,6 +37,8 @@ import { INTAKE_QUEUES, INTAKE_SYSTEM_CONTEXT } from '../queues.js';
 import type { TableLimits, TableRead } from './csv.js';
 import { runInSandbox, SandboxError, type SandboxLimits } from './file-sandbox.js';
 import type { FlatValue } from './flat-json.js';
+import { startImportRunInTx, uploaderAsRunner } from './import-run.js';
+import { mappingFor } from './imports.service.js';
 
 /** How many reads the worker runs at once (D72). */
 export const ASSET_LIST_READ_CONCURRENCY = 4;
@@ -64,6 +72,7 @@ export type AssetListReadJob = z.infer<typeof assetListReadJobSchema>;
 /** What one run did. `skipped`: nothing to do (bad job data, no such import, or already read). */
 export type AssetListReadOutcome =
   | { status: 'needs_mapping'; importId: string; rowCount: number; columnCount: number }
+  | { status: 'queued'; importId: string; rowCount: number; columnCount: number; jobId: string }
   | { status: 'failed'; importId: string; code: AssetListReadCode }
   | { status: 'skipped'; importId?: string; reason: 'bad_job_data' | 'import_not_found' | 'already_read' };
 
@@ -91,6 +100,9 @@ export interface AssetListReaderDeps {
   files: Pick<FileStore, 'get'>;
   readTable?: TableReader;
   log?: Logger;
+  /** With both, a source's saved mapping that fits starts the import by itself (S3-007). */
+  jobs?: Pick<JobsService, 'sendInTx'>;
+  audit?: Pick<AuditService, 'appendInTx'>;
 }
 
 function isReadCode(code: string): code is AssetListReadCode {
@@ -188,18 +200,52 @@ async function finish(
         updatedAt: new Date(),
       };
 
-  const updated = await withOrgContext(deps.db, INTAKE_SYSTEM_CONTEXT(imp.orgId), (tx) =>
-    tx
+  const { jobs, audit } = deps;
+  const saved = await withOrgContext(deps.db, INTAKE_SYSTEM_CONTEXT(imp.orgId), async (tx) => {
+    const updated = await tx
       .update(imports)
       .set(changes)
       .where(and(eq(imports.orgId, imp.orgId), eq(imports.id, imp.id), eq(imports.status, 'reading')))
-      .returning({ id: imports.id }),
-  );
-  if (updated.length === 0) return { status: 'skipped', importId: imp.id, reason: 'already_read' };
+      .returning({ id: imports.id });
+    if (updated.length === 0) return { updated: false as const };
+    if (failed || !jobs || !audit) return { updated: true as const, jobId: null };
+
+    // A repeat upload from a source with a saved mapping that fits imports by itself (D44).
+    const [mapping] = await tx
+      .select()
+      .from(importMappings)
+      .where(and(eq(importMappings.orgId, imp.orgId), eq(importMappings.source, imp.source)))
+      .limit(1);
+    if (!mapping || mappingFor(outcome.columns, mapping).mappingFrom !== 'saved') {
+      return { updated: true as const, jobId: null };
+    }
+    const runner = await uploaderAsRunner(tx, doc);
+    if (!runner) return { updated: true as const, jobId: null };
+    const jobId = await startImportRunInTx(
+      tx,
+      { jobs, audit },
+      { imp, mapping: mapping.fields, runner, automatic: true },
+    );
+    return { updated: true as const, jobId };
+  });
+  if (!saved.updated) return { status: 'skipped', importId: imp.id, reason: 'already_read' };
 
   if (failed) {
     log.warn({ ...ids, code: outcome.code, row: outcome.row }, 'an asset list could not be read');
     return { status: 'failed', importId: imp.id, code: outcome.code };
+  }
+  if (saved.jobId !== null) {
+    log.info(
+      { ...ids, rowCount: outcome.rowCount, columnCount: outcome.columns.length, jobId: saved.jobId },
+      "an asset list was read and queued for import with its source's saved mapping",
+    );
+    return {
+      status: 'queued',
+      importId: imp.id,
+      rowCount: outcome.rowCount,
+      columnCount: outcome.columns.length,
+      jobId: saved.jobId,
+    };
   }
   log.info(
     { ...ids, rowCount: outcome.rowCount, columnCount: outcome.columns.length },
@@ -221,11 +267,17 @@ export class AssetListReaderJob implements OnApplicationBootstrap {
     private readonly jobs: JobsService,
     private readonly db: Db,
     private readonly files: FileStore,
+    private readonly audit?: AuditService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
     if (!this.jobs.processesJobs) return;
-    const deps: AssetListReaderDeps = { db: this.db, files: this.files, log: this.log };
+    const deps: AssetListReaderDeps = {
+      db: this.db,
+      files: this.files,
+      log: this.log,
+      ...(this.audit ? { jobs: this.jobs, audit: this.audit } : {}),
+    };
     await this.jobs.work(
       INTAKE_QUEUES.assetListRead,
       async (job) => {
