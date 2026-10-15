@@ -1,7 +1,7 @@
-// Who may add, see and change evidence (D50 "Evidence files", D213 (3)), and who may add and link
-// audit findings (D50 "Audit findings", D200): pure functions for the API and the web app. "Label
-// visible" means the label is at or below the caller's clearance (D51). Anything unknown (role,
-// clearance, label, kind or caller) is refused (fail safe, D45.7).
+// Who may add, see, change and review evidence (D50 "Evidence files", D213 (3), D220 (4)), and who
+// may add and link audit findings (D50 "Audit findings", D200): pure functions for the API and the
+// web app. "Label visible" means the label is at or below the caller's clearance (D51). Anything
+// unknown (role, clearance, label, kind or caller) is refused (fail safe, D45.7).
 import { isLabel, isVisible } from '../access/labels.js';
 import { ROLE_TABLE, can } from '../access/role-table.js';
 import { isRole, type Role } from '../access/roles.js';
@@ -57,6 +57,22 @@ export function canEditEvidence(
   if (can(caller.role, 'evidence', 'edit')) return true;
   // The Control Owner's `upload_own` cell: only evidence they added themselves.
   return ROLE_TABLE.evidence[caller.role as Role] === 'upload_own' && evidence.createdBy === caller.userId;
+}
+
+/** The roles that accept or reject evidence (D220 (4)): the Admin and the Compliance Manager. */
+export const EVIDENCE_REVIEWER_ROLES: readonly Role[] = ['admin', 'compliance_manager'];
+
+/** Accept or reject (D213 (2), D220 (4)): the caller sees the evidence, is an Admin or a Compliance
+ * Manager, and didn't add it themselves. A missing or malformed `createdBy` is refused. */
+export function canReviewEvidence(
+  caller: IntakeCaller,
+  evidence: { label: string; createdBy: string },
+  supportedControlOwners: readonly string[],
+): boolean {
+  if (!canSeeEvidence(caller, evidence, supportedControlOwners)) return false;
+  if (!EVIDENCE_REVIEWER_ROLES.includes(caller.role as Role)) return false;
+  const addedBy: unknown = evidence.createdBy;
+  return typeof addedBy === 'string' && addedBy.length > 0 && addedBy !== caller.userId;
 }
 
 /** Only a role that edits audit findings adds them (the Auditor). */
