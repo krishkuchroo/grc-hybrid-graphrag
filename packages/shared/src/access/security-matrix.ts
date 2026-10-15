@@ -272,5 +272,44 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Imports and saved mappings (S3-006, D44, D73): the `uploads` cell at the guard (the Control
+    // Owner, Auditor and Viewer get 403). An import is also checked for the role's asset view and
+    // its label by the service and again by RLS (404 when hidden); mappings are behind the org wall.
+    // Saving a mapping is versioned (409 stale_version) and audited as `import_mapping.saved`.
+    {
+      method: 'GET',
+      path: '/api/v1/imports',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/imports/:id',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/import-mappings',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/import-mappings/:id',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/import-mappings',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };
