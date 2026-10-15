@@ -187,5 +187,22 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Framework mappings (S2-005, D212 (3)): adding and removing a control-to-requirement mapping
+    // need the Framework-mappings `edit` cell (Admin and Compliance Manager); the service then
+    // checks both records and `canMapControl`. An `ai` mapping is never removed here (D207).
+    {
+      method: 'POST',
+      path: '/api/v1/mappings',
+      access: { subject: 'framework_mapping', action: 'edit' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/mappings/remove',
+      access: { subject: 'framework_mapping', action: 'edit' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };
