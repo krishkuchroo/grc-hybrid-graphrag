@@ -9,6 +9,7 @@ import { Link, useNavigate, type HistoryState } from '@tanstack/react-router';
 import { CONTROL_STATUSES } from '@grc/shared';
 import { ChevronLeft } from 'lucide-react';
 import { ControlRequirements } from '@/features/frameworks/mapping/ControlRequirements';
+import { FindingsSection } from '@/features/intake/audit-findings/FindingsSection';
 import { choices, formatDate } from '../format';
 import type { FormFieldDef } from '../RecordForm';
 import { RelatedRecords } from '../links/RelatedRecords';
@@ -78,6 +79,7 @@ export function ControlPage({ id }: { id: string }) {
           <ControlRequirements control={control} />
         </>
       )}
+      sections={(control) => <FindingsSection kind="control" record={control} noun="control" />}
       details={(control) => [
         { label: 'Code', value: control.code },
         { label: 'Source note', value: control.framework },
