@@ -76,13 +76,24 @@ export class JobsService implements OnApplicationShutdown {
     });
   }
 
-  /** Registers a handler for a queue. Only the worker program processes jobs. */
-  async work(queue: string, handler: (job: JobHandlerInput) => Promise<void>): Promise<void> {
+  /**
+   * Registers a handler for a queue. Only the worker program processes jobs. `concurrency` is how
+   * many jobs of the queue this program runs at once (D72: read file ×4, embed ×2 …), 1 by default.
+   */
+  async work(
+    queue: string,
+    handler: (job: JobHandlerInput) => Promise<void>,
+    opts: { concurrency?: number } = {},
+  ): Promise<void> {
     if (!this.options.processJobs) {
       throw new Error('The API program does not process jobs; register job handlers in the worker.');
     }
+    const concurrency = opts.concurrency ?? 1;
+    if (!Number.isInteger(concurrency) || concurrency < 1) {
+      throw new Error('work: concurrency must be a whole number from 1');
+    }
     await this.ensureQueue(queue);
-    await this.boss.work(queue, { batchSize: 1 }, async (jobs) => {
+    await this.boss.work(queue, { batchSize: 1, localConcurrency: concurrency }, async (jobs) => {
       for (const job of jobs) await handler({ id: job.id, data: job.data });
     });
   }

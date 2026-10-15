@@ -62,10 +62,11 @@ export interface ImportCounts {
   linksAdded: number;
 }
 
-/** One refused row of an import: the row number, the field and a code, never the value (D163). */
+/** One refused row of an import: the row number, the field and a code, never the value (D163).
+ * A file that couldn't be read at all has one error with `field: null` (row 0 for the whole file). */
 export interface ImportRowError {
   row: number;
-  field: string;
+  field: string | null;
   code: string;
 }
 
