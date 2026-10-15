@@ -63,6 +63,131 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** A refused answer as an ApiError, in the one error format when its body has it. */
+function refusal(status: number, text: string, retryAfterHeader: string | null): ApiError {
+  let data: unknown = undefined;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = undefined;
+    }
+  }
+  const err = (data as Partial<ApiErrorBody> | undefined)?.error;
+  const retryAfter = Number(retryAfterHeader);
+  return new ApiError(
+    status,
+    err?.code ?? 'error',
+    err?.message ?? 'The request was refused.',
+    err?.referenceId,
+    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+  );
+}
+
+/** How far an upload has got: the bytes sent so far, and the whole form's size (0 when unknown). */
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+}
+
+export interface UploadOptions {
+  /** Called as the form's bytes are sent. */
+  onProgress?: (progress: UploadProgress) => void;
+  /** Aborting it cancels the upload, which then fails with the code `aborted`. */
+  signal?: AbortSignal;
+}
+
+/** Sends a multipart/form-data form (text fields first, then files; empty and missing fields left
+ * out), reporting progress as its bytes go. Cookies go with it, as it's the page's own origin. */
+function upload<T>(method: string, path: string, fields: object, options: UploadOptions = {}): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const entries = Object.entries(fields as Record<string, unknown>);
+    const form = new FormData();
+    for (const [name, value] of entries) {
+      if (typeof value === 'string' && value !== '') form.append(name, value);
+    }
+    for (const [name, value] of entries) {
+      if (typeof File !== 'undefined' && value instanceof File) form.append(name, value);
+      else if (value instanceof Blob) form.append(name, value, 'file');
+    }
+    if (options.signal?.aborted) {
+      reject(new ApiError(0, 'aborted', 'The upload was cancelled.'));
+      return;
+    }
+    const xhr = new XMLHttpRequest();
+    const onAbort = () => xhr.abort();
+    const settle = () => options.signal?.removeEventListener('abort', onAbort);
+    xhr.open(method, path);
+    xhr.setRequestHeader('accept', 'application/json');
+    xhr.upload.onprogress = (event) => {
+      options.onProgress?.({ loaded: event.loaded, total: event.lengthComputable ? event.total : 0 });
+    };
+    xhr.onload = () => {
+      settle();
+      const text = typeof xhr.responseText === 'string' ? xhr.responseText : '';
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(refusal(xhr.status, text, xhr.getResponseHeader('retry-after')));
+        return;
+      }
+      try {
+        resolve((text ? JSON.parse(text) : undefined) as T);
+      } catch {
+        reject(new ApiError(xhr.status, 'error', 'The answer could not be read.'));
+      }
+    };
+    xhr.onerror = () => {
+      settle();
+      reject(new ApiError(0, 'network_error', 'The server could not be reached. Check your connection and try again.'));
+    };
+    xhr.onabort = () => {
+      settle();
+      reject(new ApiError(0, 'aborted', 'The upload was cancelled.'));
+    };
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    xhr.send(form);
+  });
+}
+
+/** A downloaded file: its bytes, its type, and the name the server gave it. */
+export interface ApiFile {
+  blob: Blob;
+  contentType: string;
+  /** From Content-Disposition, when the server named the file. */
+  fileName: string | undefined;
+}
+
+/** The file name in a Content-Disposition header: the UTF-8 `filename*` first, then `filename`. */
+export function fileNameFromDisposition(header: string | null): string | undefined {
+  if (!header) return undefined;
+  const extended = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (extended?.[1]) {
+    try {
+      const name = decodeURIComponent(extended[1].trim());
+      if (name) return name;
+    } catch {
+      // A malformed encoding: the plain name below.
+    }
+  }
+  const plain = /filename\s*=\s*(?:"([^"]*)"|([^;]+))/i.exec(header);
+  const name = (plain?.[1] ?? plain?.[2] ?? '').trim();
+  return name === '' ? undefined : name;
+}
+
+async function download(method: string, path: string): Promise<ApiFile> {
+  let res: Response;
+  try {
+    res = await fetch(path, { method, credentials: 'same-origin', headers: { accept: '*/*' } });
+  } catch {
+    throw new ApiError(0, 'network_error', 'The server could not be reached. Check your connection and try again.');
+  }
+  if (!res.ok) throw refusal(res.status, await res.text(), res.headers.get('retry-after'));
+  return {
+    blob: await res.blob(),
+    contentType: res.headers.get('content-type') ?? 'application/octet-stream',
+    fileName: fileNameFromDisposition(res.headers.get('content-disposition')),
+  };
+}
+
 /** A paged list's query parameters (D47): page, pageSize, sort and the list's filters. */
 export type ListQuery = Record<string, string | number | undefined>;
 
@@ -766,6 +891,54 @@ export type PostControlsIdRetireBody = {
   version: number;
 };
 
+/** GET /api/v1/documents response. */
+export type GetDocumentsResponse = {
+  items: Array<{
+    id: string;
+    kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+    recordType:
+      'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'framework_mapping' | 'evidence' | 'audit_finding';
+    format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+    fileName: string;
+    sizeBytes: number;
+    contentHash: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    uploader: {
+      type: 'user' | 'api_key' | 'system';
+      id: string;
+    };
+    source: unknown;
+    status: 'stored' | 'processing' | 'processed' | 'failed';
+    createdAt: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** GET /api/v1/documents/{id} response. */
+export type GetDocumentsIdResponse = {
+  id: string;
+  kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+  recordType: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'framework_mapping' | 'evidence' | 'audit_finding';
+  format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+  fileName: string;
+  sizeBytes: number;
+  contentHash: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  uploader: {
+    type: 'user' | 'api_key' | 'system';
+    id: string;
+  };
+  source: unknown;
+  status: 'stored' | 'processing' | 'processed' | 'failed';
+  createdAt: string;
+  importId?: unknown;
+};
+
+/** GET /api/v1/documents/{id}/download response. */
+export type GetDocumentsIdDownloadResponse = ApiFile;
+
 /** GET /api/v1/frameworks response. */
 export type GetFrameworksResponse = {
   items: Array<{
@@ -853,6 +1026,185 @@ export type GetHealthResponse = {
   status: 'ok' | 'degraded';
   postgres: 'up' | 'down';
   neo4j: 'up' | 'down';
+};
+
+/** GET /api/v1/import-mappings response. */
+export type GetImportMappingsResponse = {
+  items: Array<{
+    id: string;
+    source: string;
+    fields: {
+      sourceId?: string;
+      name?: string;
+      assetType?: string;
+      criticality?: string;
+      dataClassification?: string;
+      owner?: string;
+      hostedOn?: string;
+      runsOn?: string;
+    };
+    version: number;
+    createdBy: string;
+    updatedBy: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/import-mappings response. */
+export type PostImportMappingsResponse = {
+  id: string;
+  source: string;
+  fields: {
+    sourceId?: string;
+    name?: string;
+    assetType?: string;
+    criticality?: string;
+    dataClassification?: string;
+    owner?: string;
+    hostedOn?: string;
+    runsOn?: string;
+  };
+  version: number;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** POST /api/v1/import-mappings request body. */
+export type PostImportMappingsBody = {
+  source: string;
+  fields: {
+    sourceId: string;
+    name: string;
+    assetType?: string;
+    criticality?: string;
+    dataClassification?: string;
+    owner?: string;
+    hostedOn?: string;
+    runsOn?: string;
+  };
+  version?: number;
+};
+
+/** GET /api/v1/import-mappings/{id} response. */
+export type GetImportMappingsIdResponse = {
+  id: string;
+  source: string;
+  fields: {
+    sourceId?: string;
+    name?: string;
+    assetType?: string;
+    criticality?: string;
+    dataClassification?: string;
+    owner?: string;
+    hostedOn?: string;
+    runsOn?: string;
+  };
+  version: number;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** GET /api/v1/imports response. */
+export type GetImportsResponse = {
+  items: Array<{
+    id: string;
+    documentId: string;
+    fileName: unknown;
+    format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt' | null;
+    source: string;
+    status: 'reading' | 'needs_mapping' | 'queued' | 'importing' | 'done' | 'failed';
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    recordType: 'asset';
+    columns: Array<string> | null;
+    sample: Array<Record<string, never>> | null;
+    rowCount: number | null;
+    counts: {
+      added: number;
+      updated: number;
+      unchanged: number;
+      failed: number;
+      linksAdded: number;
+    } | null;
+    errors: Array<{
+      row: number;
+      field: unknown;
+      code: string;
+    }> | null;
+    mapping: {
+      sourceId?: string;
+      name?: string;
+      assetType?: string;
+      criticality?: string;
+      dataClassification?: string;
+      owner?: string;
+      hostedOn?: string;
+      runsOn?: string;
+    };
+    mappingFrom: 'saved' | 'suggested';
+    savedMapping: {
+      id: string;
+      version: number;
+    } | null;
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** GET /api/v1/imports/{id} response. */
+export type GetImportsIdResponse = {
+  id: string;
+  documentId: string;
+  fileName: unknown;
+  format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt' | null;
+  source: string;
+  status: 'reading' | 'needs_mapping' | 'queued' | 'importing' | 'done' | 'failed';
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  recordType: 'asset';
+  columns: Array<string> | null;
+  sample: Array<Record<string, never>> | null;
+  rowCount: number | null;
+  counts: {
+    added: number;
+    updated: number;
+    unchanged: number;
+    failed: number;
+    linksAdded: number;
+  } | null;
+  errors: Array<{
+    row: number;
+    field: unknown;
+    code: string;
+  }> | null;
+  mapping: {
+    sourceId?: string;
+    name?: string;
+    assetType?: string;
+    criticality?: string;
+    dataClassification?: string;
+    owner?: string;
+    hostedOn?: string;
+    runsOn?: string;
+  };
+  mappingFrom: 'saved' | 'suggested';
+  savedMapping: {
+    id: string;
+    version: number;
+  } | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 /** GET /api/v1/incidents response. */
@@ -1483,6 +1835,61 @@ export type PostRisksIdRetireBody = {
   version: number;
 };
 
+/** POST /api/v1/uploads response. */
+export type PostUploadsResponse =
+  | {
+      document: {
+        id: string;
+        kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        recordType:
+          'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'framework_mapping' | 'evidence' | 'audit_finding';
+        format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+        fileName: string;
+        sizeBytes: number;
+        contentHash: string;
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        uploader: {
+          type: 'user' | 'api_key' | 'system';
+          id: string;
+        };
+        source: unknown;
+        status: 'stored' | 'processing' | 'processed' | 'failed';
+        createdAt: string;
+      };
+      duplicate: true;
+    }
+  | {
+      document: {
+        id: string;
+        kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        recordType:
+          'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'framework_mapping' | 'evidence' | 'audit_finding';
+        format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+        fileName: string;
+        sizeBytes: number;
+        contentHash: string;
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        uploader: {
+          type: 'user' | 'api_key' | 'system';
+          id: string;
+        };
+        source: unknown;
+        status: 'stored' | 'processing' | 'processed' | 'failed';
+        createdAt: string;
+      };
+      duplicate: false;
+      jobId: unknown;
+      importId?: string;
+    };
+
+/** POST /api/v1/uploads request body, sent as a multipart form. */
+export type PostUploadsBody = {
+  file: Blob;
+  kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report';
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  source?: string;
+};
+
 export const api = {
   /** Create a machine API key (Admin only); the key is shown only in this response */
   postApiKeys: (): Promise<PostApiKeysResponse> => request<PostApiKeysResponse>('POST', '/api/v1/api-keys'),
@@ -1605,6 +2012,15 @@ export const api = {
   /** Retire a control; it is kept, never deleted */
   postControlsIdRetire: (path: { id: string }, body: PostControlsIdRetireBody): Promise<PostControlsIdRetireResponse> =>
     request<PostControlsIdRetireResponse>('POST', `/api/v1/controls/${encodeURIComponent(path.id)}/retire`, body),
+  /** List the stored documents the caller can see, paged, with kind, status, source, label and file-name search; sorted by -createdAt (default), createdAt or fileName */
+  getDocuments: (query?: ListQuery): Promise<GetDocumentsResponse> =>
+    request<GetDocumentsResponse>('GET', `/api/v1/documents${queryString(query)}`),
+  /** Open one stored document (with its import for an asset list); 404 when missing or hidden */
+  getDocumentsId: (path: { id: string }): Promise<GetDocumentsIdResponse> =>
+    request<GetDocumentsIdResponse>('GET', `/api/v1/documents/${encodeURIComponent(path.id)}`),
+  /** Download the stored file as an attachment (Content-Type from its format); every download is audited as document.downloaded. 404 when missing or hidden */
+  getDocumentsIdDownload: (path: { id: string }): Promise<GetDocumentsIdDownloadResponse> =>
+    download('GET', `/api/v1/documents/${encodeURIComponent(path.id)}/download`),
   /** The active frameworks, each with its requirement, covered and implemented counts for the caller */
   getFrameworks: (): Promise<GetFrameworksResponse> => request<GetFrameworksResponse>('GET', '/api/v1/frameworks'),
   /** One framework with its counts for the caller; 404 when missing or hidden */
@@ -1621,6 +2037,21 @@ export const api = {
     ),
   /** Whether the API can reach Postgres and Neo4j */
   getHealth: (): Promise<GetHealthResponse> => request<GetHealthResponse>('GET', '/api/v1/health'),
+  /** List the org's saved column mappings, one per source, sorted by source, paged, with a source filter */
+  getImportMappings: (query?: ListQuery): Promise<GetImportMappingsResponse> =>
+    request<GetImportMappingsResponse>('GET', `/api/v1/import-mappings${queryString(query)}`),
+  /** Save a source's column mapping: created when the source has none (no version), replaced when version is the saved one's, else 409 stale_version; audited as import_mapping.saved */
+  postImportMappings: (body: PostImportMappingsBody): Promise<PostImportMappingsResponse> =>
+    request<PostImportMappingsResponse>('POST', '/api/v1/import-mappings', body),
+  /** Open one of the org's saved column mappings; 404 when missing or another org's */
+  getImportMappingsId: (path: { id: string }): Promise<GetImportMappingsIdResponse> =>
+    request<GetImportMappingsIdResponse>('GET', `/api/v1/import-mappings/${encodeURIComponent(path.id)}`),
+  /** List the asset-list imports the caller can see, newest first, paged, with status and source filters; each with its columns, sample, row count, and the saved or suggested mapping */
+  getImports: (query?: ListQuery): Promise<GetImportsResponse> =>
+    request<GetImportsResponse>('GET', `/api/v1/imports${queryString(query)}`),
+  /** Open one asset-list import: its columns, 5 sample rows, row count, status, counts and errors, plus the source's saved mapping when it fits the columns, else the suggested one (mappingFrom); 404 when missing or hidden */
+  getImportsId: (path: { id: string }): Promise<GetImportsIdResponse> =>
+    request<GetImportsIdResponse>('GET', `/api/v1/imports/${encodeURIComponent(path.id)}`),
   /** List incidents, paged */
   getIncidents: (query?: ListQuery): Promise<GetIncidentsResponse> =>
     request<GetIncidentsResponse>('GET', `/api/v1/incidents${queryString(query)}`),
@@ -1707,4 +2138,7 @@ export const api = {
   /** Retire a risk; it is kept, never deleted */
   postRisksIdRetire: (path: { id: string }, body: PostRisksIdRetireBody): Promise<PostRisksIdRetireResponse> =>
     request<PostRisksIdRetireResponse>('POST', `/api/v1/risks/${encodeURIComponent(path.id)}/retire`, body),
+  /** Upload one file (PDF, DOCX, CSV, JSON or TXT, checked by content, at most 25 MB) as an asset list, policy document, SOC ticket file or audit report. Stored once per org by content: 201 with the new document and its job (and import, for an asset list); 200 with the existing document when the org already has that content. Audited as document.uploaded. 20 uploads a minute per person */
+  postUploads: (body: PostUploadsBody, options?: UploadOptions): Promise<PostUploadsResponse> =>
+    upload<PostUploadsResponse>('POST', '/api/v1/uploads', body, options),
 };
