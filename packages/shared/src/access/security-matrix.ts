@@ -247,6 +247,31 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Evidence (S3-009, D50, D213 (3), R12): the Admin adds to any visible control and changes any
+    // evidence; the Control Owner's `upload_own` cell passes the guard and the service lets them
+    // add only to controls they own, see the evidence on their own controls (404 otherwise) and
+    // change only evidence they added (403); Risk Managers, Compliance Managers, Auditors and
+    // Analysts view and download (403 on create, edit and retire); the Viewer gets 403 on the
+    // list and create and 404 on every route naming an item. Evidence files are stored once per
+    // org by content and their document rows are read only under the intake system context, after
+    // the evidence rules pass. Adding counts toward the 20 uploads a minute per person; every
+    // download is audited as `document.downloaded`. The evidence on a control follows the control
+    // row (a Control Owner only on their own controls) and lists only evidence the caller can see.
+    ...recordRoutes('evidence', 'evidence'),
+    {
+      method: 'GET',
+      path: '/api/v1/evidence/:id/download',
+      access: { subject: 'evidence', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/controls/:id/evidence',
+      access: { subject: 'control', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
     // Documents (S3-005, D53, D73): the `uploads` cell at the guard (the Control Owner, Auditor
     // and Viewer get 403), then the role's view cell for the document's record type and the label,
     // checked by the service and again by RLS (404 when hidden). Evidence documents are never

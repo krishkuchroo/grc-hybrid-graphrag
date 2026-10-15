@@ -8,11 +8,12 @@
 //    words), and one the kind takes (415).
 // 2. `sha256` of the bytes; the object key is `sha256/<hex>` in the org's own bucket, written only
 //    when it isn't there yet, so the same file is stored once per org (D45.5).
-// 3. One `withOrgContext` transaction in the caller's own context: the `documents` row (or, when the
-//    org already has that content, the existing row, which keeps its kind, label and uploader), the
-//    `document.uploaded` entry (`appendInTx`, `meta { kind, format, label, duplicate }`, never the
-//    file's contents or name), and, for a new document only, the caller's `afterInsert` hook (the
-//    kind's job, `JobsService.sendInTx`). They commit together or not at all (D29, D45.4); the
+// 3. One `withOrgContext` transaction in the caller's own context (or, with `context: 'system'`,
+//    the intake system context: S3-009's evidence files, planner's reading R12): the `documents`
+//    row (or, when the org already has that content, the existing row, which keeps its kind, label
+//    and uploader), the `document.uploaded` entry (`appendInTx`, `meta { kind, format, label,
+//    duplicate }`, never the file's contents or name), and, for a new document only, the caller's
+//    `afterInsert` hook (the kind's job, `JobsService.sendInTx`). They commit together or not at all (D29, D45.4); the
 //    stored object may stay after a rollback, and a retry reuses it.
 // The same content already stored under a label above the caller's clearance is hidden from them
 // by RLS: the repeat is still audited, and the answer is 409 `already_stored`, which names nothing
@@ -69,6 +70,13 @@ export interface StoreUploadInput {
 export interface StoreUploadOptions<T> {
   /** Runs in the same transaction right after a new document's row and entry, for the kind's job. */
   afterInsert?: (tx: Tx, document: DocumentRow) => Promise<T>;
+  /**
+   * Whose Postgres context the document row is written and found under: the caller's own
+   * (`caller`, the default), or the intake system context (`system`, R12). Evidence uses `system`:
+   * a Control Owner's own context can't see evidence rows, and the evidence rules have already
+   * passed in the API by then. The org wall applies either way; the audit entry names the caller.
+   */
+  context?: 'caller' | 'system';
 }
 
 export interface StoredUpload<T = undefined> {
@@ -247,7 +255,8 @@ export async function storeUpload<T = undefined>(
     });
   const byHash = and(eq(documents.orgId, caller.orgId), eq(documents.contentHash, contentHash));
 
-  const outcome = await withOrgContext<Outcome<T>>(deps.db, contextOf(caller), async (tx) => {
+  const context = opts.context === 'system' ? INTAKE_SYSTEM_CONTEXT(caller.orgId) : contextOf(caller);
+  const outcome = await withOrgContext<Outcome<T>>(deps.db, context, async (tx) => {
     const [inserted] = await tx
       .insert(documents)
       .values({
@@ -293,7 +302,7 @@ export async function storeUpload<T = undefined>(
       .limit(1);
     return row;
   });
-  if (hidden) await withOrgContext(deps.db, contextOf(caller), (tx) => audit(tx, hidden, true));
+  if (hidden) await withOrgContext(deps.db, context, (tx) => audit(tx, hidden, true));
   log.warn({ ...ids, documentId: hidden?.id, code: 'already_stored' }, 'an upload repeats a hidden document');
   throw new ApiError(409, 'already_stored', 'This file is already stored in your organisation.');
 }
