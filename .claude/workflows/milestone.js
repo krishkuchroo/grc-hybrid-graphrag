@@ -430,7 +430,7 @@ async function reviewAndTestSlice(m, built) {
   let testCommand = ''
   let lastFixes = ''
   for (let round = 1; round <= SLICE_ROUNDS; round++) {
-    const tw = await handIn(
+    const twRun = handIn(
       `${M}-TEST`,
       'test-writer',
       [
@@ -445,7 +445,6 @@ async function reviewAndTestSlice(m, built) {
       ],
       { phase: RT, label: `test:${M}:${round}`, isolation: 'worktree', schema: handoffSchema({ ...WORKTREE, codeProblem: { type: 'boolean' }, ...issueSchema }) },
     )
-    if (tw.tests?.run) testCommand = tw.tests.run
     const review = (who) =>
       handIn(
         `${M}-REVIEW`,
@@ -461,7 +460,9 @@ async function reviewAndTestSlice(m, built) {
         ],
         { phase: RT, label: `${who === 'code-reviewer' ? 'review' : 'security'}:${M}:${round}`, isolation: 'worktree', schema: handoffSchema({ ...REVIEW_FIXES, ...issueSchema }) },
       )
-    const [code, security] = await Promise.all([review('code-reviewer'), review('security-reviewer')])
+    // The test writer and both reviewers run side by side (D224).
+    const [tw, code, security] = await Promise.all([twRun, review('code-reviewer'), review('security-reviewer')])
+    if (tw.tests?.run) testCommand = tw.tests.run
     const dead = [['test-writer', tw], ['code-reviewer', code], ['security-reviewer', security]].filter(([, h]) => h.status === 'blocked' && !(h === tw && h.codeProblem))
     if (dead.length) return { status: 'blocked', findings: dead.map(([w, h]) => `${w}: ${h.findings}`).join('\n\n'), testCommand }
     const issues = []
