@@ -2,10 +2,13 @@
 // framework, group and parent, the controls that satisfy it and its links to other frameworks, both
 // ways. Everything comes from the API, limited to what the person can see (D7, D51): a hidden
 // control neither shows nor counts, and coverage is only ever the API's SATISFIES answer, never a
-// control's Source note (D212 (5)). Catalogs are read-only here.
+// control's Source note (D212 (5)). Catalogs are read-only here; the mappings aren't (S2-007):
+// "Map a control" shows when the person's role has the Framework-mappings `edit` cell (D212 (3)),
+// and "Remove" on a row when `canMapControl` holds for its control and it isn't an AI mapping (D207).
 import { Link } from '@tanstack/react-router';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, CircleCheck, Unlink } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ApiProblem } from '@/features/records/ApiProblem';
 import { formatMoment, words } from '@/features/records/format';
@@ -15,6 +18,10 @@ import { isNotFound } from '@/features/records/useRecords';
 import { ValueBadge } from '@/features/records/ValueBadge';
 import { cn } from '@/lib/utils';
 import { CoverageState, formatCount } from './CoverageBar';
+import { MappingOrigin } from './mapping/ControlRequirements';
+import { MapControlDialog } from './mapping/MapControlDialog';
+import { MappingRefusal, RemoveMappingDialog, type MappingTarget } from './mapping/RemoveMappingDialog';
+import { mayMapAny, mayRemoveMapping, useRemoveMapping, useViewer } from './mapping/useMappings';
 import {
   frameworkName,
   groupLabel,
@@ -42,24 +49,37 @@ function BackToFrameworks() {
 function Panel({
   title,
   count,
+  toolbar,
   children,
   className,
 }: {
   title: string;
   count?: number;
+  /** Shown at the right of the title bar, for example a status message and an action. */
+  toolbar?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
+  const heading = (
+    <h2 className="flex items-center gap-2 text-sm font-semibold">
+      {title}
+      {count !== undefined ? (
+        <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums">
+          {formatCount(count)}
+        </span>
+      ) : null}
+    </h2>
+  );
   return (
     <section aria-label={title} className={cn('bg-card rounded-lg border shadow-xs', className)}>
-      <h2 className="flex items-center gap-2 border-b px-5 py-2.5 text-sm font-semibold">
-        {title}
-        {count !== undefined ? (
-          <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums">
-            {formatCount(count)}
-          </span>
-        ) : null}
-      </h2>
+      {toolbar ? (
+        <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 border-b px-5 py-1.5">
+          {heading}
+          {toolbar}
+        </div>
+      ) : (
+        <div className="border-b px-5 py-2.5">{heading}</div>
+      )}
       {children}
     </section>
   );
@@ -100,12 +120,85 @@ function FrameworkLink({ framework, fallbackKey }: { framework: FrameworkSummary
 
 // ---- Sections ---------------------------------------------------------------------------------
 
-function SatisfyingControls({ controls }: { controls: SatisfyingControl[] }) {
+function SatisfyingControls({ requirement }: { requirement: RequirementDetail }) {
+  const controls = requirement.controls;
+  const viewer = useViewer();
+  const remove = useRemoveMapping();
+  const [target, setTarget] = useState<MappingTarget | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [refused, setRefused] = useState<unknown>(null);
+
+  const mayMap = mayMapAny(viewer);
+  const canRemove = (control: SatisfyingControl) => mayRemoveMapping(viewer, control, control.origin);
+  const actions = controls.some(canRemove);
+  const mappedIds = new Set(controls.map((c) => c.id));
+
+  const startRemoval = (control: SatisfyingControl) => {
+    remove.reset();
+    setNotice(null);
+    setRefused(null);
+    setTarget({
+      control: { id: control.id, number: control.number, name: control.name, label: control.label },
+      requirement: { id: requirement.id, code: requirement.code, title: requirement.title },
+      origin: control.origin,
+    });
+  };
+
+  const confirmRemoval = () => {
+    if (!target) return;
+    const { control } = target;
+    remove.mutate(
+      { controlId: control.id, requirementId: requirement.id },
+      {
+        onSuccess: () => {
+          setTarget(null);
+          setNotice(`${control.number} no longer satisfies ${requirement.code}.`);
+        },
+        onError: (error) => {
+          setTarget(null);
+          setRefused(error);
+        },
+      },
+    );
+  };
+
+  const toolbar = (
+    <>
+      <p role="status" className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs font-normal">
+        {notice ? (
+          <>
+            <CircleCheck className="size-3.5 shrink-0 text-emerald-600" aria-hidden />
+            <span className="truncate">{notice}</span>
+          </>
+        ) : null}
+      </p>
+      {viewer && mayMap ? (
+        <div className="ml-auto">
+          <MapControlDialog
+            requirement={{ id: requirement.id, code: requirement.code, title: requirement.title }}
+            mappedIds={mappedIds}
+            viewer={viewer}
+            onMapped={(message) => {
+              setRefused(null);
+              setNotice(message);
+            }}
+          />
+        </div>
+      ) : null}
+    </>
+  );
+
   return (
-    <Panel title="Controls that satisfy this requirement" count={controls.length}>
+    <Panel title="Controls that satisfy this requirement" count={controls.length} toolbar={toolbar}>
+      {refused ? (
+        <div className="border-b p-4">
+          <MappingRefusal error={refused} action="remove" />
+        </div>
+      ) : null}
       {controls.length === 0 ? (
         <EmptyNote>
           <p>No control you can see satisfies this requirement.</p>
+          {mayMap ? <p className="text-xs">Use Map a control to record one that does.</p> : null}
         </EmptyNote>
       ) : (
         <Table>
@@ -114,7 +207,13 @@ function SatisfyingControls({ controls }: { controls: SatisfyingControl[] }) {
               <TableHead className="pl-5">Number</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Code</TableHead>
-              <TableHead className="pr-5">Status</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className={actions ? undefined : 'pr-5'}>Origin</TableHead>
+              {actions ? (
+                <TableHead className="w-28 pr-5 text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -139,17 +238,43 @@ function SatisfyingControls({ controls }: { controls: SatisfyingControl[] }) {
                   <span className="line-clamp-2 min-w-[12rem]">{control.name}</span>
                 </TableCell>
                 <TableCell className="font-medium whitespace-nowrap">{control.code}</TableCell>
-                <TableCell className="pr-5">
+                <TableCell>
                   <span className="inline-flex flex-wrap items-center gap-2">
                     <ValueBadge value={control.controlStatus} />
                     {control.status === 'retired' ? <StatusBadge status="retired" /> : null}
                   </span>
                 </TableCell>
+                <TableCell className={actions ? undefined : 'pr-5'}>
+                  <MappingOrigin origin={control.origin} />
+                </TableCell>
+                {actions ? (
+                  <TableCell className="py-1 pr-3 text-right">
+                    {canRemove(control) ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive h-7"
+                        aria-label={`Remove mapping to ${control.number}`}
+                        onClick={() => startRemoval(control)}
+                      >
+                        <Unlink aria-hidden />
+                        Remove
+                      </Button>
+                    ) : null}
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
+      <RemoveMappingDialog
+        target={target}
+        pending={remove.isPending}
+        onConfirm={confirmRemoval}
+        onCancel={() => setTarget(null)}
+      />
     </Panel>
   );
 }
@@ -356,7 +481,7 @@ export function RequirementPage({ id }: { id: string }) {
           <Panel title="Details">
             <Sheet items={details} />
           </Panel>
-          <SatisfyingControls controls={r.controls} />
+          <SatisfyingControls requirement={r} />
           <RelatedRequirements requirement={r} frameworks={known} />
         </div>
 
