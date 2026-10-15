@@ -806,7 +806,8 @@ for (const m of group) {
     slices[m].stoppedBecause = `${unfinished.map((t) => t.id).join(', ')} did not finish, so ${M} was not pushed and the run stops here`
     break
   }
-  if (slices[m].done.every((t) => t.findings === 'already done')) {
+  // `review: ['s3']` still reviews and pushes a slice whose tasks were all done before this run.
+  if (slices[m].done.every((t) => t.findings === 'already done') && !(given.review ?? []).includes(m)) {
     slices[m].pushed = 'nothing new to push'
     log(`${M}: every task was already done, so no rebuild and no push`)
     continue
