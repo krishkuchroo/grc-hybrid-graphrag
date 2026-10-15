@@ -1,6 +1,7 @@
-// Org provisioning (M0-014; D4, D22, D45.5, D53, D57, D73, D133): one call creates an org
+// Org provisioning (M0-014; D4, D22, D45.5, D53, D57, D66, D73, D133): one call creates an org
 // everywhere: the Postgres org row, its audit partition, the first Admin, the `org.created` audit
-// event, `org-<orgId>` in Neo4j and `grc-org-<orgId>` in storage.
+// event, `org-<orgId>` in Neo4j with its schema and the framework catalogs (S2-003), and
+// `grc-org-<orgId>` in storage.
 //
 // Safe to re-run (D45.5): the slug names the org. The org ID is derived from the slug (a
 // name-based UUID), so a re-run finds the same org without reading across the org wall, and every
@@ -11,7 +12,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { AuditService, createAuditPartition } from '../audit/audit.service.js';
+import { AuditOutbox } from '../audit/outbox.js';
 import type { Db } from '../db/client.js';
+import type { CatalogFiles } from '../frameworks/catalog-files.js';
+import { loadFrameworkCatalogs } from '../frameworks/catalog-loader.js';
 import { ensureOrgSchema, type SchemaGraph } from '../graph/org-schema.js';
 import type { Tx } from '../db/org-context.js';
 import { member, organization, user } from './schema.js';
@@ -29,6 +33,11 @@ export interface ProvisionOrgDeps {
   migrator: Db;
   graph: SchemaGraph & { createOrgDatabase(orgId: string): Promise<void> };
   files: { ensureBucket(orgId: string): Promise<void> };
+  /** Saves the catalog load and its audit entries in one transaction each (S2-003). Defaults to an
+   * AuditOutbox over `graph`. */
+  outbox?: Pick<AuditOutbox, 'withAuditedWrite'>;
+  /** The framework catalogs to load. Defaults to the committed files (`readCatalogFiles`). */
+  catalogs?: CatalogFiles;
 }
 
 /** Lowercase letters and digits, in groups joined by single hyphens. */
@@ -127,9 +136,11 @@ export async function provisionOrg(input: ProvisionOrgInput, deps: ProvisionOrgD
     sourceId: `org.created:${orgId}`,
   });
 
-  // 4. The org's graph database with its D73 schema, and its storage bucket (all "if missing").
+  // 4. The org's graph database with its D73 schema and the framework catalogs (D66; a re-run
+  // loads only what is missing or changed), and its storage bucket (all "if missing").
   await deps.graph.createOrgDatabase(orgId);
   await ensureOrgSchema(deps.graph, orgId);
+  await loadFrameworkCatalogs({ outbox: deps.outbox ?? new AuditOutbox(deps.graph) }, orgId, deps.catalogs);
   await deps.files.ensureBucket(orgId);
 
   return { orgId };
