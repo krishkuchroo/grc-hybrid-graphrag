@@ -15,8 +15,13 @@ export interface RouteDoc {
   summary: string;
   /** The schema of the JSON request body, if the route takes one. */
   body?: z.ZodType;
+  /** A multipart/form-data request body instead: its text fields, and its file parts by name with
+   * their descriptions. */
+  multipart?: { fields: z.ZodObject; files: Record<string, string> };
   /** The schema of the 200 JSON response. */
   response: z.ZodType;
+  /** Other JSON answers by status, for example a 201 that differs from the 200. */
+  responses?: Record<string, { description: string; schema: z.ZodType }>;
   /** The query parameters the route takes (an object of strings), if any besides a list's paging. */
   query?: z.ZodObject;
 }
@@ -31,6 +36,46 @@ function jsonSchema(schema: z.ZodType): Record<string, unknown> {
   const result = z.toJSONSchema(schema, { io: 'output' }) as Record<string, unknown>;
   delete result.$schema;
   return result;
+}
+
+/** A multipart form's schema: its file parts (binary strings) and its text fields. */
+function multipartSchema(multipart: NonNullable<RouteDoc['multipart']>): Record<string, unknown> {
+  const fields = jsonSchema(multipart.fields) as { properties?: Record<string, unknown>; required?: string[] };
+  const files = Object.entries(multipart.files);
+  return {
+    type: 'object',
+    properties: {
+      ...Object.fromEntries(
+        files.map(([name, description]) => [
+          name,
+          { type: 'string', format: 'binary', contentMediaType: 'application/octet-stream', description },
+        ]),
+      ),
+      ...(fields.properties ?? {}),
+    },
+    required: [...files.map(([name]) => name), ...(fields.required ?? [])],
+    additionalProperties: false,
+  };
+}
+
+function requestBody(route: RouteDoc): Record<string, unknown> | undefined {
+  if (route.multipart) {
+    return {
+      required: true,
+      content: {
+        'multipart/form-data': {
+          schema: multipartSchema(route.multipart),
+          encoding: Object.fromEntries(
+            Object.keys(route.multipart.files).map((name) => [name, { contentType: 'application/octet-stream' }]),
+          ),
+        },
+      },
+    };
+  }
+  if (route.body) {
+    return { required: true, content: { 'application/json': { schema: jsonSchema(route.body) } } };
+  }
+  return undefined;
 }
 
 /** A query schema's fields as OpenAPI query parameters. */
@@ -50,22 +95,22 @@ export function openApiDocument(): Record<string, unknown> {
   for (const route of routes.values()) {
     const path = `${API_PREFIX}${route.path}`;
     paths[path] ??= {};
+    const body = requestBody(route);
     paths[path][route.method] = {
       summary: route.summary,
       ...(route.query ? { parameters: queryParameters(route.query) } : {}),
-      ...(route.body
-        ? {
-            requestBody: {
-              required: true,
-              content: { 'application/json': { schema: jsonSchema(route.body) } },
-            },
-          }
-        : {}),
+      ...(body ? { requestBody: body } : {}),
       responses: {
         '200': {
           description: 'OK',
           content: { 'application/json': { schema: jsonSchema(route.response) } },
         },
+        ...Object.fromEntries(
+          Object.entries(route.responses ?? {}).map(([status, r]) => [
+            status,
+            { description: r.description, content: { 'application/json': { schema: jsonSchema(r.schema) } } },
+          ]),
+        ),
       },
     };
   }

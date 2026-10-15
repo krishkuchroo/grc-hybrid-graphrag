@@ -311,5 +311,17 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Uploads (S3-004, D53, D64): the `uploads` cell at the guard (the Control Owner, Auditor and
+    // Viewer get 403), then `canUpload(role, kind)` and the label against the caller's clearance
+    // (D198) in the service. The document lands only in the caller's org (row, bucket and audit
+    // trail); a repeat of content the org already has stores nothing again. Audited as
+    // `document.uploaded`; 20 uploads a minute per person.
+    {
+      method: 'POST',
+      path: '/api/v1/uploads',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };

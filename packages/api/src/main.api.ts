@@ -1,6 +1,7 @@
 // The API program (D28, D36): NestJS on Fastify, every route under /api/v1 (D47), one error
 // format (D47), a 1 MB body cap, 300 requests a minute per person and security headers (D64), and
-// sign-in with Better Auth (D49, D54).
+// sign-in with Better Auth (D49, D54). The upload routes alone take multipart bodies of up to 25 MB,
+// at 20 uploads a minute per person (D53, D64; S3-004).
 // Importing this file builds nothing; running it directly starts listening.
 import 'reflect-metadata';
 import { pathToFileURL } from 'node:url';
@@ -15,6 +16,8 @@ import { RateLimiter, REQUESTS_PER_MINUTE, registerRateLimit } from './common/ra
 import { registerSecurityHeaders } from './common/security-headers.js';
 import { AuthService } from './identity/auth.js';
 import { registerAuthRoutes, registerSessionHook } from './identity/auth-routes.js';
+import { registerMultipart } from './intake/uploads/multipart.js';
+import { registerUploadRateLimit } from './intake/uploads/upload-rate-limit.js';
 
 /** 1 MB for every request body. Uploads (25 MB) get their own limit on their own route (D53). */
 export const BODY_LIMIT_BYTES = 1_048_576;
@@ -44,6 +47,8 @@ export async function createApiApp(opts: ApiAppOptions = {}): Promise<NestFastif
   const auth = app.get(AuthService);
   registerSessionHook(fastify, auth);
   registerRateLimit(fastify, new RateLimiter(REQUESTS_PER_MINUTE));
+  registerUploadRateLimit(fastify);
+  await registerMultipart(fastify);
   registerAuthRoutes(fastify, auth, log);
   app.setGlobalPrefix(API_PREFIX.slice(1));
   app.useGlobalFilters(new ErrorFilter(log));
