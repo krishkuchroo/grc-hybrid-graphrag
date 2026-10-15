@@ -4,7 +4,8 @@
 // POST /api/v1/mappings/remove. Every address is relative (the M0-015 rule). The web only hides the
 // buttons the API would refuse (`canMapControl`, `isRemovableLinkOrigin`); the API decides (D7).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { can, canMapControl, isRemovableLinkOrigin } from '@grc/shared';
+import { useEffect, useState } from 'react';
+import { can, canMapControl, FRAMEWORK_KEYS, isRemovableLinkOrigin } from '@grc/shared';
 import {
   api,
   ApiError,
@@ -73,6 +74,39 @@ export function mayRemoveMapping(
   origin: unknown,
 ): boolean {
   return isRemovableLinkOrigin(origin) && mayMapControl(viewer, control);
+}
+
+/** How a mapping's origin reads on screen. */
+export const ORIGIN_TEXT: Record<string, string> = { manual: 'Manual', import: 'Import', ai: 'AI' };
+
+/** A search box's text once typing has paused, trimmed: what a picker asks the API for. A cleared
+ * box clears it straight away, so an old search never shows again. */
+export function usePausedText(text: string): string {
+  const now = text.trim();
+  const [paused, setPaused] = useState(now);
+  useEffect(() => {
+    const timer = setTimeout(() => setPaused(now), SEARCH_PAUSE_MS);
+    return () => clearTimeout(timer);
+  }, [now]);
+  return now === '' ? '' : paused;
+}
+
+/** A control's requirements in one group per framework, in the project's framework order, each
+ * keeping the API's natural code order. */
+export function byFramework(items: readonly ControlRequirement[]): Array<{ key: string; items: ControlRequirement[] }> {
+  const groups = new Map<string, ControlRequirement[]>();
+  for (const item of items) {
+    const group = groups.get(item.framework);
+    if (group) group.push(item);
+    else groups.set(item.framework, [item]);
+  }
+  const rank = (key: string) => {
+    const i = (FRAMEWORK_KEYS as readonly string[]).indexOf(key);
+    return i < 0 ? FRAMEWORK_KEYS.length : i;
+  };
+  return [...groups.entries()]
+    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+    .map(([key, groupItems]) => ({ key, items: groupItems }));
 }
 
 /** The requirements a control satisfies, in framework then natural code order (the API's order). */
