@@ -8,7 +8,9 @@
 // sent without a key gets its own unique key, so it is never merged with another.
 import { randomUUID } from 'node:crypto';
 import { Logger, Module, type DynamicModule, type OnApplicationShutdown } from '@nestjs/common';
-import { PgBoss } from 'pg-boss';
+import { sql } from 'drizzle-orm';
+import { fromDrizzle, PgBoss } from 'pg-boss';
+import type { Tx } from '../db/org-context.js';
 
 export const JOB_DEFAULTS = Object.freeze({
   retryLimit: 3,
@@ -57,6 +59,21 @@ export class JobsService implements OnApplicationShutdown {
   async send(queue: string, data: object, opts: { singletonKey?: string } = {}): Promise<string | null> {
     await this.ensureQueue(queue);
     return this.boss.send(queue, data, { ...JOB_DEFAULTS, singletonKey: opts.singletonKey ?? randomUUID() });
+  }
+
+  /**
+   * Queues a job inside the caller's transaction (D29), through pg-boss's `db` option, so the job
+   * exists only if that transaction commits. Same defaults and key rule as `send`; returns the ID,
+   * or null when a job with the same key is already queued or running (the same key twice in one
+   * transaction too). The queue itself is created outside the transaction, once per queue.
+   */
+  async sendInTx(tx: Tx, queue: string, data: object, opts: { singletonKey?: string } = {}): Promise<string | null> {
+    await this.ensureQueue(queue);
+    return this.boss.send(queue, data, {
+      ...JOB_DEFAULTS,
+      singletonKey: opts.singletonKey ?? randomUUID(),
+      db: fromDrizzle(tx, sql),
+    });
   }
 
   /** Registers a handler for a queue. Only the worker program processes jobs. */
