@@ -830,6 +830,54 @@ export type GetControlsIdAuditFindingsQuery = {
   status: 'active' | 'retired' | 'all';
 };
 
+/** GET /api/v1/controls/{id}/evidence response. */
+export type GetControlsIdEvidenceResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    collectedDate: string;
+    validUntil: string | null;
+    fileKey: string;
+    fileHash: string;
+    documentId: string;
+    fileName: string;
+    format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+    sizeBytes: number;
+    reviewStatus: 'pending' | 'accepted' | 'rejected';
+    reviewedBy: string | null;
+    reviewedAt: string | null;
+    controls: Array<{
+      id: string;
+      number: string;
+      name: string;
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      status: string;
+    }>;
+    validity: 'valid' | 'expiring' | 'expired';
+    reviewer: {
+      id: string;
+      name: string;
+    } | null;
+    canEdit: boolean;
+  }>;
+};
+
+/** GET /api/v1/controls/{id}/evidence query parameters. */
+export type GetControlsIdEvidenceQuery = {
+  status: 'active' | 'retired' | 'all';
+};
+
 /** GET /api/v1/controls/{id}/links response. */
 export type GetControlsIdLinksResponse = {
   items: Array<{
@@ -938,6 +986,285 @@ export type GetDocumentsIdResponse = {
 
 /** GET /api/v1/documents/{id}/download response. */
 export type GetDocumentsIdDownloadResponse = ApiFile;
+
+/** GET /api/v1/evidence response. */
+export type GetEvidenceResponse = {
+  items: Array<{
+    id: string;
+    number: string;
+    sourceIds: Array<string>;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: 'active' | 'retired';
+    owner: string;
+    version: number;
+    createdAt: string;
+    createdBy: string;
+    updatedAt: string;
+    updatedBy: string;
+    origin: 'manual' | 'import' | 'ai';
+    collectedDate: string;
+    validUntil: string | null;
+    fileKey: string;
+    fileHash: string;
+    documentId: string;
+    fileName: string;
+    format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+    sizeBytes: number;
+    reviewStatus: 'pending' | 'accepted' | 'rejected';
+    reviewedBy: string | null;
+    reviewedAt: string | null;
+    controls: Array<{
+      id: string;
+      number: string;
+      name: string;
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      status: string;
+    }>;
+    validity: 'valid' | 'expiring' | 'expired';
+    reviewer: {
+      id: string;
+      name: string;
+    } | null;
+    canEdit: boolean;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/evidence response. */
+export type PostEvidenceResponse =
+  | {
+      id: string;
+      number: string;
+      sourceIds: Array<string>;
+      name: string;
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      status: 'active' | 'retired';
+      owner: string;
+      version: number;
+      createdAt: string;
+      createdBy: string;
+      updatedAt: string;
+      updatedBy: string;
+      origin: 'manual' | 'import' | 'ai';
+      collectedDate: string;
+      validUntil: string | null;
+      fileKey: string;
+      fileHash: string;
+      documentId: string;
+      fileName: string;
+      format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+      sizeBytes: number;
+      reviewStatus: 'pending' | 'accepted' | 'rejected';
+      reviewedBy: string | null;
+      reviewedAt: string | null;
+      controls: Array<{
+        id: string;
+        number: string;
+        name: string;
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        status: string;
+      }>;
+      validity: 'valid' | 'expiring' | 'expired';
+      reviewer: {
+        id: string;
+        name: string;
+      } | null;
+      canEdit: boolean;
+    }
+  | {
+      id: string;
+      number: string;
+      sourceIds: Array<string>;
+      name: string;
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      status: 'active' | 'retired';
+      owner: string;
+      version: number;
+      createdAt: string;
+      createdBy: string;
+      updatedAt: string;
+      updatedBy: string;
+      origin: 'manual' | 'import' | 'ai';
+      collectedDate: string;
+      validUntil: string | null;
+      fileKey: string;
+      fileHash: string;
+      documentId: string;
+      fileName: string;
+      format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+      sizeBytes: number;
+      reviewStatus: 'pending' | 'accepted' | 'rejected';
+      reviewedBy: string | null;
+      reviewedAt: string | null;
+      controls: Array<{
+        id: string;
+        number: string;
+        name: string;
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        status: string;
+      }>;
+      validity: 'valid' | 'expiring' | 'expired';
+      reviewer: {
+        id: string;
+        name: string;
+      } | null;
+      canEdit: boolean;
+    };
+
+/** POST /api/v1/evidence request body, sent as a multipart form. */
+export type PostEvidenceBody = {
+  file: Blob;
+  controlId: string;
+  name: string;
+  collectedDate: string;
+  validUntil?: string;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  owner?: string;
+};
+
+/** GET /api/v1/evidence/{id} response. */
+export type GetEvidenceIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  collectedDate: string;
+  validUntil: string | null;
+  fileKey: string;
+  fileHash: string;
+  documentId: string;
+  fileName: string;
+  format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+  sizeBytes: number;
+  reviewStatus: 'pending' | 'accepted' | 'rejected';
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  controls: Array<{
+    id: string;
+    number: string;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: string;
+  }>;
+  validity: 'valid' | 'expiring' | 'expired';
+  reviewer: {
+    id: string;
+    name: string;
+  } | null;
+  canEdit: boolean;
+};
+
+/** PATCH /api/v1/evidence/{id} response. */
+export type PatchEvidenceIdResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  collectedDate: string;
+  validUntil: string | null;
+  fileKey: string;
+  fileHash: string;
+  documentId: string;
+  fileName: string;
+  format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+  sizeBytes: number;
+  reviewStatus: 'pending' | 'accepted' | 'rejected';
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  controls: Array<{
+    id: string;
+    number: string;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: string;
+  }>;
+  validity: 'valid' | 'expiring' | 'expired';
+  reviewer: {
+    id: string;
+    name: string;
+  } | null;
+  canEdit: boolean;
+};
+
+/** PATCH /api/v1/evidence/{id} request body. */
+export type PatchEvidenceIdBody = {
+  name?: string;
+  collectedDate?: string;
+  validUntil?: string | null;
+  label?: 'public' | 'internal' | 'confidential' | 'restricted';
+  owner?: string;
+  version: number;
+};
+
+/** GET /api/v1/evidence/{id}/download response. */
+export type GetEvidenceIdDownloadResponse = ApiFile;
+
+/** POST /api/v1/evidence/{id}/retire response. */
+export type PostEvidenceIdRetireResponse = {
+  id: string;
+  number: string;
+  sourceIds: Array<string>;
+  name: string;
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  status: 'active' | 'retired';
+  owner: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  origin: 'manual' | 'import' | 'ai';
+  collectedDate: string;
+  validUntil: string | null;
+  fileKey: string;
+  fileHash: string;
+  documentId: string;
+  fileName: string;
+  format: 'pdf' | 'docx' | 'csv' | 'json' | 'txt';
+  sizeBytes: number;
+  reviewStatus: 'pending' | 'accepted' | 'rejected';
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  controls: Array<{
+    id: string;
+    number: string;
+    name: string;
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    status: string;
+  }>;
+  validity: 'valid' | 'expiring' | 'expired';
+  reviewer: {
+    id: string;
+    name: string;
+  } | null;
+  canEdit: boolean;
+};
+
+/** POST /api/v1/evidence/{id}/retire request body. */
+export type PostEvidenceIdRetireBody = {
+  version: number;
+};
 
 /** GET /api/v1/frameworks response. */
 export type GetFrameworksResponse = {
@@ -2027,6 +2354,15 @@ export const api = {
       'GET',
       `/api/v1/controls/${encodeURIComponent(path.id)}/audit-findings${queryString(query)}`,
     ),
+  /** The evidence supporting a control that the caller can see (active by default) */
+  getControlsIdEvidence: (
+    path: { id: string },
+    query?: GetControlsIdEvidenceQuery,
+  ): Promise<GetControlsIdEvidenceResponse> =>
+    request<GetControlsIdEvidenceResponse>(
+      'GET',
+      `/api/v1/controls/${encodeURIComponent(path.id)}/evidence${queryString(query)}`,
+    ),
   /** The control's links whose other end the caller can see */
   getControlsIdLinks: (path: { id: string }): Promise<GetControlsIdLinksResponse> =>
     request<GetControlsIdLinksResponse>('GET', `/api/v1/controls/${encodeURIComponent(path.id)}/links`),
@@ -2045,6 +2381,24 @@ export const api = {
   /** Download the stored file as an attachment (Content-Type from its format); every download is audited as document.downloaded. 404 when missing or hidden */
   getDocumentsIdDownload: (path: { id: string }): Promise<GetDocumentsIdDownloadResponse> =>
     download('GET', `/api/v1/documents/${encodeURIComponent(path.id)}/download`),
+  /** List evidence, paged, with control, label, status, review status, validity (valid, expiring, expired) and search; sorted by number, name, collectedDate or validUntil */
+  getEvidence: (query?: ListQuery): Promise<GetEvidenceResponse> =>
+    request<GetEvidenceResponse>('GET', `/api/v1/evidence${queryString(query)}`),
+  /** Attach an evidence file (PDF, DOCX, CSV, JSON or TXT, checked by content, at most 25 MB) to a control. The file is stored once per org by content; the evidence (review status pending) and its SUPPORTS link are saved together and audited as record.created. 409 evidence_exists when the same file is already on that control. Counts toward the 20 uploads a minute per person */
+  postEvidence: (body: PostEvidenceBody, options?: UploadOptions): Promise<PostEvidenceResponse> =>
+    upload<PostEvidenceResponse>('POST', '/api/v1/evidence', body, options),
+  /** Open one evidence item with the controls it supports, its validity, review status and canEdit; 404 when missing or hidden */
+  getEvidenceId: (path: { id: string }): Promise<GetEvidenceIdResponse> =>
+    request<GetEvidenceIdResponse>('GET', `/api/v1/evidence/${encodeURIComponent(path.id)}`),
+  /** Edit evidence (name, dates, label, owner); the review fields are refused (400), the date rules run on the merged evidence, and a stale version is refused (409 stale_version) */
+  patchEvidenceId: (path: { id: string }, body: PatchEvidenceIdBody): Promise<PatchEvidenceIdResponse> =>
+    request<PatchEvidenceIdResponse>('PATCH', `/api/v1/evidence/${encodeURIComponent(path.id)}`, body),
+  /** Download the evidence file as an attachment (Content-Type from its format); every download is audited as document.downloaded. 404 when missing or hidden */
+  getEvidenceIdDownload: (path: { id: string }): Promise<GetEvidenceIdDownloadResponse> =>
+    download('GET', `/api/v1/evidence/${encodeURIComponent(path.id)}/download`),
+  /** Retire evidence; it is kept with its link and file, never deleted */
+  postEvidenceIdRetire: (path: { id: string }, body: PostEvidenceIdRetireBody): Promise<PostEvidenceIdRetireResponse> =>
+    request<PostEvidenceIdRetireResponse>('POST', `/api/v1/evidence/${encodeURIComponent(path.id)}/retire`, body),
   /** The active frameworks, each with its requirement, covered and implemented counts for the caller */
   getFrameworks: (): Promise<GetFrameworksResponse> => request<GetFrameworksResponse>('GET', '/api/v1/frameworks'),
   /** One framework with its counts for the caller; 404 when missing or hidden */
