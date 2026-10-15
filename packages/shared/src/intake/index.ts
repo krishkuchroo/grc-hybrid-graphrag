@@ -12,3 +12,5 @@ export * from './audit-findings.js';
 export * from './intake-schemas.js';
 export * from './intake-links.js';
 export * from './evidence-rules.js';
+// Running asset imports (S3-007): who may import.
+export * from './import-rules.js';

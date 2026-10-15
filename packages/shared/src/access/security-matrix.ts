@@ -311,6 +311,18 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Running an import (S3-007, D213 (5)): the `uploads` cell at the guard, then `canImportAssets`
+    // (Admin, Risk Manager, Compliance Manager and Analyst, people and API keys) in the service; the
+    // import is checked for the role's asset view and its label (404 when hidden) and RLS checks
+    // again. The worker writes only in the caller's org database, refuses rows labelled above the
+    // runner's clearance, and audits every change with `meta.importId`.
+    {
+      method: 'POST',
+      path: '/api/v1/imports/:id/run',
+      access: { subject: 'uploads', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
     // Uploads (S3-004, D53, D64): the `uploads` cell at the guard (the Control Owner, Auditor and
     // Viewer get 403), then `canUpload(role, kind)` and the label against the caller's clearance
     // (D198) in the service. The document lands only in the caller's org (row, bucket and audit

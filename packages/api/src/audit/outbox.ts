@@ -53,4 +53,40 @@ export class AuditOutbox {
       return result;
     });
   }
+
+  /**
+   * Like `withAuditedWrite`, for a change that writes many entries at once (S3-007's imports):
+   * runs `fn` and saves one outbox node per entry, in the order given (each with a larger `seq`),
+   * in the same write transaction in `org-<orgId>`. No entries means no outbox nodes. If `fn`
+   * throws or the transaction fails, none of the changes or entries are kept.
+   */
+  async withAuditedWrites<T>(
+    orgId: string,
+    actor: AuditActor,
+    fn: (tx: ManagedTransaction) => Promise<{ result: T; audits: OutboxAudit[] }>,
+  ): Promise<T> {
+    return this.graph.write(orgId, async (tx) => {
+      const { result, audits } = await fn(tx);
+      if (audits.length === 0) return result;
+      const nodes = audits.map((audit) => {
+        const payload: OutboxPayload = {
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          action: audit.action,
+          targetType: audit.targetType,
+          targetId: audit.targetId,
+          before: audit.before,
+          after: audit.after,
+          meta: audit.meta,
+        };
+        return { id: randomUUID(), payload: JSON.stringify(payload), seq: nextSeq() };
+      });
+      await tx.run(
+        `UNWIND $nodes AS node
+         CREATE (:${AUDIT_OUTBOX_LABEL} {id: node.id, orgId: $orgId, payload: node.payload, createdAt: datetime(), seq: node.seq})`,
+        { nodes, orgId },
+      );
+      return result;
+    });
+  }
 }
