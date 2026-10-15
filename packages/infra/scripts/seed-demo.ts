@@ -7,10 +7,16 @@
 // - Then (S1-010) each org's fixed records and links (demo-records.ts), added as the org's Admin
 //   through RecordsService and LinksService, so each one is audited like any change (D37, D45.4).
 //   Every record carries a fixed source ID, so a re-run finds it and adds nothing (D45.5).
+// - Then (S2-008) each org's framework catalogs (loadFrameworkCatalogs; a no-op when provisioning
+//   already loaded them) and its fixed control-to-requirement mappings (demo-mappings.ts), added as
+//   the org's Admin through MappingsService, so each one gets its `link.created` entry (D37, D56).
+//   A control is found by its demo source ID and a requirement by its framework and code; a mapping
+//   that is already there is refused (409 `link_exists`) and left alone, so a re-run adds nothing.
 // - DEMO_ORG_SLUG_SUFFIX (optional, lowercase letters and digits) makes each slug
 //   `<slug>-<suffix>`. The org IDs come from the slugs, so tests use it to stay off the live demo
 //   orgs (D176).
 import { randomBytes, randomUUID, scrypt } from 'node:crypto';
+import type { DemoMapping } from './demo-mappings.js';
 import type { DemoData, DemoKind } from './demo-records.js';
 import type { ScriptDb } from './org-script-env.js';
 // Loaded by URL: plain `node` needs the `.ts` file name, which tsc refuses in an import path.
@@ -21,6 +27,9 @@ const { connect, describeError, load, missingSettings, provisioning, setting, sq
 const { DEMO_DATA, demoSourceId } = (await import(
   new URL('./demo-records.ts', import.meta.url).href
 )) as typeof import('./demo-records.js');
+const { DEMO_MAPPINGS } = (await import(
+  new URL('./demo-mappings.ts', import.meta.url).href
+)) as typeof import('./demo-mappings.js');
 
 type Role = 'admin' | 'risk_manager' | 'compliance_manager' | 'control_owner' | 'auditor' | 'analyst' | 'viewer';
 type Label = 'public' | 'internal' | 'confidential' | 'restricted';
@@ -131,10 +140,29 @@ interface RecordsApi {
 interface LinksApi {
   create(caller: Caller, input: { type: string; fromId: string; toId: string }): Promise<unknown>;
 }
+interface MappingsApi {
+  create(caller: Caller, input: { controlId: string; requirementId: string }): Promise<unknown>;
+}
+/** Node counts of one framework's load (the loader's report). */
+interface CatalogCounts {
+  added: number;
+  updated: number;
+  retired: number;
+}
+interface CatalogReport {
+  frameworks: CatalogCounts[];
+  mapsTo: { added: number; retired: number };
+}
 interface Services {
   graph: Graph;
   records: RecordsApi;
   links: LinksApi;
+  mappings: MappingsApi;
+  /** The audit outbox the services write through; provisioning uses the same one. */
+  outbox: object;
+  /** The framework catalog files, read and checked once. */
+  catalogs: unknown;
+  loadCatalogs(orgId: string): Promise<CatalogReport>;
 }
 
 async function services(deps: { db: ScriptDb; graph: unknown }): Promise<Services> {
@@ -143,11 +171,23 @@ async function services(deps: { db: ScriptDb; graph: unknown }): Promise<Service
     'records/records.service.ts',
   );
   const { LinksService } = await load<{ LinksService: new (d: object) => LinksApi }>('records/links.service.ts');
+  const { MappingsService } = await load<{ MappingsService: new (d: object) => MappingsApi }>(
+    'frameworks/mappings.service.ts',
+  );
+  const { readCatalogFiles } = await load<{ readCatalogFiles(): unknown }>('frameworks/catalog-files.ts');
+  const { loadFrameworkCatalogs } = await load<{
+    loadFrameworkCatalogs(deps: { outbox: object }, orgId: string, catalogs: unknown): Promise<CatalogReport>;
+  }>('frameworks/catalog-loader.ts');
   const outbox = new AuditOutbox(deps.graph);
+  const catalogs = readCatalogFiles();
   return {
     graph: deps.graph as Graph,
     records: new RecordsService({ graph: deps.graph, outbox, db: deps.db }),
     links: new LinksService({ graph: deps.graph, outbox }),
+    mappings: new MappingsService({ graph: deps.graph, outbox }),
+    outbox,
+    catalogs,
+    loadCatalogs: (orgId) => loadFrameworkCatalogs({ outbox }, orgId, catalogs),
   };
 }
 
@@ -156,6 +196,18 @@ class MissingSetting extends Error {
   constructor(readonly setting: string) {
     super(`missing setting ${setting}`);
     this.name = 'MissingSetting';
+  }
+}
+
+/** The fixed demo data names something the org's graph doesn't hold. Prints only which kind of
+ * thing is missing and its place in the list, never a value (D164). */
+class DemoDataError extends Error {
+  constructor(
+    readonly code: 'unknown_control' | 'unknown_requirement',
+    readonly index: number,
+  ) {
+    super(`demo mapping ${index}: ${code}`);
+    this.name = 'DemoDataError';
   }
 }
 
@@ -210,6 +262,52 @@ async function seedRecords(
   return { records, links };
 }
 
+// Adds the org's demo mappings that aren't there yet, as `caller` through MappingsService (its
+// checks and its audit entry, D37, D212 (3)). The controls are found by their demo source IDs and
+// the requirements by framework and code (active ones only), each in one read. A mapping already
+// there is refused (409 `link_exists`) and left alone. Returns how many were added.
+async function seedMappings(svc: Services, caller: Caller, mappings: DemoMapping[]): Promise<number> {
+  const sourceIds = [...new Set(mappings.map((m) => m.control))];
+  const wanted = mappings.map((m) => ({ framework: m.framework, code: m.code }));
+  const { controls, requirements } = await svc.graph.read(caller.orgId, async (tx) => {
+    const c = await tx.run(
+      `UNWIND $sourceIds AS sid
+       MATCH (n:Control) WHERE sid IN n.sourceIds
+       RETURN sid, n.id AS id`,
+      { sourceIds },
+    );
+    const q = await tx.run(
+      `UNWIND $wanted AS w
+       MATCH (n:Requirement {framework: w.framework, code: w.code}) WHERE n.status = 'active'
+       RETURN w.framework + ' ' + w.code AS key, n.id AS id`,
+      { wanted },
+    );
+    return {
+      controls: new Map(c.records.map((r) => [r.get('sid') as string, r.get('id') as string])),
+      requirements: new Map(q.records.map((r) => [r.get('key') as string, r.get('id') as string])),
+    };
+  });
+  let added = 0;
+  for (const [index, m] of mappings.entries()) {
+    const controlId = controls.get(m.control);
+    if (!controlId) throw new DemoDataError('unknown_control', index);
+    const requirementId = requirements.get(`${m.framework} ${m.code}`);
+    if (!requirementId) throw new DemoDataError('unknown_requirement', index);
+    try {
+      await svc.mappings.create(caller, { controlId, requirementId });
+      added += 1;
+    } catch (err) {
+      if ((err as { code?: unknown }).code !== 'link_exists') throw err;
+    }
+  }
+  return added;
+}
+
+/** The sum of one count over every framework of a catalog load. */
+function total(report: CatalogReport, key: keyof CatalogCounts): number {
+  return report.frameworks.reduce((sum, f) => sum + f[key], 0);
+}
+
 const conn = await connect();
 try {
   const svc = await services(conn.deps);
@@ -220,7 +318,7 @@ try {
     const admin = people.find((p) => p.role === 'admin')!;
     const { orgId } = await provisioning.provisionOrg(
       { name: org.name, slug, admin: { email: admin.email, name: admin.name } },
-      conn.deps,
+      { ...conn.deps, outbox: svc.outbox, catalogs: svc.catalogs },
     );
     lines.push('', `${org.name} (${slug}), org ID ${orgId}`);
     const userIds = new Map<string, string>();
@@ -240,12 +338,25 @@ try {
     const caller: Caller = { orgId, userId: userOf('admin'), role: 'admin', clearance: 'restricted' };
     const added = await seedRecords(svc, caller, DEMO_DATA[org.slug]!, userOf);
     lines.push(`  records added: ${added.records}, links added: ${added.links}`);
+    // S2-008: the catalogs (already loaded by provisioning, so normally nothing changes), then the
+    // demo mappings.
+    const catalogs = await svc.loadCatalogs(orgId);
+    const mapped = await seedMappings(svc, caller, DEMO_MAPPINGS[org.slug]!);
+    lines.push(
+      `  framework catalogs: ${catalogs.frameworks.length} frameworks, items added ${total(catalogs, 'added')}, ` +
+        `updated ${total(catalogs, 'updated')}, retired ${total(catalogs, 'retired')}; mappings added: ${mapped}`,
+    );
   }
   console.log('Demo logins (every user signs in with the DEMO_USER_PASSWORD value from .env):');
   console.log(lines.join('\n'));
 } catch (err) {
   if (err instanceof MissingSetting) {
     console.error(`seed:demo: missing setting (environment or .env): ${err.setting}. The records were not added.`);
+  } else if (err instanceof DemoDataError) {
+    const thing = err.code === 'unknown_control' ? 'a control' : 'an active requirement';
+    console.error(
+      `seed:demo: demo mapping ${err.index} (demo-mappings.ts) names ${thing} the org's graph doesn't hold.`,
+    );
   } else {
     console.error(`seed:demo: failed: ${describeError(err)}`);
   }
