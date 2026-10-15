@@ -31,3 +31,6 @@ coverage/
 # Playwright output
 test-results/
 playwright-report/
+
+# The user's private notes (demo logins, backup codes): never commit
+RoughWork.md
