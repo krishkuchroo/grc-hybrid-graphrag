@@ -90,7 +90,7 @@ function frameworkCounts(scope: Scope): string {
   return `
     OPTIONAL MATCH (n:Requirement {framework: f.key}) WHERE ${scope.catalog('n')} AND n.status = 'active'
     OPTIONAL MATCH (c:Control)-[:SATISFIES]->(n) WHERE ${scope.control('c')} AND c.status = 'active'
-    WITH f, n, collect(c) AS cs
+    WITH f, n, collect(DISTINCT c) AS cs
     WITH f, n, size(cs) > 0 AS covered, any(c IN cs WHERE c.controlStatus = 'implemented') AS implemented
     WITH f, count(n) AS requirementCount,
       sum(CASE WHEN covered THEN 1 ELSE 0 END) AS coveredCount,
@@ -146,7 +146,7 @@ export function requirementListQueries(
   const coverage = q.coverage === undefined ? '' : ` WHERE ${COVERAGE_WHERE[q.coverage]}`;
   const match = `MATCH (n:Requirement {framework: $key}) WHERE ${where.join(' AND ')}
     OPTIONAL MATCH (c:Control)-[:SATISFIES]->(n) WHERE ${scope.control('c')}
-    WITH n, collect(c) AS cs
+    WITH n, collect(DISTINCT c) AS cs
     WITH n, size(cs) AS controlCount,
       any(c IN cs WHERE c.status = 'active') AS covered,
       any(c IN cs WHERE c.status = 'active' AND c.controlStatus = 'implemented') AS implemented${coverage}`;
