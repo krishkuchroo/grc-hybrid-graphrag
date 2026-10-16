@@ -1,9 +1,12 @@
 // The Analyst's decisions on a waiting finding (S5-005; D24, D38, D50): Approve (links and
-// mappings) with an optional note, and Reject (every kind) after a confirmation, with an optional
-// note. Only the Analyst sees them (`canWorkReviewQueue`; approving a mapping also needs
-// `canApproveFinding`); the API decides anyway (D7), so its refusals show in the dialog in plain
-// words with their reference ID (D47). After a decision the page shows the new status, and the
-// queue, its counts and the record pages ask again (useReview).
+// mappings) with an optional note, and Reject (every kind, "Not duplicates" for a possible
+// duplicate) after a confirmation, with an optional note. A proposed record is approved through its
+// form (./RecordApproval) and a duplicate merged through its own confirmation (./MergeDuplicate);
+// a live or approved finding is removed as a false positive (./RemoveFinding). Only the Analyst
+// sees them (`canWorkReviewQueue`; approving a mapping also needs `canApproveFinding`); the API
+// decides anyway (D7), so its refusals show in the dialog in plain words with their reference ID
+// (D47). After a decision the page shows the new status, and the queue, its counts and the record
+// pages ask again (useReview).
 import { REVIEW_NOTE_MAX_LENGTH, type ReviewFindingKind } from '@grc/shared';
 import { CircleCheck, CircleX } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
@@ -34,7 +37,7 @@ import { refusalMeansStale, useApproveFinding, useRejectFinding, type Decision, 
 import { decisionRefusal, decisionRefusalTitle } from './words';
 
 /** The optional note that goes with a decision into the audit trail. */
-function NoteField({
+export function NoteField({
   value,
   onChange,
   disabled,
@@ -69,7 +72,7 @@ function NoteField({
   );
 }
 
-function withNote<T extends object>(body: T, note: string): T & { note?: string } {
+export function withNote<T extends object>(body: T, note: string): T & { note?: string } {
   const trimmed = note.trim();
   return trimmed === '' ? body : { ...body, note: trimmed };
 }
@@ -159,7 +162,7 @@ export function ApproveDialog({
           {approve.error ? (
             <ApiProblem
               error={decisionRefusal(approve.error, 'approve', finding.kind)}
-              title={decisionRefusalTitle('approve')}
+              title={decisionRefusalTitle('approve', finding.kind)}
             />
           ) : null}
           <DialogFooter>
@@ -177,26 +180,34 @@ export function ApproveDialog({
   );
 }
 
-const REJECT_TEXT: Record<ReviewFindingKind, { title: string; description: string }> = {
+const REJECT_TEXT: Record<ReviewFindingKind, { title: string; description: string; button: string; busy: string }> = {
   link: {
     title: 'Reject this link?',
     description: 'The link isn’t written to the graph.',
+    button: 'Reject',
+    busy: 'Rejecting…',
   },
   record: {
     title: 'Reject this proposed record?',
     description: 'The record isn’t created, and the waiting links that point to it are rejected with it.',
+    button: 'Reject',
+    busy: 'Rejecting…',
   },
   duplicate: {
-    title: 'Reject this possible duplicate?',
-    description: 'The two records stay separate, as they are now.',
+    title: 'Mark these as not duplicates?',
+    description: 'The two records stay separate, as they are now, and nothing moves between them.',
+    button: 'Not duplicates',
+    busy: 'Saving…',
   },
   mapping: {
     title: 'Reject this mapping?',
     description: 'The mapping isn’t written and doesn’t count toward coverage.',
+    button: 'Reject',
+    busy: 'Rejecting…',
   },
 };
 
-/** Reject, for any waiting finding, after a confirmation. */
+/** Reject, for any waiting finding, after a confirmation ("Not duplicates" for a possible duplicate). */
 export function RejectDialog({
   finding,
   onRejected,
@@ -227,7 +238,7 @@ export function RejectDialog({
       <AlertDialogTrigger asChild>
         <Button type="button" variant="outline">
           <CircleX aria-hidden />
-          Reject
+          {text.button}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent className="sm:max-w-xl">
@@ -242,7 +253,7 @@ export function RejectDialog({
         {reject.error ? (
           <ApiProblem
             error={decisionRefusal(reject.error, 'reject', finding.kind)}
-            title={decisionRefusalTitle('reject')}
+            title={decisionRefusalTitle('reject', finding.kind)}
           />
         ) : null}
         <AlertDialogFooter>
@@ -267,7 +278,7 @@ export function RejectDialog({
             }}
           >
             <CircleX aria-hidden />
-            {reject.isPending ? 'Rejecting…' : 'Reject'}
+            {reject.isPending ? text.busy : text.button}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

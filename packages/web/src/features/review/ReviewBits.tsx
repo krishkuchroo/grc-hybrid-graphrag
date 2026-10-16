@@ -106,7 +106,8 @@ export function AiMark({ className }: { className?: string }) {
   );
 }
 
-const PAGE_OF = {
+/** Each kind's record page. */
+export const RECORD_PAGE = {
   risk: '/risks/$id',
   control: '/controls/$id',
   policy: '/policies/$id',
@@ -115,10 +116,10 @@ const PAGE_OF = {
   requirement: '/requirements/$id',
 } as const;
 
-export type PageKind = keyof typeof PAGE_OF;
+export type PageKind = keyof typeof RECORD_PAGE;
 
 export function isPageKind(kind: string): kind is PageKind {
-  return Object.hasOwn(PAGE_OF, kind);
+  return Object.hasOwn(RECORD_PAGE, kind);
 }
 
 /** A record's number, linking to its page. */
@@ -136,7 +137,7 @@ export function RecordLink({
   if (!isPageKind(kind)) return <span className={cn('font-semibold tabular-nums', className)}>{number}</span>;
   return (
     <Link
-      to={PAGE_OF[kind]}
+      to={RECORD_PAGE[kind]}
       params={{ id }}
       className={cn('text-primary font-semibold tabular-nums underline-offset-2 hover:underline', className)}
     >

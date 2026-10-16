@@ -2142,6 +2142,47 @@ export type GetReviewCountsResponse = {
   total: number;
 };
 
+/** GET /api/v1/review/documents/{id} response. */
+export type GetReviewDocumentsIdResponse = {
+  document: {
+    id: string;
+    name: string;
+    kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    uploader: {
+      type: 'user' | 'api_key' | 'system';
+      id: string;
+      name: unknown;
+    };
+    uploadedAt: string;
+    status: 'stored' | 'processing' | 'processed' | 'failed' | 'removed';
+  };
+  counts: {
+    liveAiLinks: number;
+    approvedRecords: number;
+    pendingFindings: number;
+    liveOrApprovedFindings: number;
+  };
+};
+
+/** POST /api/v1/review/documents/{id}/remove response. */
+export type PostReviewDocumentsIdRemoveResponse = {
+  documentId: string;
+  status: 'removed';
+  counts: {
+    aiLinksDeleted: number;
+    recordsRetired: number;
+    findingsRejected: number;
+    findingsRemoved: number;
+    chunkRecordsDeleted: number;
+  };
+};
+
+/** POST /api/v1/review/documents/{id}/remove request body. */
+export type PostReviewDocumentsIdRemoveBody = {
+  note?: string;
+};
+
 /** GET /api/v1/review/findings response. */
 export type GetReviewFindingsResponse = {
   items: Array<
@@ -2973,6 +3014,55 @@ export type PostReviewFindingsIdRejectBody = {
   note?: string;
 };
 
+/** POST /api/v1/review/findings/{id}/remove response. */
+export type PostReviewFindingsIdRemoveResponse = {
+  id: string;
+  kind: 'link' | 'record' | 'duplicate' | 'mapping';
+  status: 'removed';
+  decidedAt: string;
+  outcome:
+    | {
+        result: 'created' | 'exists';
+        type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+        fromId: string;
+        fromNumber: string;
+        toId: string;
+        toNumber: string;
+        removed?: {
+          graph: 'deleted' | 'not_found';
+        };
+      }
+    | {
+        recordId: string;
+        number: string;
+        removed?: {
+          graph: 'retired' | 'already_retired';
+        };
+      }
+    | {
+        keptId: string;
+        keptNumber: string;
+        retiredId: string;
+        retiredNumber: string;
+      }
+    | {
+        result: 'created' | 'exists';
+        type: 'SATISFIES' | 'MAPS_TO';
+        fromId: string;
+        fromNumber: string;
+        toId: string;
+        toNumber: string;
+        removed?: {
+          graph: 'deleted' | 'not_found';
+        };
+      };
+};
+
+/** POST /api/v1/review/findings/{id}/remove request body. */
+export type PostReviewFindingsIdRemoveBody = {
+  note?: string;
+};
+
 /** GET /api/v1/risks response. */
 export type GetRisksResponse = {
   items: Array<{
@@ -3498,6 +3588,19 @@ export const api = {
   /** The pending review findings per kind, and their total, in the caller's view */
   getReviewCounts: (): Promise<GetReviewCountsResponse> =>
     request<GetReviewCountsResponse>('GET', '/api/v1/review/counts'),
+  /** What removing one upload would touch (Admins and Analysts): the document, and counts of the live AI links from it in the graph, the records approved from its findings, its pending findings, and its live or approved findings. Counts include what is above your clearance, never by name or number. 404 when you may not see the document; 403 for every other role */
+  getReviewDocumentsId: (path: { id: string }): Promise<GetReviewDocumentsIdResponse> =>
+    request<GetReviewDocumentsIdResponse>('GET', `/api/v1/review/documents/${encodeURIComponent(path.id)}`),
+  /** Remove everything from one bad upload in a single action (Analysts only): the document becomes Removed and is never processed again, every AI link from it is deleted from the graph (each with a `link.removed` entry), the records approved from its findings are retired, its pending findings are rejected and its live and approved ones removed, its chunk-to-record rows are dropped, and one `document.removed` entry holds the counts and your note. The stored file is kept. Answers what this run did, as counts only; running it again answers zero counts. 404 when you may not see the document; 409 `not_removable` for an asset list; 403 for every other role, Admins included */
+  postReviewDocumentsIdRemove: (
+    path: { id: string },
+    body: PostReviewDocumentsIdRemoveBody,
+  ): Promise<PostReviewDocumentsIdRemoveResponse> =>
+    request<PostReviewDocumentsIdRemoveResponse>(
+      'POST',
+      `/api/v1/review/documents/${encodeURIComponent(path.id)}/remove`,
+      body,
+    ),
   /** The Analyst review queue (Admins and Analysts): the AI findings in the caller's view, paged; pending and newest first by default. Filters: kind, status (one or more, comma-separated), documentId, recordId (any record a finding names) and failedCheck; sort newest or oldest. A record the caller can't see now shows as `{ hidden: true }`; findings above the caller's clearance are never listed */
   getReviewFindings: (query?: ListQuery): Promise<GetReviewFindingsResponse> =>
     request<GetReviewFindingsResponse>('GET', `/api/v1/review/findings${queryString(query)}`),
@@ -3522,6 +3625,16 @@ export const api = {
     request<PostReviewFindingsIdRejectResponse>(
       'POST',
       `/api/v1/review/findings/${encodeURIComponent(path.id)}/reject`,
+      body,
+    ),
+  /** Remove a live or approved AI finding that turned out false (Analysts only): a link or mapping's own AI link is deleted from the graph with a `link.removed` copy (a link that was already there from a person, an import or elsewhere is never deleted), or the record an approved new-record finding created is retired. The finding becomes `removed`, with your note, its outcome's `removed.graph` and a `review.removed` audit entry, and the AI never proposes it again. 404 when the finding or a record it names is hidden from you or missing; 409 `not_removable` for a duplicate or a pending finding (reject it instead); 409 `already_decided` once it is rejected or removed; 403 for every other role, Admins included */
+  postReviewFindingsIdRemove: (
+    path: { id: string },
+    body: PostReviewFindingsIdRemoveBody,
+  ): Promise<PostReviewFindingsIdRemoveResponse> =>
+    request<PostReviewFindingsIdRemoveResponse>(
+      'POST',
+      `/api/v1/review/findings/${encodeURIComponent(path.id)}/remove`,
       body,
     ),
   /** List risks, paged */

@@ -1,4 +1,5 @@
-// The create and edit form for any record kind (React Hook Form). It checks the values with the
+// The create and edit form for any record kind (React Hook Form), also used to approve a proposed
+// new record from the Analyst review screen (S5-006). It checks the values with the
 // shared S1-001 schemas before anything is sent, and shows each problem on its field. Name, owner
 // and label are on every form; each kind adds its own fields. The owner picker is on both forms,
 // for everyone the form is open to (D206); the label chooser offers only what the caller passes in
@@ -85,6 +86,10 @@ interface Props {
   onCancel: () => void;
   /** A problem from the API (refusal, stale save), shown above the fields. */
   notice?: ReactNode;
+  /** More to fill in after the record's fields (an Analyst's note on an approval, S5-006). */
+  extra?: ReactNode;
+  /** The submit button's words while it works; `Saving…` by default. */
+  pendingText?: string;
 }
 
 export function RecordForm({
@@ -98,6 +103,8 @@ export function RecordForm({
   onSubmit,
   onCancel,
   notice,
+  extra,
+  pendingText = 'Saving…',
 }: Props) {
   const messages: Record<string, string> = {
     ...COMMON_MESSAGES,
@@ -233,9 +240,11 @@ export function RecordForm({
           />
         </fieldset>
 
+        {extra}
+
         <div className="flex items-center gap-2 border-t pt-4">
           <Button type="submit" disabled={pending}>
-            {pending ? 'Saving…' : submitText}
+            {pending ? pendingText : submitText}
           </Button>
           <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
             Cancel

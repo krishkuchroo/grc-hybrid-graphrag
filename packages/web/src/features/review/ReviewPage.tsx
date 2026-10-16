@@ -3,7 +3,8 @@
 // filters, a sort, and a paged table per tab. The screen is for the Review-queue cell's roles
 // (`canViewReviewQueue`: Admin and Analyst); every other role gets the no-access screen, as it
 // does when the API answers 403 (D7, D50). Admins see everything read-only; only the Analyst
-// decides, on a finding's own page.
+// decides, on a finding's own page. Narrowed to one document, the screen also shows that upload and
+// what it put in, and offers the Analyst "Remove everything from this upload" (S5-006).
 import {
   canViewReviewQueue,
   canWorkReviewQueue,
@@ -26,6 +27,7 @@ import { useMe } from '@/features/records/useRecords';
 import { cn } from '@/lib/utils';
 import { FindingsTable } from './FindingsTable';
 import { isShown, KIND_ICON, type NamedRecord } from './ReviewBits';
+import { UploadImpactSection } from './RemoveUpload';
 import { DocumentFilter, RecordFilter } from './ReviewFilters';
 import {
   DEFAULT_KIND,
@@ -195,6 +197,15 @@ export function ReviewPage({
               </p>
             </AlertDescription>
           </Alert>
+        ) : null}
+
+        {search.documentId ? (
+          <UploadImpactSection
+            key={search.documentId}
+            documentId={search.documentId}
+            canRemove={canWorkReviewQueue(role)}
+            framed
+          />
         ) : null}
 
         <section aria-label="Review findings" className="bg-card min-w-0 rounded-lg border shadow-xs">

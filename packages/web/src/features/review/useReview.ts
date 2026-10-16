@@ -1,9 +1,11 @@
-// The Analyst review screen's data (S5-005, D27 #8), around the generated typed client (D30): the
-// queue (GET /api/v1/review/findings), one finding (GET /api/v1/review/findings/:id), the waiting
-// counts (GET /api/v1/review/counts), approving and rejecting (POST …/:id/approve and …/:id/reject),
-// and the names the filters show (GET /api/v1/documents/:id and a record kind's list). Every address
-// is relative (the M0-015 rule). The API decides every permission and what each person sees (D7,
-// D50, D51); these hooks fetch, cache and refresh.
+// The Analyst review screen's data (S5-005, S5-006, D27 #8), around the generated typed client
+// (D30): the queue (GET /api/v1/review/findings), one finding (GET /api/v1/review/findings/:id), the
+// waiting counts (GET /api/v1/review/counts), approving and rejecting (POST …/:id/approve and
+// …/:id/reject), removing a false positive (POST …/:id/remove), what one upload put in and removing
+// all of it (GET /api/v1/review/documents/:id and POST …/:id/remove), and the names the filters show
+// (GET /api/v1/documents/:id and a record kind's list). Every address is relative (the M0-015 rule).
+// The API decides every permission and what each person sees (D7, D50, D51); these hooks fetch,
+// cache and refresh.
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   RECORD_KINDS,
@@ -17,14 +19,18 @@ import {
 import {
   api,
   ApiError,
+  type GetReviewDocumentsIdResponse,
   type GetReviewFindingsIdResponse,
   type GetReviewFindingsResponse,
   type ListQuery,
+  type PostReviewDocumentsIdRemoveResponse,
   type PostReviewFindingsIdApproveBody,
   type PostReviewFindingsIdApproveResponse,
   type PostReviewFindingsIdRejectResponse,
+  type PostReviewFindingsIdRemoveResponse,
 } from '@/api/client';
 import { frameworkKeys } from '@/features/frameworks/useFrameworks';
+import { intakeKeys } from '@/features/intake/useDocuments';
 import type { AnyRecord, Paged } from '@/features/records/useRecords';
 
 /** The root of every record query (`['records', kind, …]`): lists, pages and their links. */
@@ -43,6 +49,12 @@ export type LinkEnd = LinkFindingDetail['summary']['from'];
 /** A link end as a list row shows it. */
 export type LinkEndRow = Extract<FindingRow, { kind: 'link' }>['summary']['from'];
 export type Decision = PostReviewFindingsIdApproveResponse | PostReviewFindingsIdRejectResponse;
+/** A false positive taken back out: the finding is `removed`, with what the removal did. */
+export type Removal = PostReviewFindingsIdRemoveResponse;
+/** What removing one upload would touch: the document and its counts. */
+export type UploadImpact = GetReviewDocumentsIdResponse;
+/** What removing one upload did, as counts only. */
+export type UploadRemoval = PostReviewDocumentsIdRemoveResponse;
 
 export const reviewKeys = {
   all: ['review'] as const,
@@ -50,6 +62,7 @@ export const reviewKeys = {
   list: (query: ListQuery) => ['review', 'findings', query] as const,
   one: (id: string) => ['review', 'finding', id] as const,
   documentName: (id: string) => ['review', 'document-name', id] as const,
+  documentImpact: (id: string) => ['review', 'document-impact', id] as const,
   recordName: (kind: RecordKind, id: string) => ['review', 'record-name', kind, id] as const,
   documentSearch: (q: string) => ['review', 'document-search', q] as const,
   recordSearch: (kind: RecordKind, q: string) => ['review', 'record-search', kind, q] as const,
@@ -235,10 +248,30 @@ export function useRecordSearch(kind: RecordKind, q: string) {
   });
 }
 
+/** What one upload put in (S5-004's counts) and the document as the reader sees it. The Admin and
+ * the Analyst may ask; `null` when the reader may not see the document (404). */
+export function useUploadImpact(documentId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: reviewKeys.documentImpact(documentId ?? ''),
+    queryFn: async (): Promise<UploadImpact | null> => {
+      if (!documentId) return null;
+      try {
+        return await api.getReviewDocumentsId({ id: documentId });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
+    },
+    enabled: enabled && documentId !== undefined,
+    retry: (count, err) => !(err instanceof ApiError && err.status < 500) && count < 2,
+  });
+}
+
 /**
  * After a decision (or a refusal that means the page is out of date), everything that may show it
- * asks again: the queue, its counts and the finding; every record page's links (an approved link);
- * and the frameworks screens (an approved mapping).
+ * asks again: the queue, its counts, the finding and the upload counts; every record page and its
+ * links (an approved link, a new, merged or retired record); the frameworks screens (an approved or
+ * removed mapping); and Data intake (a removed upload).
  */
 function useRefreshAfterDecision() {
   const queryClient = useQueryClient();
@@ -247,15 +280,19 @@ function useRefreshAfterDecision() {
       queryClient.invalidateQueries({ queryKey: reviewKeys.all }),
       queryClient.invalidateQueries({ queryKey: RECORDS_ROOT }),
       queryClient.invalidateQueries({ queryKey: frameworkKeys.all }),
+      queryClient.invalidateQueries({ queryKey: intakeKeys.all }),
     ]);
 }
 
-/** The refusals that mean the finding on screen is out of date: someone decided it first, or it
- * (or a record it names) is gone or hidden now. */
+/** The refusals that mean the finding on screen is out of date: someone decided it first, it can't
+ * be removed any more, or it (or a record it names) is gone or hidden now. */
 export function refusalMeansStale(error: unknown): boolean {
   return (
     error instanceof ApiError &&
-    (error.status === 404 || error.code === 'already_decided' || error.code === 'record_not_active')
+    (error.status === 404 ||
+      error.code === 'already_decided' ||
+      error.code === 'record_not_active' ||
+      error.code === 'not_removable')
   );
 }
 
@@ -285,6 +322,35 @@ export function useRejectFinding(id: string) {
     },
     onError: (error) => {
       if (refusalMeansStale(error)) void refresh();
+    },
+  });
+}
+
+/** Removes a live or approved finding that turned out false (D38, D207). */
+export function useRemoveFinding(id: string) {
+  const refresh = useRefreshAfterDecision();
+  return useMutation({
+    mutationFn: (body: { note?: string }) => api.postReviewFindingsIdRemove({ id }, body),
+    // Not awaited, as for approving: the page's own callbacks run first.
+    onSuccess: () => {
+      void refresh();
+    },
+    onError: (error) => {
+      if (refusalMeansStale(error)) void refresh();
+    },
+  });
+}
+
+/** Removes everything from one upload in a single action (D52.5). */
+export function useRemoveUpload(documentId: string) {
+  const refresh = useRefreshAfterDecision();
+  return useMutation({
+    mutationFn: (body: { note?: string }) => api.postReviewDocumentsIdRemove({ id: documentId }, body),
+    onSuccess: () => {
+      void refresh();
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && (error.status === 404 || error.status === 409)) void refresh();
     },
   });
 }
