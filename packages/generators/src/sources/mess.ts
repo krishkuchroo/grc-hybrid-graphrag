@@ -5,6 +5,7 @@
 import { Faker, base, en } from '@faker-js/faker';
 import type { LinkType, RecordKind, UploadKind } from '@grc/shared';
 import type { WorldLink, WorldOrg } from '../world/index.js';
+import type { DocumentText } from './formats/index.js';
 import type { FalsePositivePlant, Plants, TypoPlant } from './render-sources.js';
 
 /** A link of the answer key, as a document states it (or, for a plant, as it must not be read). */
@@ -25,6 +26,8 @@ export const STREAMS = {
   falsePositives: 7,
   injections: 8,
   proseTypos: 9,
+  /** Which documents are written as PDF or DOCX (S8-007). */
+  formats: 10,
 } as const;
 
 export function fakerFor(seed: number, orgIndex: number, stream: number): Faker {
@@ -383,25 +386,38 @@ export function paragraphText(paragraph: Paragraph): string {
   return paragraph.sentences.map((s) => s.text).join(' ');
 }
 
+/** The formats a document is written in: text and JSON as drafted, PDF and DOCX laid out (S8-007). */
+export type DocFormat = 'txt' | 'json' | 'pdf' | 'docx';
+
 /** A document before it is written out. The plants change its paragraphs; `render` reads them. */
 export interface DocDraft {
   source: string;
   kind: UploadKind;
   fileName: string;
-  format: 'txt' | 'json';
+  format: DocFormat;
   /** Every paragraph of the body, in the order the body holds them. */
   paragraphs: Paragraph[];
+  /** The document as text: the whole TXT or JSON file. */
   render(): string;
+  /** The same text as a title and paragraphs, for the PDF and DOCX writers; text documents only. */
+  layout?(): DocumentText;
 }
 
 /** A plain-text document: lines and paragraphs, LF line endings, one final newline. */
 export class TextDoc {
   private readonly parts: (string | { paragraph: Paragraph; prefix: string })[] = [];
+  private titleAt: number | null = null;
   readonly paragraphs: Paragraph[] = [];
 
   line(text = ''): this {
     this.parts.push(text);
     return this;
+  }
+
+  /** A line that is the document's title (the heading of its PDF or DOCX). */
+  title(text: string): this {
+    this.titleAt = this.parts.length;
+    return this.line(text);
   }
 
   paragraph(sentences: Sentence[], prefix = ''): Paragraph {
@@ -411,11 +427,25 @@ export class TextDoc {
     return paragraph;
   }
 
+  private lines(): string[] {
+    return this.parts.map((part) => (typeof part === 'string' ? part : part.prefix + paragraphText(part.paragraph)));
+  }
+
   render(): string {
-    const lines = this.parts.map((part) =>
-      typeof part === 'string' ? part : part.prefix + paragraphText(part.paragraph),
-    );
-    return `${lines.join('\n')}\n`;
+    return `${this.lines().join('\n')}\n`;
+  }
+
+  /**
+   * The title (the first non-empty line when none was set) and every other non-empty line as a
+   * paragraph of its own, in order: the same text as `render`, without the blank lines.
+   */
+  layout(): DocumentText {
+    const lines = this.lines();
+    const titleAt = this.titleAt ?? lines.findIndex((line) => line.trim() !== '');
+    return {
+      title: titleAt < 0 ? '' : lines[titleAt]!,
+      paragraphs: lines.filter((line, i) => i !== titleAt && line.trim() !== ''),
+    };
   }
 }
 

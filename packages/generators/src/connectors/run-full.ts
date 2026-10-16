@@ -6,12 +6,13 @@
 //      rows (and under the API's 1 MB body cap), with batch IDs
 //      `<generatorVersion>:<seed>:<orgKey>:<source>:<n>` (n from 1 per source), so a re-run sends
 //      the same batch IDs and the API answers each `duplicate: true` (D45.5, D47);
-//   3. uploads each document (policies, SOC tickets, audit reports), which the API stores once by
-//      content, so a re-run's uploads are `duplicate: true` too.
+//   3. uploads each document (policies, SOC tickets, audit reports) with its file name and its bytes
+//      (PDF and DOCX as written, the others as UTF-8 text), which the API stores once by content,
+//      so a re-run's uploads are `duplicate: true` too.
 // One org at a time, one request at a time, so the order is always the same (D45.8). It returns
 // counts and the IDs the API answered with, never anything from the data.
 import type { ImportMapping } from '@grc/shared';
-import { CMDB_SOURCES, type OrgSources, type RenderedSources, type SourceFile } from '../sources/index.js';
+import { CMDB_SOURCES, fileBytesOf, type OrgSources, type RenderedSources, type SourceFile } from '../sources/index.js';
 import type { AnswerKey } from '../world/index.js';
 import { ApiClient, type ConnectorClient, type FetchLike, type PushBatchInput } from './api-client.js';
 import { assetRows, type AssetRow } from './asset-rows.js';
@@ -188,7 +189,7 @@ async function runOrg(
       kind: doc.kind,
       fileName: doc.fileName,
       format: doc.format,
-      body: doc.body,
+      body: fileBytesOf(doc),
       ...(doc.kind === 'asset_list' ? { source: doc.source } : {}),
     });
     result.documentIds.push(answer.documentId);

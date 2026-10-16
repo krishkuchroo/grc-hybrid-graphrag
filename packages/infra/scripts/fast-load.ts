@@ -359,7 +359,7 @@ async function eachLimited<T>(items: readonly T[], limit: number, fn: (item: T) 
 /** The document's bytes, checked against the plan: the same size and hash, and its format by content. */
 function bytesOf(run: OrgRun, n: number, i: number, doc: FastLoadDocument): Buffer {
   const where = `${run.orgKey} document batch ${n} item ${i + 1}`;
-  const body = Buffer.from(doc.body, 'utf8');
+  const body = Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength);
   const hash = createHash('sha256').update(body).digest('hex');
   if (body.length !== doc.sizeBytes || hash !== doc.contentHash) throw new FastLoadError('document_changed', where);
   const sniffed = sniffFileFormat(doc.fileName, body);

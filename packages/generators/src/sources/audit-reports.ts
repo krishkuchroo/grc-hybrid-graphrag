@@ -1,6 +1,7 @@
-// Internal audit reports (D41: logs arrive as audit findings): text reports whose findings each concern
-// one risk of the answer key, name the assets exposed to it (EXPOSED_TO) and the controls meant to
-// mitigate it (MITIGATED_BY), every fact in a sentence that names both ends.
+// Internal audit reports (D41: logs arrive as audit findings): reports drafted as text (render-sources
+// writes a seeded half as PDF, S8-007) whose findings each concern one risk of the answer key, name
+// the assets exposed to it (EXPOSED_TO) and the controls meant to mitigate it (MITIGATED_BY), every
+// fact in a sentence that names both ends.
 import type { Faker } from '@faker-js/faker';
 import { riskRating } from '@grc/shared';
 import {
@@ -98,7 +99,7 @@ export function draftAuditReports(world: OrgWorld, faker: Faker): DocDraft[] {
     const end = REFERENCE_MS - (n - 1) * 30 * DAY_MS;
     const doc = new TextDoc()
       .line(`${org} Internal Audit`)
-      .line(title)
+      .title(title)
       .line(`Report reference: ${reference}`)
       .line(`Audit period: ${isoDay(end - 365 * DAY_MS)} to ${isoDay(end)}`)
       .line(`Lead auditor: ${faker.person.fullName()}`)
@@ -142,6 +143,7 @@ export function draftAuditReports(world: OrgWorld, faker: Faker): DocDraft[] {
       format: 'txt',
       paragraphs: doc.paragraphs,
       render: () => doc.render(),
+      layout: () => doc.layout(),
     });
   }
   return drafts;
