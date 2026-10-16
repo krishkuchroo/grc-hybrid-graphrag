@@ -1832,6 +1832,39 @@ export type PostMappingsRemoveBody = {
   requirementId: string;
 };
 
+/** POST /api/v1/mappings/suggestions response. */
+export type PostMappingsSuggestionsResponse =
+  | {
+      status: 'started';
+      jobId: string;
+      message: string;
+    }
+  | {
+      status: 'already_running';
+      jobId: null;
+      message: string;
+    }
+  | {
+      status: 'started';
+      jobId: string;
+      message: string;
+    }
+  | {
+      status: 'already_running';
+      jobId: null;
+      message: string;
+    };
+
+/** POST /api/v1/mappings/suggestions request body. */
+export type PostMappingsSuggestionsBody =
+  | {
+      kind: 'controls';
+      framework: 'nist_800_53' | 'nist_csf_2' | 'iso_27001' | 'soc_2';
+    }
+  | {
+      kind: 'soc2_to_nist';
+    };
+
 /** GET /api/v1/me response. */
 export type GetMeResponse = {
   user: {
@@ -2585,6 +2618,9 @@ export const api = {
   /** Take a mapping back (the same people who may add one). Answers 404 not_found, 403 forbidden, or 409 ai_link_review_only for a mapping suggested by the AI (D207) */
   postMappingsRemove: (body: PostMappingsRemoveBody): Promise<PostMappingsRemoveResponse> =>
     request<PostMappingsRemoveResponse>('POST', '/api/v1/mappings/remove', body),
+  /** Start AI mapping suggestions in the background (Admins and Compliance Managers): `controls` suggests which requirements of one framework each of your controls satisfies (SATISFIES); `soc2_to_nist` suggests which NIST SP 800-53 controls each SOC 2 criterion maps to (MAPS_TO). The local AI picks from the 5 closest catalog items by name, and every suggestion waits in the Analyst's review queue; nothing is linked until it is approved. Answers 202 `started` with the job ID, or 202 `already_running` with no new job while the same run is queued or running; 403 forbidden for any other role */
+  postMappingsSuggestions: (body: PostMappingsSuggestionsBody): Promise<PostMappingsSuggestionsResponse> =>
+    request<PostMappingsSuggestionsResponse>('POST', '/api/v1/mappings/suggestions', body),
   /** The signed-in user, their org, role and clearance, and whether MFA is set up */
   getMe: (): Promise<GetMeResponse> => request<GetMeResponse>('GET', '/api/v1/me'),
   /** The caller's org members for the owner picker, paged: id, name and role only */

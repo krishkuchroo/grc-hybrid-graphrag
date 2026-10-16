@@ -204,6 +204,20 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // AI mapping suggestions (S4-009, D16 (b), D20, D212 (4)): starting a run needs the
+    // Framework-mappings `edit` cell (Admin and Compliance Manager, and API keys with those roles;
+    // `canSuggestMappings` in the service). The run is queued in the caller's org only, one per org,
+    // kind and framework at a time, audited `mapping_suggestions.started`. The worker reads the graph
+    // as the starter's role x clearance account, so no control above their clearance reaches Gemma,
+    // and every pick waits as a `pending` finding labelled the higher of its two ends'; nothing is
+    // written to Neo4j.
+    {
+      method: 'POST',
+      path: '/api/v1/mappings/suggestions',
+      access: { subject: 'framework_mapping', action: 'edit' },
+      orgWalled: true,
+      labels: true,
+    },
     // Audit findings (S3-010, D50, D213 (2), R11): the Auditor edits, Admin, Risk Manager,
     // Compliance Manager, Control Owner and Analyst view, the Viewer sees none (403 on the list,
     // 404 on every route naming a finding). CONCERNS links are added and removed with the
