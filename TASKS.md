@@ -84,6 +84,13 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | S4-008 | S4 | builder-backend | done | Rule checks and the decision (D24, D38, D39): the `processing.chunk-resolve` job matches each extracted record, runs the three checks on each link, writes confident links to Neo4j as origin `ai` with their source and their `link.created` entries in one transaction (D37, D69), and sends the rest to `review_findings` (new risks, controls, policies and incidents too); chunk-to-record links; mention linking for fast-loaded documents; the document ends `processed`. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S4-008.md | |
 | S4-009 | S4 | builder-backend | done | AI mapping suggestions (D16(b), D20, D212 (4)): `POST /api/v1/mappings/suggestions` (Admin and Compliance Manager, 202 with a job ID) starts a background run in which Gemma picks, from the closest catalog items by name, the requirements a control satisfies, or the NIST 800-53 controls a SOC 2 criterion maps to; every pick waits in `review_findings` for the Analyst, never live; security-matrix row; web client regenerated. Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S4-009.md |
 | S4-010 | S4 | builder-frontend | done | "Suggest mappings" on a framework's page, and "Suggest links to NIST 800-53" on the SOC 2 page, for Admins and Compliance Managers only: a confirmation that says it runs in the background on the local AI and that the suggestions go to the Analyst's review queue, then "Started" or "Already running". Fast mode (D222): lint + type checks; no new tests | logs/tasks/S4-010.md | |
+| S5-001 | S5 | builder-backend | done | Shared review model and the slice's groundwork: in `@grc/shared`, who may view and who may work the review queue (Admin view, Analyst work, D50), which statuses can be decided or removed, the approve, reject and remove bodies per kind, the list filters and answer shapes, the outcome per kind, the audit action names and error codes, and plain words for kinds, statuses and failed checks; the document status `removed`; a new migration (`review_findings.outcome`, and documents may be `removed`); the eight S5 security-matrix rows; the review module laid out as `queue/`, `decide/` and `remove/`. Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S5-001.md |
+| S5-002 | S5 | builder-backend | done | Reading the queue: `GET /api/v1/review/findings` (paged; filters by kind, status, document, record and failed check; pending and newest first by default), `GET /api/v1/review/findings/:id` (the sentence inside its chunk, the document, failed checks, each end's match or candidates, the decision and its outcome) and `GET /api/v1/review/counts`; Admin and Analyst only, label-checked in the API and in Postgres; a named record is shown only if the reader can see it now; never another org's. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S5-002.md | |
+| S5-003 | S5 | builder-backend | done | Approve and reject (D24, D38, D43, D51, D56): `POST /api/v1/review/findings/:id/approve` per kind (link: ends matched or chosen from the candidates, ontology and `endsCoverSource` checked, written as origin `ai` with its source and reviewer; record: created from the Analyst's form as origin `ai`, labelled at least the document's label; duplicate: merged, with the Analyst choosing which record to keep; mapping: SATISFIES or MAPS_TO written as origin `ai`) and `POST /api/v1/review/findings/:id/reject` (hidden, kept, never raised again; rejecting a proposed record also rejects its waiting links); Analyst only; the finding is locked, the graph change and its audit entries commit in one Neo4j transaction, then the status and its `review.*` entry in Postgres; of two decisions at once, one wins and the other gets 409. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S5-003.md | |
+| S5-004 | S5 | builder-backend | done | Removing what turned out false (D38, D52.5, D69, D207): `POST /api/v1/review/findings/:id/remove` deletes a live or approved AI link or mapping from Neo4j with a `link.removed` copy, or retires an approved new record, and marks the finding `removed`; `GET /api/v1/review/documents/:id` (what one upload put in) and `POST /api/v1/review/documents/:id/remove` (everything from one bad upload in one action: the document becomes `removed` and is never processed again, its AI links are deleted, its approved records retired, its findings rejected or removed, its chunk-to-record rows dropped, and one `document.removed` entry written; safe to repeat); Analyst only. Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S5-004.md |
+| S5-005 | S5 | builder-frontend | done | Analyst review screen (8) at `/review` and `/review/$id`: a tab per kind with waiting counts, status, document and record filters, and paged tables; a finding's page showing why it waits (failed checks in plain words), its sentence highlighted in context, both ends with their match or a choice of candidates, and Gemma's reason for mappings; Approve (links and mappings) and Reject (every kind) for Analysts only; Admins read-only, other roles see the no-access screen; the menu shows how many are waiting. Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S5-005.md |
+| S5-006 | S5 | builder-frontend | done | The rest of the review screen: approving a proposed new record through a pre-filled form of its kind (owner, and a label no lower than the document's), merging a possible duplicate (choose which record to keep, with a confirmation), "Remove (false positive)" on live and approved findings, and "Remove everything from this upload" with the impact counts and a confirmation; Analysts only. Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S5-006.md |
+| S5-007 | S5 | builder-platform | done | S5 demo: `seed:demo` adds a fixed, re-runnable set of review findings of every kind to each demo org (a pending link for each failed check, a proposed incident with its link, a possible duplicate pair, suggested mappings, a live AI link); `docs/demo/s5.md` click-through (approve, reject, merge, remove a false positive, remove one upload, Admin read-only, other roles and the other org see nothing). Fast mode (D222): lint + type checks; no new tests | logs/tasks/S5-007.md | |
 | S7-001 | S7 | builder-backend | in review | Shared admin model in `@grc/shared`: the add-person and change-person schemas (new people start at Internal, D51), the set-up link limits (24 h, single use, 256-bit token, TOTP within 10 min, D214 (1)), the cross-org kinds and limits (auditor grants by email up to 90 days, default clearance Internal, parent links to a named group with an end date, break-glass 1 h with a second operator's confirmation and a review, D55, D214 (2)–(4)), the audit-entry view and `maskAuditEntry` (contents hidden above the reader's clearance; who, when, record number and action kept, D186), the notification kinds (including the expiry reminders) and the S7 audit action names. Tests (unit): `pnpm --filter shared test -- admin` | | `logs/tasks/S7-001.md` |
 | S7-002 | S7 | builder-platform | to do | In-app alerts for Admins (D55, D56, D214 (2)): a `notifications` table (a new migration; org wall with FORCE, Admins only), `NotificationsService.notifyAdminsInTx`, `GET /api/v1/notifications` and `POST /api/v1/notifications/:id/read`, and the nightly chain check alerting the org's Admins once per break; the table also takes S7-005's "access ending soon" reminders; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- notifications` | | `logs/tasks/S7-002.md` |
 | S7-003 | S7 | builder-platform | to do | Cross-org tables (a new migration, D214 (2)–(4)): auditor grants made by email and claimed by the auditor's existing account, with their clearance (default Internal); parent links with a clearance, an end date and a named group of the parent org's people; break-glass sessions with who ended, confirmed and reviewed them; the parent side's request and end and the auditor's claim through checked database functions; `app_visible_org` updated (claimed grants only; parent links only for the named people and until their end date); the session's "viewing org"; each account's home org; org wall kept, every org pair tested. Tests (db): `pnpm --filter api test -- cross-org-tables` | | `logs/tasks/S7-003.md` |
@@ -3242,6 +3249,451 @@ Task: S4-010
 **Pass criteria:**
 1. An Admin or Compliance Manager sees the action(s), confirms, and sees "Started"; doing it again while it runs shows "Already running".
 2. A Risk Manager, Control Owner, Auditor, Analyst or Viewer sees neither action.
+3. Lint and type checks pass.
+
+---
+
+### S5 shared notes (every S5 brief includes these)
+S5 is slice 5, "Analyst review" (D76). It runs alone, after S4, in the chained MVP run (D221–D223). The M0 and S1 shared notes above still apply: layout, code style, graph reads and writes, audit entries, no values in logs, and 404 for anything hidden. The S3 shared notes describe documents and the intake system context. The S4 shared notes describe what S5 decides on: `review_findings`, the finding kinds and statuses, live AI links, whose view applies, and labels.
+
+- **Fast mode (D222–D224, D227, D229):** each brief gives behaviour and pass criteria only. Write no new tests and change no test files; the finish check is lint + type checks. Existing tests stay as they are, even if they now fail; testing comes after the MVP. The two reviewers look at the whole slice once, at its end. The running stack keeps its older code until the one rebuild at the end of the MVP (D229), so nothing here needs a Docker rebuild, and nobody runs `pnpm db:migrate` against the live database.
+- **Scope (planner's reading; D10, D16, D24, D27 #8, D38, D43, D50, D51, D52.5, D56, D69, D207, D212 (4)):**
+  - Screen 8, the Analyst review queue: the findings S4 left, by kind (links, new records, possible duplicates, suggested mappings) and by status, each with where it came from and why it waits.
+  - The Analyst approves or rejects each pending finding. Approving makes it real in Neo4j, with its audit entries. Rejecting hides it but keeps it (D24, D38).
+  - A fact already live (made live by the rule checks, or approved) that turns out to be false is removed from Neo4j and recorded in Postgres as `removed` (D38). This is the only way an AI link is ever removed (D207).
+  - "Remove everything from one bad upload" in a single action (D52.5).
+  - **Not in S5:** search, chat and RRF (S6); scoring the Analyst's decisions in the benchmark (S8); the audit viewer (S7); starting new AI runs (S4 does that); undoing a merge. No real Gemma or bge-m3 call anywhere in S5.
+- **Folders S5 owns (D183):** `packages/api/src/review/`, `packages/shared/src/review/`, `packages/web/src/features/review/`, and the S5 migration. S5 changes S1–S4 code only where a brief says so.
+- **The review module (S5-001 lays it out):** `packages/api/src/review/review.module.ts` (already registered in `feature-modules.ts`) imports one Nest module per part, each in its own folder, so later tasks never edit `review.module.ts`: `queue/` (S5-002, reading the queue), `decide/` (S5-003, approve and reject) and `remove/` (S5-004, removing live facts and whole uploads). Every route runs in the API program; S5 adds no background job.
+- **Routes (planner's reading). S5-001 adds every row to the security matrix: org-walled, labels on, subject `review_queue`:**
+
+  | route | D50 cell | built by |
+  |---|---|---|
+  | `GET /api/v1/review/findings` | `view` | S5-002 |
+  | `GET /api/v1/review/findings/:id` | `view` | S5-002 |
+  | `GET /api/v1/review/counts` | `view` | S5-002 |
+  | `POST /api/v1/review/findings/:id/approve` | `work` | S5-003 |
+  | `POST /api/v1/review/findings/:id/reject` | `work` | S5-003 |
+  | `POST /api/v1/review/findings/:id/remove` | `work` | S5-004 |
+  | `GET /api/v1/review/documents/:id` | `view` | S5-004 |
+  | `POST /api/v1/review/documents/:id/remove` | `work` | S5-004 |
+
+- **Who (D50, D51):**
+  - The Analyst has the Review queue `work` cell. It is the only role that approves, rejects or removes. Approving a mapping also needs the Analyst's Framework-mappings `approve` cell.
+  - The Admin has `view`: they see the queue and every detail, read-only, with no action buttons. A decision route answers an Admin with 403.
+  - Every other role is refused by the guard (403) and sees the no-access screen in the web app.
+  - Within those roles, a finding is shown only if its label is at or below the reader's clearance. Postgres row security on `review_findings` already does this; the API checks it again (D45.3). A hidden or missing finding, or another org's, answers 404.
+  - A record named in a finding is shown (by number and name) only if the reader may see it now, read through the reader's own role × clearance account (D57). Otherwise it shows as "a record you can't see", and the finding can't be approved (404).
+  - Every decision is made in the Analyst's own view, never as the uploader or as the system.
+- **Statuses (S4 shared notes):**
+  - `pending` → `approved` or `rejected` (by the Analyst).
+  - `live` or `approved` → `removed` (by the Analyst), for link and mapping findings, and for approved record findings. A duplicate merge can't be removed or undone.
+  - Nothing ever goes back. `rejected` and `removed` findings are kept forever, are left out of the default view, and are never raised again by processing (S4-008 already checks this).
+  - Each decision sets `decided_by`, `decided_at`, the optional note (1 to 1,000 characters) and the new `outcome` column (S5-001): what the decision made or removed, by record ID and number.
+- **What approving does, per kind (S5-003):**
+  - **link:** writes the link in Neo4j between the two records the Analyst settled on.
+  - **record:** creates the proposed risk, control, policy or incident from a form the Analyst fills in.
+  - **duplicate:** merges the two records.
+  - **mapping:** writes the suggested `SATISFIES` or `MAPS_TO`.
+  - Every graph write goes through the writer account with its audit entries in the same Neo4j transaction (`AuditOutbox.withAuditedWrite(s)`, D37).
+- **Two databases, one decision (D37, D45.5):**
+  - First the finding's row is locked in Postgres (`SELECT … FOR UPDATE` in the org context), and its status is checked.
+  - Then the graph change and its audit entries commit in one Neo4j transaction.
+  - Then the finding's new status, decision fields and outcome, and its `review.*` audit entry (`AuditService.appendInTx`, S3-003), commit in the Postgres transaction that holds the lock.
+  - If two decisions on one finding come at once, one wins and the other gets 409 `already_decided`, and the graph matches the winner.
+  - A crash between the two commits is safe. A retry finds the graph part already done (MERGE finds the link, so no second `link.created`; a record or merge already made is found by the finding's ID) and only finishes the Postgres part.
+- **AI links the Analyst approves:**
+  - They have the same properties as S4's live links: origin `ai`, `sourceDocId`, `chunkId`, `sentence`, `model`, `promptVersion` and `sourceLabel`. `createdBy` is the Analyst. They also carry `findingId`, `reviewedBy` and `reviewedAt`.
+  - Approved mappings carry origin `ai`, `findingId`, `model`, `promptVersion`, `reviewedBy` and `reviewedAt`.
+  - A link of the same type between the same two records, in the same direction, is never doubled, whatever its origin. If one is already there, the finding counts as approved with outcome `exists`, and nothing is written to the graph.
+- **Labels (D51, D198; SF-048, SF-049):**
+  - An AI link the Analyst approves goes live only if S4's `endsCoverSource` holds (`packages/api/src/processing/decide/decide-rules.ts`): everyone who can see both ends may also see the document. Otherwise the answer is 409 `source_above_ends`, nothing is written, and the finding stays pending (it can still be rejected).
+  - A new record approved from a document is labelled at least the document's label (only an Admin may lower a label, and the Analyst isn't one), and never above the Analyst's own clearance (D198).
+  - A merged record keeps the higher of the two labels.
+- **Audit (D56, D186):**
+  - The decision entries are `review.approved`, `review.rejected` and `review.removed`. Their target is the finding. Meta: kind, old and new status, the finding's label, and the outcome's record numbers. The Analyst's note goes in the entry. `document.removed` is the whole-upload entry; its meta holds the counts.
+  - The graph changes keep their own entries: `link.created`, `link.removed` (holding a copy of the link, D201), `record.created`, `record.merged`, `record.retired` and `record.updated`.
+  - Never put a sentence, chunk text or Gemma's reason in an entry. They are the document's text, as in S4's live-link entries.
+- **Logs (D163):** IDs, counts, timings and codes only. Never a sentence, a chunk text, a record's name, a proposal or a note.
+- **Error codes (S5-001 names them):**
+  - 409 `already_decided`: the finding isn't pending, or for removal isn't live or approved.
+  - 409 `not_removable`: the kind or status can't be removed.
+  - 400 `end_not_chosen`: an uncertain end needs one of its candidates.
+  - 400 `end_not_candidate`: the record chosen isn't one of that end's candidates.
+  - 409 `end_not_approved`: the proposed new record this end points to hasn't been approved yet.
+  - 409 `end_rejected`: that proposed record was rejected.
+  - 409 `record_not_active`: a record is retired or merged away.
+  - 400 `link_not_allowed`: the type and direction don't fit the ontology.
+  - 409 `source_above_ends`: the document is more sensitive than both ends allow.
+  - 400 `label_below_source`: the new record's label is below the document's.
+  - Plus S1's 400 `validation_failed`, 403 and 404 (D47 error format with a reference ID).
+- **Notes for S6 (planner's reading):** a `removed` document and its chunks are never searched or sent to Gemma, and its chunk-to-record rows are gone. AI graph queries return `r.sentence` or `r.sourceDocId` only where the reader is cleared for `r.sourceLabel` (SF-049).
+- **Security matrix (D175, D59):** S5 adds the eight routes above (all in S5-001) and no new record type.
+- **Never** change Neo4j accounts or privileges, Postgres roles, live settings or shared state to make something work (D131, D144, D176).
+- **Migrations (D183):** only S5-001 adds one: "a new migration". Never pick its number; the integrator numbers it at merge.
+- **Hot files (D183):** each brief lists its hot files; only one task at a time changes each.
+- **Git (D112, D159):** branch `task/<ID>` in its own worktree; commit messages start with the task ID and never mention Claude, Anthropic or AI tooling.
+- **Planner's readings for the user to confirm (not blocking; the questions are in the S5 planning hand-off):**
+  - S5-Q1: removing a whole upload also removes AI links and retires records the Analyst isn't cleared to see; the Analyst sees only counts (S5-004).
+  - S5-Q2: approving a proposed new risk, control or policy creates it, even though the Analyst's role only views those; the Review queue `work` cell allows it, on this path only (S5-003).
+  - S5-Q3: when merging, the Analyst picks which record to keep (by default the older one), and the kept record takes the higher label (S5-003).
+  - S5-Q4: removing an approved new record retires it, and merges can't be undone from the queue (S5-004).
+  - S5-Q5: an AI link from a document more sensitive than both its ends can't be approved, only rejected (S5-003).
+  - S5-Q6: rejecting a proposed new record also rejects the waiting links that point to it (S5-003).
+  - S5-Q7: a removed upload stays stored and is listed as "Removed" in Data intake; uploading the same file again doesn't bring it back (S5-004).
+
+---
+
+Task: S5-001
+
+**Goal:** One shared definition of what the Analyst can do with each finding, used by the API, the web app and the benchmark (S8). Also the groundwork every other S5 task builds in: the database column, the document status, the security-matrix rows and the review module's layout.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Don't run `pnpm db:migrate` against the live database (D229).
+
+**Decisions:** D24, D30 (Zod), D38, D47, D50 (Review queue and Framework-mappings rows), D51, D52.5, D56, D69, D73, D175, D183, D207. Read the S5 shared notes.
+
+**Depends on:** nothing.
+
+**Hot files:** `packages/shared/src/index.ts`, `packages/shared/src/access/security-matrix.ts`, `packages/shared/src/intake/statuses.ts`, the migrations folder and its journal (`packages/api/src/db/migrations/`), `packages/api/src/processing/processing.schema.ts`, `packages/api/src/intake/intake.schema.ts`, `packages/api/src/review/review.module.ts`, `packages/web/src/features/intake/StatusBadge.tsx`.
+
+**Where things are now:**
+- The finding kinds, statuses and proposal schemas are in `packages/shared/src/processing/findings.ts`.
+- The `review_findings` table is defined in `0008_processing.sql` and `processing.schema.ts`, with the decision fields `decided_by`, `decided_at` and `decision_note` already there.
+- The document statuses are in `packages/shared/src/intake/statuses.ts`; the documents table's status check is in the intake migration.
+- The role table (`packages/shared/src/access/role-table.ts`) has `review_queue` (Admin `view`, Analyst `work`) and `framework_mapping` (Analyst `approve`).
+- `packages/api/src/review/review.module.ts` is empty and registered in `feature-modules.ts`.
+
+**Behaviour:**
+1. **`packages/shared/src/review/`**, exported from `packages/shared/src/index.ts`, in the style of `packages/shared/src/processing/`:
+   - **Who:** `canViewReviewQueue(role)` (Admin, Analyst) and `canWorkReviewQueue(role)` (Analyst only), read from `ROLE_TABLE`, not hard-coded.
+   - **Status rules:** `canDecide(status)` is true only for `pending`. `canRemove(kind, status)` is true for `link` and `mapping` at `live` or `approved`, for `record` at `approved`, and never for `duplicate`.
+   - **Request bodies (strict Zod; unknown fields refused):**
+     - Approve, per kind: link `{ from?, to?, note? }` (`from` and `to` are record IDs chosen among an end's candidates). Record `{ record, note? }`, where `record` is S1's create body for the proposal's kind (`createSchemas` in `packages/shared/src/records/schemas.ts`), name included. Duplicate `{ keep?, note? }` (the ID of one of the two records). Mapping `{ note? }`.
+     - Reject and remove: `{ note? }`. Document removal: `{ note? }`.
+     - A note is trimmed and 1 to 1,000 characters.
+   - **List query:** kind; status (one or more, default `pending`); `documentId`; `recordId` (any record the finding names: an end, a candidate, the duplicate pair, the mapping ends, or the record it created); `failedCheck`; sort (`newest`, the default, or `oldest`); plus page and page size, as other paged lists do (D47).
+   - **Answer shapes** that S5-002, S5-004 and the web app share:
+     - A list row: ID, kind, status, label, when created, who decided and when; the source document's ID, name and kind where there is one; and a per-kind summary:
+       - link: type, failed checks, and each end's kind, name as written and state (matched record, number of candidates, proposed record with that finding's ID and status, or hidden);
+       - record: kind, name, and how many link findings point to it;
+       - duplicate: the two records;
+       - mapping: type and both ends.
+       A named record is `{ recordId, number, name, kind }`, or `{ hidden: true }`.
+     - The detail: everything in the row, plus the sentence; the chunk text and where the sentence sits in it (start and end, or none); the document's label, uploader name and upload time; model and prompt version; decision note and outcome; each end's full candidates (number, name, step, score); for `record`, Gemma's details and the link findings pointing to it; for `duplicate`, both records' name, number, label, status, owner, source IDs and link count; for `mapping`, Gemma's reason and both ends' details (for a requirement: framework, code and title).
+     - The counts: pending findings per kind, and the total.
+     - The document impact: the document (ID, name, kind, label, status, uploader name, upload time) and its counts: live AI links in the graph from it, records approved from it, pending findings, and live or approved findings.
+   - **Outcome per kind** (what the `outcome` column holds):
+     - link and mapping: `{ result: 'created' | 'exists', type, fromId, fromNumber, toId, toNumber }`;
+     - record: `{ recordId, number }`;
+     - duplicate: `{ keptId, keptNumber, retiredId, retiredNumber }`.
+     - After a removal, the same object plus `removed: { graph: 'deleted' | 'not_found' | 'retired' | 'already_retired' }`.
+   - **Names:** the audit action names (`review.approved`, `review.rejected`, `review.removed`, `document.removed`) and the error codes in the S5 shared notes.
+   - **Plain words** for the screen:
+     - kinds: "Link", "New record", "Possible duplicate", "Suggested mapping";
+     - statuses: "Waiting", "Live", "Approved", "Rejected", "Removed";
+     - the three failed checks: `same_sentence` "The sentence doesn't name both records"; `ontology_fit` "This kind of link doesn't fit these records"; `both_ends_known` "Not sure which record is meant".
+   - Pure code: no I/O, no clock, no randomness; nothing imports from the API.
+2. **Document status `removed`:** added to the shared document statuses. Wherever the API or the web app names every status, give it its entry; in the Data intake status badge it reads "Removed", in a muted style.
+3. **A new migration** (never pick its number):
+   - adds `review_findings.outcome`: jsonb, empty until a decision, and an object when set;
+   - lets the documents' status check accept `removed`.
+   Update the Drizzle definitions to match. Nothing else in the tables or their row security changes; the app account still has no DELETE on findings.
+4. **Security matrix:** the eight routes in the S5 shared notes, each with its cell, `orgWalled: true` and `labels: true`.
+5. **Module layout:** `review.module.ts` imports three empty Nest modules, `queue/`, `decide/` and `remove/`, each in its own folder.
+
+**Pass criteria:**
+1. The API, the web app and the benchmark can import every name above from `@grc/shared`.
+2. The approve bodies refuse unknown fields, a note over 1,000 characters, and a record body missing its kind's required fields. `canDecide` and `canRemove` follow the status rules above. `canWorkReviewQueue` is true for the Analyst only, and `canViewReviewQueue` for Admin and Analyst only.
+3. After the migration, a finding can hold an outcome and a document can be `removed`; existing rows are unchanged.
+4. The security matrix lists the eight routes with their cells, org wall and labels.
+5. The three part modules exist and are imported; the API and worker programs still start.
+6. Lint and type checks pass.
+
+---
+
+Task: S5-002
+
+**Goal:** The Admin and the Analyst can see what waits for review and why, with each finding's source in context, and they never see anything above their clearance or from another org.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D16, D24, D38, D45.3, D47, D50, D51, D52.5, D55, D57, D73, D163, D186. Read the S5 shared notes and the S4 shared notes ("`review_findings`", "Whose view").
+
+**Depends on:** S5-001 (answer shapes, list query, `queue/` module, security-matrix rows).
+
+**Hot files:** none (its own `review/queue/` folder).
+
+**Where things are now:**
+- Findings are in `review_findings` (`packages/api/src/processing/processing.schema.ts`), and the proposals follow `packages/shared/src/processing/findings.ts`.
+- Chunks are in `chunks`; documents in `documents` (`packages/api/src/intake/intake.schema.ts`). Both are readable through the org context, with row security on role and label.
+- Graph reads as the reader: `GraphService.readAs` (role × clearance account).
+- Paging: the M0-007 paging helper.
+- Catalog items (requirements) have number, code, title and framework (S2).
+
+**Behaviour:**
+1. **`GET /api/v1/review/findings`:** paged list (D47), using S5-001's query and row shape. The default is pending findings, newest first. The filters narrow it by kind, status, document, record (any record the finding names) and failed check. Names of the records a page names are read from Neo4j in one batch per page, not one read per row.
+2. **`GET /api/v1/review/findings/:id`:** S5-001's detail. For a `link` finding, the chunk text is shown with the sentence's place in it (found the way S4's `same_sentence` check finds it, spacing ignored), or none when it isn't found. Candidates show with their step and score.
+3. **`GET /api/v1/review/counts`:** pending findings per kind and the total, in the reader's view.
+4. **Visibility:**
+   - Admin and Analyst only (the guard, `review_queue` `view`).
+   - Each finding is label-checked in Postgres (row security) and again in the API.
+   - A named record is shown only if the reader's own role × clearance read finds it, active or retired. Otherwise it is `{ hidden: true }`, with no number or name.
+   - A chunk or document the reader can't read is left out of the detail, never guessed.
+   - Another org's finding is 404, as is a hidden or missing one.
+5. **Logs:** IDs, counts and codes only (D163).
+
+**Pass criteria:**
+1. An Analyst sees the org's pending findings of all four kinds, newest first and paged; each filter (kind, status, document, record, failed check) narrows the list.
+2. A link finding's detail shows its sentence inside its chunk text, its failed checks, both ends with their match or candidates, and its document with uploader and label.
+3. An Analyst at Internal never sees a Confidential finding: not in the list, not in the counts, and its detail is 404. Another org's people never see any of this org's findings (404). A Risk Manager, Compliance Manager, Control Owner, Auditor or Viewer is refused. An Admin sees the same as an Analyst at the same clearance.
+4. A record relabelled above the reader's clearance after the finding was made shows as hidden, never by number or name.
+5. The counts match the list's totals.
+6. Lint and type checks pass.
+
+---
+
+Task: S5-003
+
+**Goal:** The Analyst decides: an approved finding becomes a real link, record, merge or mapping in Neo4j with its audit entries, and a rejected one is hidden but kept (D24, D38, D45.6: the AI proposes, people and our code decide).
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D16, D24, D26, D37, D38, D39, D43, D45.5, D50 (Review queue `work`, Framework-mappings `approve`), D51, D56, D67, D68, D69, D73, D196, D198, D207, D212 (3), (4). Read the S5 shared notes ("Who", "Statuses", "Two databases, one decision", "AI links the Analyst approves", "Labels", "Audit") and the S4 shared notes ("Live AI links").
+
+**Depends on:** S5-001 (bodies, outcome shapes, error codes, the `outcome` column, the `decide/` module, security-matrix rows).
+
+**Hot files:** `packages/api/src/records/records.service.ts`, `packages/api/src/processing/match/record-merge.ts`, and `packages/api/src/frameworks/mappings.service.ts` if its write is reused.
+
+**Where things are now:**
+- S4's live-link write is `writeLiveLinks` in `packages/api/src/processing/decide/live-links.ts`, and `endsCoverSource` is in `decide-rules.ts`.
+- S4-007's merge is `mergeRecords` in `packages/api/src/processing/match/record-merge.ts`. It merges only same-name, same-label pairs, as `system:processing`.
+- Record creation is `RecordsService.create` (`packages/api/src/records/records.service.ts`). It assigns the number, sets defaults, applies the label rules, writes `record.created` in the same Neo4j transaction, and sets origin `manual`. It requires the role's `edit` cell.
+- Mapping writes are in `packages/api/src/frameworks/mappings.service.ts` (S2-005, `canMapControl`).
+- `isAllowedLink` is in `packages/shared/src/records/links.ts`.
+- `AuditService.appendInTx` writes a Postgres entry inside the caller's transaction.
+
+**Behaviour:**
+1. **`POST /api/v1/review/findings/:id/approve`**, Analyst only. The finding must be pending (409 `already_decided`), and visible to the Analyst (404 otherwise). The body is S5-001's approve body for the finding's kind.
+2. **A link finding:**
+   - **Each end resolves to one record:**
+     - its clear match (a `from`/`to` in the body must equal it, or be left out);
+     - else, if it points to a proposed record, the record that proposal's approval created (409 `end_not_approved` while that finding is pending; 409 `end_rejected` if it was rejected);
+     - else the candidate the body names (400 `end_not_chosen` if none is given; 400 `end_not_candidate` if the ID isn't one of that end's candidates).
+   - **Checks:** both records exist, are active and are visible to the Analyst (404 if hidden; 409 `record_not_active` if retired); they aren't the same record; the type and direction fit the ontology for their kinds (400 `link_not_allowed`); and `endsCoverSource` holds for the document and the two records' current labels and kinds (409 `source_above_ends`).
+   - **Then** the link is written live as in the S5 shared notes. It is never doubled; an existing link means outcome `exists`. Its `link.created` entry is in the same Neo4j transaction.
+3. **A record finding (planner's reading S5-Q2):**
+   - The body's `record` is the full create body of the proposal's kind. The web app pre-fills the name and Gemma's details.
+   - The label is at least the finding's own label (400 `label_below_source`) and at most the Analyst's clearance (D198). The owner must be a member of the org; by default it is the Analyst.
+   - The record is created through S1's create path, so it gets its number, defaults and `record.created` entry. It has origin `ai`. The Analyst is its creator. Extend `RecordsService.create`'s server-side options for this: an origin, and permission granted by the Review queue `work` cell instead of the record type's `edit` cell, used only by this path. The API's create body still can't set either.
+   - The outcome holds the new record's ID and number. Link findings pointing to this proposal stay pending; their end now resolves to the new record (point 2).
+4. **A duplicate finding (planner's reading S5-Q3):**
+   - The two records are merged as S4-007 merges them: source IDs and links move to the kept record, links aren't doubled, the other is retired with `mergedInto`, and the entries `record.merged`, `record.retired`, `link.removed` and `link.created` are written in one Neo4j transaction.
+   - The differences: the actor is the Analyst; `keep` may name either record (by default the older one, with the lower number); the names may differ; and the kept record takes the higher of the two labels (shown in its `record.merged` entry).
+   - Both records are locked and read again inside the transaction. If either is retired or gone, the answer is 409 `record_not_active` and nothing is written.
+   - Extend `mergeRecords` for this without changing what S4's automatic merge does.
+5. **A mapping finding:**
+   - Needs the Analyst's Framework-mappings `approve` cell. Both ends must be active and visible (404 otherwise).
+   - The `SATISFIES` (control to requirement) or `MAPS_TO` (requirement to requirement) is written with origin `ai` and its `link.created` entry in one Neo4j transaction, never doubled.
+   - It shows on the control and requirement pages through S2's reads. `POST /api/v1/mappings` keeps its own rule (D212 (3)), and `POST /api/v1/mappings/remove` keeps refusing AI mappings (409 `ai_link_review_only`).
+6. **`POST /api/v1/review/findings/:id/reject`**, Analyst only, for a pending finding of any kind:
+   - Status becomes `rejected`, with the decider, time and note, and a `review.rejected` entry, in one Postgres transaction. Nothing changes in Neo4j.
+   - Rejecting a `record` finding also rejects, in the same transaction, every pending `link` finding pointing to it, each with its own entry (planner's reading S5-Q6).
+   - Processing never raises a rejected proposal again (S4-008).
+7. **Order and races:** as in the S5 shared notes ("Two databases, one decision"). The finding is locked, then Neo4j, then Postgres. Of two decisions at once, one wins and the other gets 409 `already_decided`. A retry after a crash finishes without a second link, record or merge (find them by the finding's ID).
+8. **Everything audited:** `review.approved` or `review.rejected` in Postgres for each decision, with the graph entries as above. No sentence, chunk text or Gemma reason in any entry or log line.
+
+**Pass criteria:**
+1. Approving a pending link with an uncertain end, naming one of its candidates, makes the link live: origin `ai`, with its source document, chunk, sentence, model, prompt version, source label, the Analyst as creator and reviewer, and its `link.created` entry. The finding shows `approved`, with its outcome and a `review.approved` entry.
+2. A link pointing to a proposed incident can't be approved before the incident is (409 `end_not_approved`). Approving the incident with its fields creates a new INC record with origin `ai`, labelled at least the document's label. The link then approves onto it.
+3. A link whose document is more sensitive than both its ends is refused with `source_above_ends`, and nothing is written.
+4. Approving a possible duplicate leaves one active record holding both records' source IDs and links, and the other retired with `mergedInto`. Naming `keep` keeps that record. The audit trail shows the merge by the Analyst.
+5. Approving a suggested mapping makes the `SATISFIES` show as AI-made on the control and requirement pages; `POST /api/v1/mappings/remove` refuses it.
+6. A rejected finding leaves the default view and is never raised again. Rejecting a proposed record also rejects its waiting links.
+7. Two decisions on one finding at once: one wins, the other gets 409 `already_decided`, and the graph matches the winner.
+8. Only the Analyst may decide: an Admin gets 403, as do the other roles; another org's finding, or one above the Analyst's clearance, is 404.
+9. Lint and type checks pass.
+
+---
+
+Task: S5-004
+
+**Goal:** A fact that turns out to be false is taken back out of the graph and recorded, and one bad upload can be undone in a single action, so injected or wrong content never stays live (D38, D52.5, D207).
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D24, D37, D38, D45.5, D45.7, D50, D51, D52.5, D56, D69 (records retired, never deleted; only false-positive links are removed, with a copy kept), D73, D163, D201, D207. Read the S5 shared notes and the S4 shared notes ("Live AI links", "Document status").
+
+**Depends on:** S5-001 (bodies, outcome shapes, `canRemove`, the `outcome` column, the `removed` document status, the `remove/` module, security-matrix rows).
+
+**Hot files:** none in S5 besides its own `review/remove/` folder. It also changes S4's job files under `packages/api/src/processing/` (`reader/`, `embed/`, `extract/`, `decide/`), which no other S5 task touches. It doesn't change `packages/api/src/records/records.service.ts` (S5-003's hot file): retirements here are written in its own folder, in the same shape as S1's retire.
+
+**Where things are now:**
+- S4's live links carry `sourceDocId` and `chunkId`, and every link type has an index on its source document (S1-002).
+- S5-003's approved links also carry `findingId`.
+- `linkRemovedAudit` (`packages/api/src/records/link-audit.ts`) makes S1's `link.removed` entry with a copy of the link.
+- S1's retire sets `status` `retired`, bumps the version and writes `record.retired`.
+- Document statuses are S3's plus `removed` (S5-001).
+
+**Behaviour:**
+1. **`POST /api/v1/review/findings/:id/remove`**, Analyst only, for a finding `canRemove` allows (409 `not_removable` otherwise):
+   - **link or mapping:** finds the AI link this finding made live. That is a link of its type between its two records (following `mergedInto` if a record has been merged since), with origin `ai`, and either its `findingId` (approved) or its `chunkId` (made live by S4). It deletes that link with a `link.removed` entry holding its copy, in one Neo4j transaction. A link that was already there from elsewhere (outcome `exists`, or not origin `ai`) is never deleted.
+   - **record (approved):** retires the record it created (planner's reading S5-Q4), with a version bump and `record.retired`, unless it's already retired. Its links stay.
+   - **Then** the finding becomes `removed`, with decider, time, note and outcome (`removed.graph`), and a `review.removed` entry, in the Postgres transaction that locked it. A removed fact is never made live again (S4-008).
+   - The Analyst must be able to see both ends or the record (404 otherwise).
+2. **`GET /api/v1/review/documents/:id`** (Admin and Analyst): S5-001's document impact. Answers 404 if the reader may not see the document (S3's role × record type and label rules) or it's another org's.
+3. **`POST /api/v1/review/documents/:id/remove`** (Analyst only, D52.5; planner's readings S5-Q1 and S5-Q7). In this order, each step safe to repeat:
+   1. The document becomes `removed`. From then on, every S4 step for it (read, embed, extract, resolve) ends without doing anything. A resolve already under way checks the document's status before it writes live links, inside its transaction, and writes none. Mention linking writes nothing either.
+   2. Every AI link in the org's graph whose `sourceDocId` is this document is deleted, in batches. Each batch is one Neo4j transaction with its `link.removed` entries.
+   3. Every record created by approving one of the document's `record` findings is retired, with `record.retired`.
+   4. The document's pending findings become `rejected`, and its live and approved ones `removed`, with the Analyst as decider and the note.
+   5. The chunk-to-record rows of its chunks are deleted. The chunks stay, because findings point to them, and S6 never searches a removed document's chunks.
+   6. One `document.removed` entry holds the counts and the note.
+
+   It answers with the counts. This includes links and records above the Analyst's own clearance, shown only as counts, never by name or number. Running it again finds nothing left to do and answers zero counts. The stored file is kept (traceable to its uploader, D52.5). A repeat upload of the same file finds the removed document and doesn't bring it back.
+4. **Data intake:** removed documents show "Removed" (S5-001 added the badge), and S3's document list accepts `removed` as a status filter.
+5. **Logs:** IDs, counts and codes only.
+
+**Pass criteria:**
+1. Removing a live AI link deletes it from Neo4j, with a `link.removed` entry holding its copy, and marks the finding `removed`. Record pages no longer show it, and processing the same chunk again never makes it live again.
+2. Removing an approved new record retires it. Removing an approved mapping deletes the AI `SATISFIES`. A link that already existed from a person or an import is never deleted.
+3. After removing a document that has live AI links, an approved new record, and pending and live findings: no AI link from it is left in the graph, the record is retired, the pending findings are rejected and the live and approved ones removed, its chunk-to-record rows are gone, the document shows Removed, and one `document.removed` entry holds the counts. A second run changes nothing.
+4. A document removed while its chunks are still being processed gets nothing written for it by any later step.
+5. Only the Analyst may remove. An Admin sees the impact counts but gets 403 on removal; other roles get 403; a hidden document, or another org's, is 404.
+6. Lint and type checks pass.
+
+---
+
+Task: S5-005
+
+**Goal:** Screen 8, the Analyst review queue (D27 #8), looks like a finished product: an Analyst sees what waits, understands why at a glance, and approves or rejects links and mappings; the Admin watches read-only.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D1 (looks finished), D2 (ServiceNow style), D7 and D50 (the web only hides buttons; the API decides), D16, D24, D27 #8, D30 (typed client), D33, D47, D51. Read the S5 shared notes.
+
+**Depends on:** S5-002 (the read routes) and S5-003 (approve and reject).
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerate it from the API with S5-002's and S5-003's routes), `packages/web/src/router.tsx`, `packages/web/src/app/AppShell.tsx`.
+
+**Where things are now:**
+- `/review` is a placeholder from `packages/web/src/app/screens.ts` ("Analyst review", served by `ScreenPage` because it isn't in `BUILT_SCREENS` in `router.tsx`).
+- The Data intake screen (`packages/web/src/features/intake/`) shows the app's no-access state and paged tables.
+- The record pages are under `packages/web/src/features/records/`. The current person's role and clearance come from `/api/v1/me`.
+
+**Behaviour:**
+1. **`/review`** replaces the placeholder (`packages/web/src/features/review/`), for Admins and Analysts (`canViewReviewQueue`); other roles see the no-access state.
+   - Tabs: Links, New records, Possible duplicates and Suggested mappings, each with its waiting count.
+   - A status filter: Waiting (the default), Live, Approved, Rejected and Removed. Also filters by document and by record (both can come in the URL), and a sort (newest or oldest first).
+   - A paged table per tab with S5-002's summary. Links read as plain words ("srv-pay-01 → exposed to → SQL injection"), and the failed checks are short badges in S5-001's plain words. Each row has the document, a label badge and its age.
+   - Hidden records read "A record you can't see".
+2. **`/review/$id`**, a finding's page:
+   - A header with kind, status and label.
+   - "Why it's waiting": the failed checks in plain words. A live finding instead says the rule checks passed.
+   - The source: the document (name, kind, uploader, when) and the sentence highlighted inside its chunk text.
+   - For a link: the two ends side by side. Each shows its matched record (linking to the record's page), or a choice between its candidates (number, name, how it was found, and the score as a percentage), or "Proposed new record" (linking to that finding, with its status).
+   - For a mapping: the control or requirement at each end (linking to their pages) and Gemma's reason.
+   - For a new record or a possible duplicate, this task shows S5-002's details read-only; S5-006 adds their approval in the same place.
+   - The model and prompt version in small print, and the decision (who, when, note, and the outcome with links to what it made).
+3. **Actions, Analysts only** (`canWorkReviewQueue`; Admins never see them):
+   - **Approve** for links and mappings, with an optional note. For a link it is enabled once each end is matched or chosen.
+   - **Reject** for every kind, with a confirmation and an optional note.
+   - After a decision, the page shows the new status, and the counts and list refresh.
+   - Refusals (`already_decided`, `end_not_chosen`, `end_not_approved`, `end_rejected`, `link_not_allowed`, `source_above_ends`, `record_not_active`, 403, 404) show in plain words with the reference ID, the app's usual way.
+4. **Menu:** for Admins and Analysts, the "Analyst review" item shows the number waiting (`GET /api/v1/review/counts`), refreshed every 60 s and after each decision.
+5. The look matches the rest of the app (shadcn/ui, the S1 records kit's tables and badges).
+
+**Pass criteria:**
+1. An Analyst opens Analyst review and sees waiting findings by kind with their counts, filters and pages them, and opens a link finding. They see why it waits and its sentence in context, pick a candidate, and approve. The finding shows Approved, and both record pages show the link.
+2. Approving and rejecting a suggested mapping works the same way; rejecting any kind asks for confirmation first.
+3. An Admin sees the same screens without any action buttons; a Risk Manager, Compliance Manager, Control Owner, Auditor or Viewer sees the no-access state.
+4. Refusals show a plain-words message with the reference ID.
+5. Lint and type checks pass.
+
+---
+
+Task: S5-006
+
+**Goal:** The Analyst can finish every kind of review from the screen: approve a proposed new record, merge a possible duplicate, take back a false positive, and undo one bad upload.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D1, D2, D24, D38, D43, D50, D51, D52.5, D69, D198, D207. Read the S5 shared notes.
+
+**Depends on:** S5-004 (removal routes) and S5-005 (the screen, its finding page and the regenerated client).
+
+**Hot files:** `packages/web/src/api/client.ts` (regenerate it again, now with S5-004's routes).
+
+**Where things are now:** after S5-005, `/review/$id` shows new-record and duplicate findings read-only. S1's create forms come from the shared schemas (`packages/web/src/features/records/`). The people picker uses `GET /api/v1/people`.
+
+**Behaviour:**
+1. **New record findings:**
+   - An approval form for the proposed kind, built like S1's create form from the shared schema. It is pre-filled with the name and with any of Gemma's details that fit a field's allowed values.
+   - An owner picker, defaulting to the Analyst. A label picker that offers nothing below the finding's label and nothing above the Analyst's clearance.
+   - Approving creates the record and links to its new page. The form lists the link findings that point to this proposal; once it is approved they read "ready to approve".
+2. **Possible duplicates:**
+   - The two records side by side: name, number, label, owner, source IDs and link count, each linking to its page.
+   - A choice of which to keep (by default the older one).
+   - "Merge", with a confirmation saying the other record will be retired, its links and source IDs will move, the kept record takes the higher label, and it can't be undone.
+   - "Not duplicates" rejects the finding.
+3. **Remove (false positive):** on live and approved findings that `canRemove` allows. A confirmation says what will happen ("The link is deleted from the graph" or "The record is retired") and that it's recorded in the audit trail. Then it shows the result.
+4. **Remove everything from this upload:** on a finding's source-document section, and when the list is filtered by a document.
+   - A confirmation shows the document, its uploader and S5-004's impact counts. It needs the Analyst to tick "I understand this can't be undone".
+   - Afterwards it shows what was removed. The document reads Removed, and its findings Rejected or Removed.
+5. Admins see the details and the impact counts with no action buttons. Refusals use the plain words and reference ID, as in S5-005.
+
+**Pass criteria:**
+1. An Analyst approves a proposed incident from a SOC ticket through the form, with fields pre-filled where possible, and lands on the new INC record. The waiting link findings that point to it can now be approved.
+2. An Analyst merges a possible duplicate, keeping the record they chose; the other record's page shows it retired.
+3. An Analyst removes a live AI link as a false positive, and it disappears from the record pages.
+4. An Analyst removes everything from one upload after seeing the counts. The document shows Removed in Data intake, and its findings show Rejected or Removed.
+5. Admins see no action buttons.
+6. Lint and type checks pass.
+
+---
+
+Task: S5-007
+
+**Goal:** The S5 demo works on the demo orgs without waiting for Gemma: the review queue holds a realistic, fixed set of findings of every kind, and a written click-through shows every decision.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. No Playwright journeys during the MVP.
+
+**Decisions:** D1, D18 (realistic mess), D24, D38, D42, D43, D50, D51, D52.5, D56, D69. Read the S5 shared notes and the S4 shared notes ("`review_findings`", "Live AI links", "Chunks").
+
+**Depends on:** S5-006 (the finished screen, so the click-through matches it).
+
+**Hot files:** `packages/infra/scripts/seed-demo.ts` (and its `packages/infra/scripts/demo-intake/` files if the change lands there).
+
+**Where things are now:**
+- `pnpm seed:demo` makes the demo orgs (Acme and Globex, one person per role, M0-014) and adds records, links, mappings, uploads, an asset import, evidence and audit findings (S1-010, S2-008, S3-020).
+- The demo documents are in `packages/infra/scripts/demo-intake/`.
+- `docs/demo/s1.md` to `s3.md` show the click-through style.
+
+**Behaviour:**
+1. **`seed:demo`** adds to each demo org a fixed set of review findings that reads like real processing output. Each one passes S4-001's proposal schemas and uses keys in S4's style, so a re-run adds nothing:
+   - pending link findings, one for each failed check: a sentence that doesn't name both records; a wrong direction; an end with 2 or 3 candidates;
+   - a SOC-ticket incident proposed as a new record, with a pending link pointing to it;
+   - a possible duplicate pair of assets with close spellings (seeded as two records, for example "Payroll DB" and "Payrol DB");
+   - two suggested mappings: a control `SATISFIES` an ISO 27001 requirement, and a SOC 2 criterion `MAPS_TO` a NIST 800-53 control;
+   - one live AI link with its `live` finding, written like S4's live links (origin `ai` with its source, and its `link.created` entry).
+
+   Link and record findings point to the demo documents `seed:demo` already uploads, and to one of each document's chunks whose text holds the sentence. If a document has no chunks yet, the seed stores them the way S4's reader would (same chunker), so the worker later only embeds them. If the tokenizer file is missing, the seed says which command to run, as the worker does. Nothing calls Gemma or bge-m3.
+2. **`docs/demo/s5.md`:** a click-through as the demo Analyst, then the Admin and other roles:
+   - open the queue and its counts;
+   - approve a link by choosing a candidate;
+   - approve the proposed incident, then its link;
+   - merge the duplicate;
+   - approve a mapping and see it on the control page;
+   - reject a finding;
+   - remove the live link as a false positive;
+   - remove everything from one upload;
+   - the Admin read-only;
+   - a Risk Manager sees no access;
+   - the other org sees none of it.
+   It notes that the running stack shows S5 only after the MVP-end rebuild and migration (D229).
+
+**Pass criteria:**
+1. After `pnpm seed:demo`, each demo org's Analyst finds waiting findings of all four kinds and one live AI link. Running it again adds nothing.
+2. Every step in `docs/demo/s5.md` works as written against the seeded data, once the stack runs S5's code.
 3. Lint and type checks pass.
 
 ---
