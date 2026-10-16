@@ -1,7 +1,8 @@
 // Fast-load mode's writes (S3-019; D42, D45.4, D45.5, D45.8, D48, D56, D57, D163, D164, D213 (7)):
 // the batches of `planFastLoad` (packages/generators/src/fast-load/) written straight into Neo4j,
 // Postgres and the org's bucket, through the api's own services. `pnpm gen:data --mode fast` runs
-// it (gen-data.ts); nothing here starts a job or touches Gemma or bge-m3.
+// it (gen-data.ts). Nothing here touches Gemma or bge-m3; the only jobs it queues are the
+// documents' reads (S4-004), which the worker turns into chunks and vectors.
 //
 // - Graph batches: one Neo4j write transaction per batch, as `grc_writer` in `org-<orgId>`, through
 //   `AuditOutbox.withAuditedWrite`. It write-locks the batch's record counters, finds which of the
@@ -17,8 +18,11 @@
 //   then one grc_app transaction under the intake system context inserts the `documents` rows
 //   (status `stored`, uploader `system` / `system:fast-load`, label `internal` as an upload's
 //   default) that aren't there yet, by content, and appends one `generator.loaded` entry
-//   (`appendInTx`, `meta { documentIds, counts: { documents }, generatorVersion, seed }`). No
-//   `processing.document-read` job is queued: S4 decides how these are chunked and embedded.
+//   (`appendInTx`, `meta { documentIds, counts: { documents }, generatorVersion, seed }`). The same
+//   transaction queues one `processing.document-read` job for each new policy document, SOC ticket
+//   and audit report (D42, D213 (7), S4-004), with an upload's job key `<orgId>:<contentHash>`, so
+//   the worker chunks and embeds them (embed only: uploader `system`, no Gemma). Asset lists get
+//   no job: their assets are loaded straight from the answer key.
 // - A batch with nothing new writes nothing and no entry, so a re-run adds nothing. A batch that
 //   fails keeps neither its writes nor its entry (a stored file may stay; a re-run reuses it).
 // - Entries, errors and results hold IDs, codes and counts only, never a name or text (D164).
@@ -33,6 +37,9 @@ import type { GraphService } from '../../api/src/graph/graph.service.js';
 import { AUDIT_OUTBOX_LABEL } from '../../api/src/graph/privileges.js';
 import { documents, type NewDocumentRow } from '../../api/src/intake/intake.schema.js';
 import { INTAKE_SYSTEM_CONTEXT } from '../../api/src/intake/queues.js';
+import type { JobsService } from '../../api/src/jobs/jobs.module.js';
+import { isReadableDocumentKind } from '../../api/src/processing/reader/readable-kinds.js';
+import { PROCESSING_JOB_KEYS, PROCESSING_QUEUES, type DocumentReadJob } from '../../api/src/processing/queues.js';
 import { sniffFileFormat } from '../../api/src/intake/uploads/sniff.js';
 import { DEFAULT_UPLOAD_LABEL, storageKeyFor } from '../../api/src/intake/uploads/store-upload.js';
 import { NUMBER_CLASH_ATTEMPTS, RECORD_COUNTER_LABEL, isNumberClash } from '../../api/src/records/record-numbers.js';
@@ -96,6 +103,8 @@ export interface FastLoadDeps {
   outbox: Pick<AuditOutbox, 'withAuditedWrite'>;
   audit: Pick<AuditService, 'appendInTx'>;
   files: Pick<FileStore, 'put' | 'exists'>;
+  /** Queues each new document's read job in the documents' own transaction (D29). */
+  jobs: Pick<JobsService, 'sendInTx'>;
   /** The time stamp of new records and links; now by default. */
   now?: () => string;
   /** Files put at once; `FILE_CONCURRENCY` by default. */
@@ -117,6 +126,8 @@ export interface BatchDone {
   /** What the batch created; 0 and no entry when everything was already there. */
   created: number;
   links: number;
+  /** The document read jobs the batch queued (documents batches only). */
+  readJobs: number;
   entry: boolean;
 }
 
@@ -126,6 +137,8 @@ export interface OrgFastLoadResult {
   records: { created: number; existing: number };
   links: { created: number };
   documents: { created: number; existing: number };
+  /** The `processing.document-read` jobs queued for the new documents. */
+  readJobs: number;
   /** The `generator.loaded` entries written (one per batch that created something). */
   entries: number;
   /** The IDs this run created, in plan order. */
@@ -142,6 +155,7 @@ export interface FastLoadResult {
     linksCreated: number;
     documentsCreated: number;
     documentsExisting: number;
+    readJobs: number;
     entries: number;
   };
 }
@@ -356,6 +370,7 @@ function bytesOf(run: OrgRun, n: number, i: number, doc: FastLoadDocument): Buff
 interface DocumentBatchResult {
   created: string[];
   existing: number;
+  readJobs: number;
   entry: boolean;
 }
 
@@ -397,11 +412,20 @@ async function writeDocumentBatch(deps: FastLoadDeps, run: OrgRun, batch: Docume
             .insert(documents)
             .values(rows)
             .onConflictDoNothing({ target: [documents.orgId, documents.contentHash] })
-            .returning({ id: documents.id, contentHash: documents.contentHash });
-    if (inserted.length === 0) return { created: [], existing: rows.length, entry: false };
-    const created = inserted
-      .sort((a, b) => (order.get(a.contentHash) ?? 0) - (order.get(b.contentHash) ?? 0))
-      .map((row) => row.id);
+            .returning({ id: documents.id, kind: documents.kind, contentHash: documents.contentHash });
+    if (inserted.length === 0) return { created: [], existing: rows.length, readJobs: 0, entry: false };
+    inserted.sort((a, b) => (order.get(a.contentHash) ?? 0) - (order.get(b.contentHash) ?? 0));
+    const created = inserted.map((row) => row.id);
+    // Each new readable document's read job, in this transaction: it exists only if the rows do.
+    let readJobs = 0;
+    for (const row of inserted) {
+      if (!isReadableDocumentKind(row.kind)) continue;
+      const data: DocumentReadJob = { orgId: run.orgId, documentId: row.id };
+      const jobId = await deps.jobs.sendInTx(tx, PROCESSING_QUEUES.documentRead, data, {
+        singletonKey: PROCESSING_JOB_KEYS.documentRead(run.orgId, row.contentHash),
+      });
+      if (jobId !== null) readJobs += 1;
+    }
     await deps.audit.appendInTx(tx, {
       orgId: run.orgId,
       ...FAST_LOAD_ACTOR,
@@ -415,7 +439,7 @@ async function writeDocumentBatch(deps: FastLoadDeps, run: OrgRun, batch: Docume
         seed: run.seed,
       },
     });
-    return { created, existing: rows.length - created.length, entry: true };
+    return { created, existing: rows.length - created.length, readJobs, entry: true };
   });
 }
 
@@ -449,6 +473,7 @@ export async function fastLoadOrg(
     records: { created: 0, existing: 0 },
     links: { created: 0 },
     documents: { created: 0, existing: 0 },
+    readJobs: 0,
     entries: 0,
     recordIds: [],
     documentIds: [],
@@ -467,6 +492,7 @@ export async function fastLoadOrg(
       n: batch.n,
       created: done.created.length,
       links: done.links,
+      readJobs: 0,
       entry: done.entry,
     });
   }
@@ -474,6 +500,7 @@ export async function fastLoadOrg(
     const done = await writeDocumentBatch(deps, run, batch);
     result.documents.created += done.created.length;
     result.documents.existing += done.existing;
+    result.readJobs += done.readJobs;
     result.documentIds.push(...done.created);
     if (done.entry) result.entries += 1;
     opts.onBatch?.({
@@ -483,6 +510,7 @@ export async function fastLoadOrg(
       n: batch.n,
       created: done.created.length,
       links: 0,
+      readJobs: done.readJobs,
       entry: done.entry,
     });
   }
@@ -523,6 +551,7 @@ export async function runFastLoad(
       linksCreated: sum((o) => o.links.created),
       documentsCreated: sum((o) => o.documents.created),
       documentsExisting: sum((o) => o.documents.existing),
+      readJobs: sum((o) => o.readJobs),
       entries: sum((o) => o.entries),
     },
   };

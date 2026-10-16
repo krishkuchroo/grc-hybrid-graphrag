@@ -18,6 +18,8 @@ data/uploads/
 models/
 *.gguf
 *.safetensors
+# bge-m3's tokenizer files, set up by `pnpm --filter api setup:tokenizer` (S4-004)
+packages/api/tokenizer/
 
 # Build output
 node_modules/
