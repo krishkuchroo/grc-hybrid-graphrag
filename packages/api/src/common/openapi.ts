@@ -20,6 +20,9 @@ export interface RouteDoc {
   multipart?: { fields: z.ZodObject; files: Record<string, string> };
   /** The schema of the 200 JSON response. */
   response: z.ZodType;
+  /** The 200 response's media type when it isn't JSON, for example `text/event-stream` (the chat's
+   * streamed answer, whose events `response` then describes). */
+  responseContentType?: string;
   /** Other JSON answers by status, for example a 201 that differs from the 200. */
   responses?: Record<string, { description: string; schema: z.ZodType }>;
   /** The query parameters the route takes (an object of strings), if any besides a list's paging. */
@@ -103,7 +106,7 @@ export function openApiDocument(): Record<string, unknown> {
       responses: {
         '200': {
           description: 'OK',
-          content: { 'application/json': { schema: jsonSchema(route.response) } },
+          content: { [route.responseContentType ?? 'application/json']: { schema: jsonSchema(route.response) } },
         },
         ...Object.fromEntries(
           Object.entries(route.responses ?? {}).map(([status, r]) => [

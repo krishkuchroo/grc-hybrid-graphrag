@@ -2,7 +2,7 @@
 // format (D47), a 1 MB body cap, 300 requests a minute per person and security headers (D64), and
 // sign-in with Better Auth (D49, D54). The upload routes alone take multipart bodies of up to 25 MB,
 // at 20 uploads a minute per person (D53, D64; S3-004). The push API takes 60 batches a minute per
-// API key (D64; S3-008).
+// API key (D64; S3-008). Asking the chat and searching share 10 a minute per person (D64; S6-006).
 // Importing this file builds nothing; running it directly starts listening.
 import 'reflect-metadata';
 import { pathToFileURL } from 'node:url';
@@ -10,6 +10,7 @@ import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
+import { registerChatRateLimit } from './chat/chat-rate-limit.js';
 import { ErrorFilter, registerBodyTooLargeKeepAlive } from './common/errors.js';
 import { createLogger, PinoNestLogger, type LogStream } from './common/logger.js';
 import { API_PREFIX } from './common/openapi.js';
@@ -51,6 +52,7 @@ export async function createApiApp(opts: ApiAppOptions = {}): Promise<NestFastif
   registerRateLimit(fastify, new RateLimiter(REQUESTS_PER_MINUTE));
   registerUploadRateLimit(fastify);
   registerPushRateLimit(fastify);
+  registerChatRateLimit(fastify);
   await registerMultipart(fastify);
   registerAuthRoutes(fastify, auth, log);
   app.setGlobalPrefix(API_PREFIX.slice(1));
