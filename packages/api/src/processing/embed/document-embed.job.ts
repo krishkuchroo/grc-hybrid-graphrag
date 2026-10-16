@@ -10,6 +10,10 @@
 //      uploader type `system`).
 // Re-runs (D45.5): a chunk with a vector is never embedded again, a chunk past `embedded` is never
 // queued again, and each chunk's job key is its ID, so a job already waiting isn't doubled.
+// A document the Analyst removes meanwhile (S5-004, D52.5) stops the run: each batch first reads
+// the document's status, and each batch's transaction holds the document's row shared and checks
+// it again before it stores anything or queues a next step, so nothing is written for it after
+// the removal.
 // Ollama down or busy (`unavailable`, `timed_out`): the job is put off with `RunLater`, which uses
 // no try, so the document stays Processing and carries on by itself once Ollama is back (D45.7).
 // A long document stops after a time budget and carries on in a fresh copy of the job, so a run
@@ -164,14 +168,16 @@ async function embedChunks(
       throw new RunLater(CARRY_ON_SECONDS, 'document embed carries on');
     }
 
-    const batch = await withOrgContext(deps.db, ctx, (tx) =>
-      tx
+    const batch = await withOrgContext(deps.db, ctx, async (tx) => {
+      if (await documentRemoved(tx, ids)) return null;
+      return tx
         .select({ id: chunks.id, text: chunks.text })
         .from(chunks)
         .where(and(ofDocument, eq(chunks.stage, 'read')))
         .orderBy(asc(chunks.position))
-        .limit(batchSize),
-    );
+        .limit(batchSize);
+    });
+    if (batch === null) return removedMeanwhile(log, ids, embedded);
 
     let vectors: number[][] = [];
     if (batch.length > 0) {
@@ -184,6 +190,8 @@ async function embedChunks(
     }
 
     const step = await withOrgContext(deps.db, ctx, async (tx) => {
+      // The document's row, held shared: a removal waits for this batch, or this batch for it.
+      if (await documentRemoved(tx, ids, { lock: true })) return null;
       const now = new Date();
       let stored = 0;
       for (const [i, chunk] of batch.entries()) {
@@ -201,6 +209,7 @@ async function embedChunks(
       if (Number(left?.n ?? 0) > 0) return { stored, queued: null };
       return { stored, queued: await queueNextSteps(tx, deps.jobs, ids, mode) };
     });
+    if (step === null) return removedMeanwhile(log, ids, embedded);
     embedded += step.stored;
 
     if (step.queued !== null) {
@@ -217,6 +226,24 @@ async function embedChunks(
     // Chunks are left without a vector, yet this batch found none: never loop on it.
     if (batch.length === 0) throw new Error('document embed: chunks without a vector could not be read');
   }
+}
+
+// Whether the document is gone or the Analyst removed it (S5-004). With `lock`, its row is held
+// shared for the rest of the caller's transaction.
+async function documentRemoved(tx: Tx, ids: DocumentIds, opts: { lock?: boolean } = {}): Promise<boolean> {
+  const query = tx
+    .select({ status: documents.status })
+    .from(documents)
+    .where(and(eq(documents.orgId, ids.orgId), eq(documents.id, ids.documentId)))
+    .limit(1);
+  const [row] = opts.lock ? await query.for('share') : await query;
+  return !row || row.status === 'removed';
+}
+
+// The run stops: the document was removed (or deleted) while its chunks were being embedded.
+function removedMeanwhile(log: Logger, ids: DocumentIds, embedded: number): DocumentEmbedOutcome {
+  log.info({ ...ids, code: 'document_removed', embedded }, 'a document was removed while it was embedded; it stops');
+  return { status: 'skipped', documentId: ids.documentId, reason: 'not_processing' };
 }
 
 // Queues each embedded chunk's next step in the caller's transaction (D29): Gemma extraction for a

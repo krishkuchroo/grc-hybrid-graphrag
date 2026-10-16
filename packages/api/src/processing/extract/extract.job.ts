@@ -13,11 +13,15 @@
 // the document stays Processing. Anything else, an unreadable answer included, is a failed try
 // (D72); on the last one the chunk ends `failed` and the document `failed` with `extract_failed`.
 // Fast-loaded documents (uploader type `system`) are embed-only (D42) and never reach Gemma.
+// A chunk of a document the Analyst removed (S5-004, D52.5) is never sent to Gemma, and an answer
+// that comes back after the removal is not stored: the store's transaction holds the document's row
+// shared and checks its status first, so nothing is written or queued for it. A last failed try
+// never turns a removed document into a failed one.
 //
 // Logs (D163): IDs, counts, timings, the model, the prompt version and codes. Never the chunk's
 // text, the prompt or the answer.
 import type { OnApplicationBootstrap } from '@nestjs/common';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, notInArray } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { isAiFailure } from '../../ai/ai-failure.js';
@@ -25,7 +29,7 @@ import type { TextModel } from '../../ai/text-model.js';
 import { errorKind } from '../../common/errors.js';
 import { createLogger } from '../../common/logger.js';
 import type { Db } from '../../db/client.js';
-import { withOrgContext } from '../../db/org-context.js';
+import { withOrgContext, type Tx } from '../../db/org-context.js';
 import { documents } from '../../intake/intake.schema.js';
 import { INTAKE_SYSTEM_CONTEXT } from '../../intake/queues.js';
 import type { JobHandlerInput, JobsService } from '../../jobs/jobs.module.js';
@@ -79,7 +83,8 @@ export type ChunkExtractOutcome =
         | 'not_embedded'
         | 'already_resolved'
         | 'chunk_failed'
-        | 'changed_meanwhile';
+        | 'changed_meanwhile'
+        | 'document_removed';
     };
 
 export interface ChunkExtractDeps {
@@ -100,6 +105,21 @@ interface ChunkAndDocument {
   stage: string;
   text: string;
   uploaderType: string;
+  documentStatus: string;
+}
+
+type Ids = { orgId: string; documentId: string; chunkId: string };
+
+// Whether the chunk's document is gone or the Analyst removed it (S5-004). With `lock`, its row is
+// held shared for the rest of the caller's transaction, so a removal waits for it (or it for one).
+async function documentRemoved(tx: Tx, ids: Ids, opts: { lock?: boolean } = {}): Promise<boolean> {
+  const query = tx
+    .select({ status: documents.status })
+    .from(documents)
+    .where(and(eq(documents.orgId, ids.orgId), eq(documents.id, ids.documentId)))
+    .limit(1);
+  const [row] = opts.lock ? await query.for('share') : await query;
+  return !row || row.status === 'removed';
 }
 
 /**
@@ -128,6 +148,7 @@ export async function extractChunk(
         stage: chunks.stage,
         text: chunks.text,
         uploaderType: documents.uploaderType,
+        documentStatus: documents.status,
       })
       .from(chunks)
       .innerJoin(documents, and(eq(documents.orgId, chunks.orgId), eq(documents.id, chunks.documentId)))
@@ -140,6 +161,12 @@ export async function extractChunk(
     return { status: 'skipped', chunkId, reason: 'chunk_not_found' };
   }
   const ids = { orgId, documentId: found.documentId, chunkId };
+
+  // A removed document's chunks are never sent to Gemma (S5-004).
+  if (found.documentStatus === 'removed') {
+    log.info({ ...ids, code: 'document_removed' }, 'a chunk-extract job found its document removed');
+    return { status: 'skipped', chunkId, reason: 'document_removed' };
+  }
 
   // Fast-loaded documents get chunks, vectors and mention links only, never Gemma (D42).
   if (found.uploaderType === 'system') {
@@ -226,6 +253,7 @@ async function store(
 ): Promise<ChunkExtractOutcome> {
   const { answer, droppedRecords, droppedLinks } = result.read;
   const saved = await withOrgContext(deps.db, INTAKE_SYSTEM_CONTEXT(ids.orgId), async (tx) => {
+    if (await documentRemoved(tx, ids, { lock: true })) return { updated: false as const, removed: true };
     const updated = await tx
       .update(chunks)
       .set({
@@ -237,12 +265,19 @@ async function store(
       })
       .where(and(eq(chunks.orgId, ids.orgId), eq(chunks.id, ids.chunkId), eq(chunks.stage, 'embedded')))
       .returning({ id: chunks.id });
-    if (updated.length === 0) return { updated: false as const };
+    if (updated.length === 0) return { updated: false as const, removed: false };
     const resolveJobId = await deps.jobs.sendInTx(tx, PROCESSING_QUEUES.chunkResolve, resolveJob(ids), {
       singletonKey: PROCESSING_JOB_KEYS.chunkResolve(ids.chunkId),
     });
     return { updated: true as const, resolveJobId };
   });
+  if (!saved.updated && saved.removed) {
+    log.info(
+      { ...ids, code: 'document_removed' },
+      'the document was removed during extraction; the answer was not stored',
+    );
+    return { status: 'skipped', chunkId: ids.chunkId, reason: 'document_removed' };
+  }
   if (!saved.updated) {
     log.info({ ...ids, code: 'changed_meanwhile' }, 'the chunk changed during extraction; its answer was not stored');
     return { status: 'skipped', chunkId: ids.chunkId, reason: 'changed_meanwhile' };
@@ -280,11 +315,15 @@ async function queueResolve(
   log: Logger,
   ids: { orgId: string; documentId: string; chunkId: string },
 ): Promise<ChunkExtractOutcome> {
-  const resolveJobId = await withOrgContext(deps.db, INTAKE_SYSTEM_CONTEXT(ids.orgId), (tx) =>
-    deps.jobs.sendInTx(tx, PROCESSING_QUEUES.chunkResolve, resolveJob(ids), {
+  const queued = await withOrgContext(deps.db, INTAKE_SYSTEM_CONTEXT(ids.orgId), async (tx) => {
+    if (await documentRemoved(tx, ids, { lock: true })) return { removed: true as const };
+    const jobId = await deps.jobs.sendInTx(tx, PROCESSING_QUEUES.chunkResolve, resolveJob(ids), {
       singletonKey: PROCESSING_JOB_KEYS.chunkResolve(ids.chunkId),
-    }),
-  );
+    });
+    return { removed: false as const, jobId };
+  });
+  if (queued.removed) return { status: 'skipped', chunkId: ids.chunkId, reason: 'document_removed' };
+  const resolveJobId = queued.jobId;
   if (resolveJobId !== null) {
     log.info({ ...ids, resolveJobId }, 'an extracted chunk was queued for resolution again');
   }
@@ -316,7 +355,13 @@ async function markFailed(
       await tx
         .update(documents)
         .set({ status: 'failed', failureCode: EXTRACT_FAILURE_CODE, updatedAt: now })
-        .where(and(eq(documents.orgId, ids.orgId), eq(documents.id, ids.documentId), ne(documents.status, 'failed')));
+        .where(
+          and(
+            eq(documents.orgId, ids.orgId),
+            eq(documents.id, ids.documentId),
+            notInArray(documents.status, ['failed', 'removed']),
+          ),
+        );
       return true;
     });
     if (!marked) return;
