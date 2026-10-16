@@ -5,7 +5,8 @@
 // the context clearance (`app_role_views`, `app_label_visible`, src/db/role-visibility.sql.ts).
 //
 // - `documents`: every stored file, identified by its content (unique content hash per org). The
-//   processing migration (S4-002) adds `failure_code`: why it failed, empty unless it did.
+//   processing migration (S4-002) adds `failure_code`: why it failed, empty unless it did. The
+//   review migration (S5-001) lets its status be `removed`: a whole upload taken back out (D52.5).
 // - `import_mappings`: the saved column mapping per source (D44).
 // - `imports`: one asset-list import of a document, with what it read and what it did.
 // - `push_batches`: the push API's batches, remembered so a repeat gets the first answer (D47).

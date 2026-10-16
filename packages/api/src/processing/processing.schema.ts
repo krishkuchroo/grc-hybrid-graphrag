@@ -15,11 +15,13 @@
 // - `review_findings`: one row per AI proposal (D24, D38). The key is unique per org, so a repeat
 //   proposal adds nothing (insert with `onConflictDoNothing`). SELECT needs the role's D50 "Review
 //   queue" cell (`app_review_queue_visible()`: Admin and Analyst) and `app_label_visible(label)`.
-//   grc_app may insert and update, never delete: findings are kept (D24).
+//   grc_app may insert and update, never delete: findings are kept (D24). The review migration
+//   (S5-001) adds `outcome`: what the Analyst's decision made or removed (S5-001's outcome shapes),
+//   empty until a decision.
 //
 // The partitioning and the per-partition HNSW indexes live in the migration; Drizzle doesn't model
 // them, and doesn't need to for queries on `chunks`.
-import { LABELS, type Label } from '@grc/shared';
+import { LABELS, type Label, type ReviewOutcome } from '@grc/shared';
 import { sql, type SQL } from 'drizzle-orm';
 import {
   check,
@@ -209,6 +211,9 @@ export const reviewFindings = pgTable(
     decidedBy: text('decided_by'),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     decisionNote: text('decision_note'),
+    /** What the decision made or removed, by record ID and number (S5-001's outcome per kind);
+     * null until a decision, and for a rejection. */
+    outcome: jsonb('outcome').$type<ReviewOutcome>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -249,6 +254,10 @@ export const reviewFindings = pgTable(
       sql`${t.kind} = 'duplicate' OR (${t.model} IS NOT NULL AND ${t.promptVersion} IS NOT NULL)`,
     ),
     check('review_findings_decision_check', sql`(${t.decidedBy} IS NULL) = (${t.decidedAt} IS NULL)`),
+    check(
+      'review_findings_outcome_check',
+      sql`${t.outcome} IS NULL OR (jsonb_typeof(${t.outcome}) = 'object' AND ${t.decidedAt} IS NOT NULL)`,
+    ),
   ],
 );
 
