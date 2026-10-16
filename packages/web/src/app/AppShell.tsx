@@ -1,7 +1,8 @@
 // The signed-in frame, after ServiceNow's workspace (D2): a dark header with the org, the person,
 // their role and sign-out, and a dark left navigation to the screens (D27). For the roles that see
 // the Analyst review queue (Admin and Analyst), its menu item shows how many findings wait (GET
-// /api/v1/review/counts), asked again every minute and after each decision (S5-005).
+// /api/v1/review/counts), asked again every minute and after each decision (S5-005). "Ask" in the
+// header opens the chat side panel (screen 9, S6-007) over any screen.
 import { canViewReviewQueue } from '@grc/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate } from '@tanstack/react-router';
@@ -11,6 +12,7 @@ import { HOME, SCREEN_GROUPS, type Screen } from '@/app/screens';
 import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/ui/button';
 import { formatRole, initials, ME_KEY } from '@/features/auth/session';
+import { ChatPanel } from '@/features/chat/ChatPanel';
 import { useReviewCounts } from '@/features/review/useReview';
 
 /** How many wait, as the menu shows it: nothing for none, `99+` past 99. */
@@ -61,6 +63,7 @@ export function AppShell() {
       <header className="bg-chrome text-chrome-foreground flex h-14 items-center gap-4 border-b border-black/30 px-4">
         <BrandMark />
         <div className="ml-auto flex min-w-0 items-center gap-4">
+          <ChatPanel />
           <div className="hidden items-center gap-2 rounded-md border border-white/10 px-2.5 py-1 text-sm sm:flex">
             <Building2 className="text-brand size-4" aria-hidden />
             <span className="max-w-[16rem] truncate font-semibold text-white">{me.org.name}</span>
