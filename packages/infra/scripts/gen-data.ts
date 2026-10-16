@@ -16,10 +16,13 @@
 //   slugs `fast-<seed>-<size>-<n>` (so a fast load never lands in a full-pipeline org or in another
 //   size's org), and writes the answer key's records, links and documents straight into Neo4j,
 //   Postgres and the org's bucket (`runFastLoad`, fast-load.ts): batches of at most 500, each in one
-//   transaction with one `generator.loaded` audit entry listing every ID it created. No API key, no
-//   API and no processing job. Then it copies the run's outbox entries into the Postgres audit trail
-//   with the worker's own relay, checks each org's hash chain, and prints the time it took and the
-//   process's peak memory. A re-run adds nothing and writes no entries.
+//   transaction with one `generator.loaded` audit entry listing every ID it created. No API key and
+//   no API; the transaction that stores the documents queues each new policy document's, SOC
+//   ticket's and audit report's `processing.document-read` job (S4-004), so the worker chunks and
+//   embeds them (embed only, no Gemma, D42). Then it copies the run's outbox entries into the
+//   Postgres audit trail with the worker's own relay, checks each org's hash chain, and prints the
+//   time it took and the process's peak memory. A re-run adds nothing, writes no entries and queues
+//   no job.
 // Defaults: `--size tiny`, `--seed 1`, `--base-url https://grc.localhost`. The root script runs
 // node with `--use-system-ca`, so the Mac's trust in Caddy's local certificate applies (D60).
 // The output holds only org slugs, counts, times and the answer key's path: never a key, a name or
@@ -30,7 +33,7 @@ import type { ScriptDb } from './org-script-env.js';
 // Loaded by URL: plain `node` needs the `.ts` file name, which tsc refuses in an import path. The
 // env module goes first: it lets the generators' and the api's `./x.js` imports load their `.ts`.
 type Env = typeof import('./org-script-env.js');
-const { connect, describeError, load, missingSettings, provisioning, sqlTag } = (await import(
+const { connect, describeError, load, missingSettings, provisioning, setting, sqlTag } = (await import(
   new URL('./org-script-env.ts', import.meta.url).href
 )) as Env;
 type Generators = typeof import('../../generators/src/index.js');
@@ -330,7 +333,7 @@ function fastOrgLine(
   return (
     `  ${slug}: records added ${o.records.created}, already there ${o.records.existing}; links added ${o.links.created}; ` +
     `documents added ${o.documents.created}, already there ${o.documents.existing}; ` +
-    `audit entries ${o.entries} (${(ms / 1000).toFixed(1)} s)`
+    `read jobs queued ${o.readJobs}; audit entries ${o.entries} (${(ms / 1000).toFixed(1)} s)`
   );
 }
 
@@ -354,9 +357,24 @@ async function runFast(): Promise<void> {
     };
   }>('audit/audit.service.ts');
   const { readCatalogFiles } = await load<{ readCatalogFiles(): unknown }>('frameworks/catalog-files.ts');
+  // The api's job sender, send-only like the API program's (it processes nothing), through the
+  // dev relay like every DATABASE_URL_* here (D170).
+  const { JobsService } = await load<{
+    JobsService: new (o: { connectionString: string; processJobs: boolean }) => FastLoadDeps['jobs'] & {
+      start(): Promise<unknown>;
+      onApplicationShutdown(): Promise<void>;
+    };
+  }>('jobs/jobs.module.ts');
+  const { toHostAddress } = (await import(
+    new URL('./host-address.ts', import.meta.url).href
+  )) as typeof import('./host-address.js');
 
   const conn = await connect();
+  const jobs = new JobsService({ connectionString: toHostAddress(setting('DATABASE_URL_APP')), processJobs: false });
+  let jobsStarted = false;
   try {
+    await jobs.start();
+    jobsStarted = true;
     const outbox = new AuditOutbox(conn.deps.graph);
     const audit = new AuditService(conn.deps.db);
     const catalogs = readCatalogFiles();
@@ -367,6 +385,7 @@ async function runFast(): Promise<void> {
       outbox,
       audit,
       files: conn.deps.files as FastLoadDeps['files'],
+      jobs,
     };
 
     const slugOf = new Map<string, string>();
@@ -407,7 +426,8 @@ async function runFast(): Promise<void> {
     const loadMs = performance.now() - loadStarted;
     console.log(
       `  total: records added ${t.recordsCreated}, already there ${t.recordsExisting}; links added ${t.linksCreated}; ` +
-        `documents added ${t.documentsCreated}, already there ${t.documentsExisting}; audit entries ${t.entries}`,
+        `documents added ${t.documentsCreated}, already there ${t.documentsExisting}; read jobs queued ${t.readJobs}; ` +
+        `audit entries ${t.entries}`,
     );
 
     // The run's entries into each org's Postgres hash chain now (the worker would within seconds),
@@ -439,13 +459,18 @@ async function runFast(): Promise<void> {
       `Time: load ${(loadMs / 1000).toFixed(1)} s, whole run ${((performance.now() - started) / 1000).toFixed(1)} s; ` +
         `peak memory ${peakMb} MB (one process).`,
     );
-    console.log('No processing jobs were queued: chunking and embedding of these documents come with S4.');
+    console.log(
+      t.readJobs > 0
+        ? `The worker reads the ${t.readJobs} new document(s) into chunks and embeds them (embed only, no Gemma); Data intake shows their progress.`
+        : 'No new policy documents, SOC tickets or audit reports, so no read jobs were queued.',
+    );
   } catch (err) {
     const why = err instanceof fl.FastLoadError ? `${err.code} (${err.where})` : describeError(err);
     console.error(`gen:data: failed: ${why}`);
     console.error('gen:data: fix the cause and run the same command again; it finishes the missing steps.');
     process.exitCode = 1;
   } finally {
+    if (jobsStarted) await jobs.onApplicationShutdown().catch(() => undefined);
     await conn.close();
   }
 }
