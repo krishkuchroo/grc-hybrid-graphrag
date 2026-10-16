@@ -1,7 +1,8 @@
 // Where a document has got to, as a ServiceNow state indicator (D2): a coloured dot beside the
-// plain words. A document shows its own status (Stored, Processing, Processed, Failed); an asset
-// list shows its import's (Reading, Needs mapping, Queued, Importing, Imported, Failed). A step that
-// is moving on by itself has a pulsing dot; the words always carry the meaning.
+// plain words. A document shows its own status (Stored, Processing, Processed, Failed, or Removed
+// when the Analyst took the whole upload back out, D52.5, shown muted); an asset list shows its
+// import's (Reading, Needs mapping, Queued, Importing, Imported, Failed). A step that is moving on
+// by itself has a pulsing dot; the words always carry the meaning.
 import type { DocumentStatus, ImportStatus } from '@grc/shared';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +22,8 @@ interface State {
   tone: Tone;
   /** Moving on by itself. */
   moving: boolean;
+  /** Shown in a muted style: nothing more happens to it. */
+  muted?: boolean;
 }
 
 export const DOCUMENT_STATE: Readonly<Record<DocumentStatus, State>> = {
@@ -28,6 +31,7 @@ export const DOCUMENT_STATE: Readonly<Record<DocumentStatus, State>> = {
   processing: { text: 'Processing', tone: 'amber', moving: true },
   processed: { text: 'Processed', tone: 'green', moving: false },
   failed: { text: 'Failed', tone: 'red', moving: false },
+  removed: { text: 'Removed', tone: 'grey', moving: false, muted: true },
 };
 
 export const IMPORT_STATE: Readonly<Record<ImportStatus, State>> = {
@@ -62,7 +66,7 @@ export function StatusBadge(
         ) : null}
         <span className={cn('relative inline-flex size-2 rounded-full', DOT[shown.tone])} />
       </span>
-      <span>{shown.text}</span>
+      <span className={cn(shown.muted && 'text-muted-foreground')}>{shown.text}</span>
     </span>
   );
 }

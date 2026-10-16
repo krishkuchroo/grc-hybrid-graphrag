@@ -201,7 +201,7 @@ export interface UploadGroup {
   statuses: Array<{ status: DocumentStatus; count: number }>;
 }
 
-const STATUS_ORDER: readonly DocumentStatus[] = ['stored', 'processing', 'processed', 'failed'];
+const STATUS_ORDER: readonly DocumentStatus[] = ['stored', 'processing', 'processed', 'failed', 'removed'];
 
 /**
  * The documents API keys uploaded, grouped by source and key, newest group first. Files a push

@@ -411,5 +411,73 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // The Analyst review queue (S5, D24, D38, D50, D51, D52.5, D207): reading needs the Review-queue
+    // `view` cell (Admin and Analyst; every other role gets 403), deciding and removing need `work`
+    // (the Analyst only; an Admin gets 403), and approving a suggested mapping also needs the
+    // Analyst's Framework-mappings `approve` cell (`canApproveFinding` in the service). A finding is
+    // shown only at or below the reader's clearance, checked by the service and again by RLS on
+    // review_findings (404 when hidden, missing or another org's); a record it names is shown only
+    // if the reader's own role x clearance read finds it, else `{ hidden: true }` and it can't be
+    // approved (404). Each decision locks the finding in Postgres, writes the graph change with its
+    // audit entries in one Neo4j transaction as the writer, then commits the finding's status,
+    // outcome and its `review.*` entry (409 `already_decided` for the loser of a race). A document
+    // the reader may not see (role x record type and label) is 404; removing it (D52.5) takes every
+    // AI link from it out of the graph and is audited as `document.removed`, with counts only.
+    {
+      method: 'GET',
+      path: '/api/v1/review/findings',
+      access: { subject: 'review_queue', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/review/findings/:id',
+      access: { subject: 'review_queue', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/review/counts',
+      access: { subject: 'review_queue', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/review/findings/:id/approve',
+      access: { subject: 'review_queue', action: 'work' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/review/findings/:id/reject',
+      access: { subject: 'review_queue', action: 'work' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/review/findings/:id/remove',
+      access: { subject: 'review_queue', action: 'work' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/review/documents/:id',
+      access: { subject: 'review_queue', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/review/documents/:id/remove',
+      access: { subject: 'review_queue', action: 'work' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };

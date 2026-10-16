@@ -966,7 +966,7 @@ export type GetDocumentsResponse = {
       id: string;
     };
     source: unknown;
-    status: 'stored' | 'processing' | 'processed' | 'failed';
+    status: 'stored' | 'processing' | 'processed' | 'failed' | 'removed';
     createdAt: string;
   }>;
   page: number;
@@ -989,7 +989,7 @@ export type GetDocumentsIdResponse = {
     id: string;
   };
   source: unknown;
-  status: 'stored' | 'processing' | 'processed' | 'failed';
+  status: 'stored' | 'processing' | 'processed' | 'failed' | 'removed';
   createdAt: string;
   importId?: unknown;
 };
@@ -2352,7 +2352,7 @@ export type PostUploadsResponse =
           id: string;
         };
         source: unknown;
-        status: 'stored' | 'processing' | 'processed' | 'failed';
+        status: 'stored' | 'processing' | 'processed' | 'failed' | 'removed';
         createdAt: string;
       };
       duplicate: true;
@@ -2373,7 +2373,7 @@ export type PostUploadsResponse =
           id: string;
         };
         source: unknown;
-        status: 'stored' | 'processing' | 'processed' | 'failed';
+        status: 'stored' | 'processing' | 'processed' | 'failed' | 'removed';
         createdAt: string;
       };
       duplicate: false;
