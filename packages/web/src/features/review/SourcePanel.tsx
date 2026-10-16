@@ -2,13 +2,15 @@
 // label) and the sentence the extraction read, highlighted inside its passage (the chunk's text, at
 // the place S5-002 found it). The passage is the document's own words, so it is set apart from the
 // interface in a reading face. A document or passage the reader may not read is left out by the
-// API (D51); the panel says so instead of guessing.
+// API (D51); the panel says so instead of guessing. At its foot, what the upload put in, and for the
+// Analyst the way to remove all of it (S5-006, ./RemoveUpload).
 import { Link } from '@tanstack/react-router';
 import { FileText, ListFilter, Quote } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
 import { KIND_TEXT } from '@/features/intake/permissions';
 import { formatMoment } from '@/features/records/format';
 import { LabelBadge } from '@/features/records/LabelBadge';
+import { UploadImpactSection } from './RemoveUpload';
 import { Panel, Sheet } from './ReviewBits';
 import type { FindingDetail, ReviewSearch } from './useReview';
 import { HIDDEN_DOCUMENT_TEXT, textOrNull } from './words';
@@ -69,7 +71,14 @@ function SentenceQuote({ sentence }: { sentence: string }) {
   );
 }
 
-export function SourcePanel({ finding }: { finding: FindingDetail }) {
+export function SourcePanel({
+  finding,
+  canRemoveUpload,
+}: {
+  finding: FindingDetail;
+  /** The Analyst (Review-queue `work`): offers "Remove everything from this upload". */
+  canRemoveUpload: boolean;
+}) {
   const document = finding.document;
   const sentence = textOrNull(finding.sentence);
   const chunk = finding.chunk;
@@ -141,6 +150,7 @@ export function SourcePanel({ finding }: { finding: FindingDetail }) {
           )}
         </div>
       ) : null}
+      {document ? <UploadImpactSection documentId={document.id} canRemove={canRemoveUpload} /> : null}
     </Panel>
   );
 }

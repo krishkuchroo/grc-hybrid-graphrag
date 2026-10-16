@@ -1,17 +1,14 @@
 // How the Analyst review screen (D27 #8) says things: link and mapping types, matching steps,
-// scores, record kinds, ages and the decision routes' refusals, in plain words (D2). The finding
-// kinds, statuses and failed checks come from @grc/shared (S5-001), so the API, the web app and
-// the benchmark say the same thing.
+// scores, record kinds, ages and the review actions' refusals (./refusals), in plain words (D2). The
+// finding kinds, statuses and failed checks come from @grc/shared (S5-001), so the API, the web app
+// and the benchmark say the same thing.
 import {
-  isReviewErrorCode,
   LINK_TYPES,
   MAPPING_LINK_TYPES,
-  REVIEW_ERRORS,
   type MatchStep,
   type ReviewFindingKind,
   type ReviewRecordKind,
 } from '@grc/shared';
-import { ApiError } from '@/api/client';
 import { formatDay } from '@/features/records/format';
 
 /** What a record the reader may not see (or that is gone) reads as, everywhere on the screen. */
@@ -114,31 +111,5 @@ export function personText(person: { id: string; name: unknown } | null | undefi
   return textOrNull(person.name) ?? 'A former member';
 }
 
-export type DecisionAction = 'approve' | 'reject';
-
-/**
- * A refused decision in plain words, keeping the API's code and reference ID (D47). The S5 codes
- * use S5-001's shared messages; 403 and 404 get the screen's own words.
- */
-export function decisionRefusal(error: unknown, action: DecisionAction, kind: ReviewFindingKind): ApiError | unknown {
-  if (!(error instanceof ApiError)) return error;
-  let message = error.message;
-  if (isReviewErrorCode(error.code)) {
-    message = REVIEW_ERRORS[error.code].message;
-  } else if (error.status === 403) {
-    message =
-      action === 'approve' && kind === 'mapping'
-        ? 'Only an Analyst with the right to approve framework mappings can approve a suggested mapping.'
-        : 'Only an Analyst can approve or reject findings. Your role can see the queue but not decide.';
-  } else if (error.status === 404) {
-    message = 'This finding, or a record it names, doesn’t exist or you can’t see it.';
-  } else if (error.code === 'validation_failed') {
-    message = 'The decision couldn’t be read. A note can be up to 1,000 characters.';
-  }
-  return new ApiError(error.status, error.code, message, error.referenceId);
-}
-
-/** The title over a refused decision. */
-export function decisionRefusalTitle(action: DecisionAction): string {
-  return action === 'approve' ? 'The finding wasn’t approved' : 'The finding wasn’t rejected';
-}
+// The refusals of the review actions, in plain words, live in ./refusals.
+export { decisionRefusal, decisionRefusalTitle, type DecisionAction } from './refusals';
