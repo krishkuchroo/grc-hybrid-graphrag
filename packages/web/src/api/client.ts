@@ -694,6 +694,196 @@ export type PostAuthTwoFactorVerifyTotpBody = {
   code: string;
 };
 
+/** GET /api/v1/chat/conversations response. */
+export type GetChatConversationsResponse = {
+  items: Array<{
+    id: string;
+    title: string;
+    createdAt: string;
+    lastActivityAt: string;
+    messageCount: number;
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** POST /api/v1/chat/conversations response. */
+export type PostChatConversationsResponse = {
+  id: string;
+  title: string;
+  createdAt: string;
+  lastActivityAt: string;
+  messages: Array<
+    | {
+        id: string;
+        question: string;
+        answer: string;
+        status: 'answered' | 'stopped' | 'failed';
+        mode: 'hybrid' | 'vector';
+        fallback:
+          | 'graph_model_unavailable'
+          | 'graph_query_invalid'
+          | 'graph_query_refused'
+          | 'graph_query_timed_out'
+          | 'graph_query_failed'
+          | null;
+        citations: Array<
+          | {
+              number: number;
+              type: 'record';
+              record: {
+                id: string;
+                number: string;
+                name: string;
+                kind:
+                  | 'asset'
+                  | 'risk'
+                  | 'control'
+                  | 'policy'
+                  | 'incident'
+                  | 'framework'
+                  | 'requirement'
+                  | 'evidence'
+                  | 'audit_finding';
+              };
+            }
+          | {
+              number: number;
+              type: 'passage';
+              passage: {
+                chunkId: string;
+                documentId: string;
+                documentName: string;
+                documentKind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+                position: number;
+                text: string;
+              };
+            }
+          | {
+              number: number;
+              type: 'hidden';
+            }
+        >;
+        graphQuery: unknown;
+        model: unknown;
+        promptVersions: {
+          graphQuery: unknown;
+          answer: unknown;
+        };
+        timings: {
+          waitedMs: number;
+          searchingMs: number | null;
+          firstWordsMs: number | null;
+          totalMs: number;
+        };
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        createdAt: string;
+        hidden: false;
+      }
+    | {
+        id: string;
+        question: string;
+        createdAt: string;
+        hidden: true;
+      }
+  >;
+};
+
+/** POST /api/v1/chat/conversations request body. */
+export type PostChatConversationsBody = Record<string, never>;
+
+/** GET /api/v1/chat/conversations/{id} response. */
+export type GetChatConversationsIdResponse = {
+  id: string;
+  title: string;
+  createdAt: string;
+  lastActivityAt: string;
+  messages: Array<
+    | {
+        id: string;
+        question: string;
+        answer: string;
+        status: 'answered' | 'stopped' | 'failed';
+        mode: 'hybrid' | 'vector';
+        fallback:
+          | 'graph_model_unavailable'
+          | 'graph_query_invalid'
+          | 'graph_query_refused'
+          | 'graph_query_timed_out'
+          | 'graph_query_failed'
+          | null;
+        citations: Array<
+          | {
+              number: number;
+              type: 'record';
+              record: {
+                id: string;
+                number: string;
+                name: string;
+                kind:
+                  | 'asset'
+                  | 'risk'
+                  | 'control'
+                  | 'policy'
+                  | 'incident'
+                  | 'framework'
+                  | 'requirement'
+                  | 'evidence'
+                  | 'audit_finding';
+              };
+            }
+          | {
+              number: number;
+              type: 'passage';
+              passage: {
+                chunkId: string;
+                documentId: string;
+                documentName: string;
+                documentKind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+                position: number;
+                text: string;
+              };
+            }
+          | {
+              number: number;
+              type: 'hidden';
+            }
+        >;
+        graphQuery: unknown;
+        model: unknown;
+        promptVersions: {
+          graphQuery: unknown;
+          answer: unknown;
+        };
+        timings: {
+          waitedMs: number;
+          searchingMs: number | null;
+          firstWordsMs: number | null;
+          totalMs: number;
+        };
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        createdAt: string;
+        hidden: false;
+      }
+    | {
+        id: string;
+        question: string;
+        createdAt: string;
+        hidden: true;
+      }
+  >;
+};
+
+/** POST /api/v1/chat/conversations/{id}/messages response. */
+export type PostChatConversationsIdMessagesResponse = unknown;
+
+/** POST /api/v1/chat/conversations/{id}/messages request body. */
+export type PostChatConversationsIdMessagesBody = {
+  question: string;
+  mode?: 'hybrid' | 'vector';
+};
+
 /** GET /api/v1/controls response. */
 export type GetControlsResponse = {
   items: Array<{
@@ -3266,6 +3456,79 @@ export type PostRisksIdRetireBody = {
   version: number;
 };
 
+/** POST /api/v1/search response. */
+export type PostSearchResponse = {
+  mode: 'hybrid' | 'vector';
+  results: Array<
+    | {
+        rank: number;
+        score: number;
+        foundBy: Array<'vector' | 'graph'>;
+        inContext: boolean;
+        type: 'passage';
+        passage: {
+          chunkId: string;
+          documentId: string;
+          documentName: string;
+          documentKind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+          position: number;
+          text: string;
+          label: 'public' | 'internal' | 'confidential' | 'restricted';
+          similarity: number;
+        };
+      }
+    | {
+        rank: number;
+        score: number;
+        foundBy: Array<'vector' | 'graph'>;
+        inContext: boolean;
+        type: 'record';
+        record: {
+          id: string;
+          number: string;
+          name: string;
+          kind:
+            | 'asset'
+            | 'risk'
+            | 'control'
+            | 'policy'
+            | 'incident'
+            | 'framework'
+            | 'requirement'
+            | 'evidence'
+            | 'audit_finding';
+          label: 'public' | 'internal' | 'confidential' | 'restricted';
+          keyFields: Record<string, never>;
+        };
+      }
+  >;
+  graph: {
+    ran: boolean;
+    query: unknown;
+    fallback:
+      | 'graph_model_unavailable'
+      | 'graph_query_invalid'
+      | 'graph_query_refused'
+      | 'graph_query_timed_out'
+      | 'graph_query_failed'
+      | null;
+    rowsRead: number;
+  };
+  timings: {
+    embeddingMs: number;
+    vectorSearchMs: number;
+    queryWritingMs: number | null;
+    queryRunningMs: number | null;
+    fusionMs: number;
+  };
+};
+
+/** POST /api/v1/search request body. */
+export type PostSearchBody = {
+  query: string;
+  mode?: 'hybrid' | 'vector';
+};
+
 /** POST /api/v1/uploads response. */
 export type PostUploadsResponse =
   | {
@@ -3414,6 +3677,25 @@ export const api = {
   /** Check a 6-digit authenticator code (finishes sign-in or MFA set-up) */
   postAuthTwoFactorVerifyTotp: (body: PostAuthTwoFactorVerifyTotpBody): Promise<PostAuthTwoFactorVerifyTotpResponse> =>
     request<PostAuthTwoFactorVerifyTotpResponse>('POST', '/api/v1/auth/two-factor/verify-totp', body),
+  /** The caller's own conversations, paged, latest activity first, each with its message count */
+  getChatConversations: (query?: ListQuery): Promise<GetChatConversationsResponse> =>
+    request<GetChatConversationsResponse>('GET', `/api/v1/chat/conversations${queryString(query)}`),
+  /** Start an empty conversation, titled "New conversation" until its first question names it */
+  postChatConversations: (body: PostChatConversationsBody): Promise<PostChatConversationsResponse> =>
+    request<PostChatConversationsResponse>('POST', '/api/v1/chat/conversations', body),
+  /** One of the caller's own conversations with its messages, oldest first. Each citation is read again with the caller's access now; one they can no longer see is { type: 'hidden' }. A message above their current clearance shows its question only (hidden: true). 404 for anyone else's */
+  getChatConversationsId: (path: { id: string }): Promise<GetChatConversationsIdResponse> =>
+    request<GetChatConversationsIdResponse>('GET', `/api/v1/chat/conversations/${encodeURIComponent(path.id)}`),
+  /** Ask a question (hybrid by default; vector is for the benchmark). Answers text/event-stream, one event per frame (event: <name>, data: <JSON>): queued (the place in the queue, while waiting), step, sources, token (the answer as it is written), then done (the saved message) or error (code, message, referenceId). Every question is saved and audited as chat.asked, answered, stopped or failed. 400 and 404 come before the stream; 429 after 10 questions and searches in a minute */
+  postChatConversationsIdMessages: (
+    path: { id: string },
+    body: PostChatConversationsIdMessagesBody,
+  ): Promise<PostChatConversationsIdMessagesResponse> =>
+    request<PostChatConversationsIdMessagesResponse>(
+      'POST',
+      `/api/v1/chat/conversations/${encodeURIComponent(path.id)}/messages`,
+      body,
+    ),
   /** List controls, paged */
   getControls: (query?: ListQuery): Promise<GetControlsResponse> =>
     request<GetControlsResponse>('GET', `/api/v1/controls${queryString(query)}`),
@@ -3664,6 +3946,9 @@ export const api = {
   /** Retire a risk; it is kept, never deleted */
   postRisksIdRetire: (path: { id: string }, body: PostRisksIdRetireBody): Promise<PostRisksIdRetireResponse> =>
     request<PostRisksIdRetireResponse>('POST', `/api/v1/risks/${encodeURIComponent(path.id)}/retire`, body),
+  /** Search what you can see, in `hybrid` mode (the default: vector search over the document passages and an AI-written, read-only graph query in your org, fused with RRF k=60) or `vector` mode (passages only, no Gemma). Answers the fused results after the visibility checks, best first, at most 50, each with its rank, score, the paths that found it and whether it went into the context; the graph part (whether the query ran, the query, the fallback reason when it failed, the rows read); and the timings in ms. Only passages and records you could open yourself are listed: never another org, a record type your role does not view, a label above your clearance, a removed document or a link with a hidden end. When the graph path fails the answer uses documents only and gives the fallback reason. 503 assistant_unavailable when the embedding model cannot be reached. Shares the 10-a-minute limit with asking (429 rate_limited) */
+  postSearch: (body: PostSearchBody): Promise<PostSearchResponse> =>
+    request<PostSearchResponse>('POST', '/api/v1/search', body),
   /** Upload one file (PDF, DOCX, CSV, JSON or TXT, checked by content, at most 25 MB) as an asset list, policy document, SOC ticket file or audit report. Stored once per org by content: 201 with the new document and its job (and import, for an asset list); 200 with the existing document when the org already has that content. Audited as document.uploaded. 20 uploads a minute per person */
   postUploads: (body: PostUploadsBody, options?: UploadOptions): Promise<PostUploadsResponse> =>
     upload<PostUploadsResponse>('POST', '/api/v1/uploads', body, options),
