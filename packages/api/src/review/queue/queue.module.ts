@@ -2,7 +2,25 @@
 // /api/v1/review/findings/:id and GET /api/v1/review/counts, for the Review-queue `view` cell (Admin
 // and Analyst), with S5-001's list query and answer shapes. Runs in the API program; the module
 // declares its own imports.
+// - The routes: ./queue.controller.ts. The reads: ./queue.service.ts (Postgres, in the reader's own
+//   org context) and ./queue-graph.ts (Neo4j, as the reader's own role x clearance account).
 import { Module } from '@nestjs/common';
+import type { Db } from '../../db/client.js';
+import { DB } from '../../db/db.module.js';
+import { GRAPH } from '../../graph/graph.module.js';
+import type { GraphService } from '../../graph/graph.service.js';
+import { ReviewQueueController } from './queue.controller.js';
+import { ReviewQueueService } from './queue.service.js';
 
 export class ReviewQueueModule {}
-Module({})(ReviewQueueModule);
+Module({
+  controllers: [ReviewQueueController],
+  providers: [
+    {
+      provide: ReviewQueueService,
+      useFactory: (db: Db, graph: GraphService) => new ReviewQueueService({ db, graph }),
+      inject: [DB, GRAPH],
+    },
+  ],
+  exports: [ReviewQueueService],
+})(ReviewQueueModule);
