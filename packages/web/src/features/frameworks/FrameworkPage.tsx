@@ -3,7 +3,8 @@
 // coverage and status, and searched on code or title, all by the API (D47). The filters live in the
 // URL search params under the API's own names, so a reload or a shared link asks the same question.
 // Coverage comes only from the API's SATISFIES counts (D212 (5)); a hidden control neither shows
-// nor counts (D51). Catalogs are read-only here.
+// nor counts (D51). Catalogs are read-only here. Admins and Compliance Managers can start AI mapping
+// suggestions from the header (S4-010); the result shows above the requirements.
 import { Link } from '@tanstack/react-router';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
@@ -36,6 +37,8 @@ import {
   type FrameworkSummary,
   type RequirementRow,
 } from './useFrameworks';
+import { SuggestMappingsActions, SuggestionNotice } from './suggest/SuggestMappings';
+import type { SuggestionOutcome } from './suggest/useSuggestions';
 
 // ---- The page's state in the URL -------------------------------------------------------------
 
@@ -128,12 +131,15 @@ function coverageOf(framework: FrameworkSummary): Coverage {
   };
 }
 
-function FrameworkHeader({ framework }: { framework: FrameworkSummary }) {
+function FrameworkHeader({ framework, actions }: { framework: FrameworkSummary; actions?: ReactNode }) {
   const coverage = coverageOf(framework);
   return (
     <div className="bg-card border-b px-8 pt-4 pb-6">
-      <div className="text-muted-foreground mb-2 text-xs">
-        <BackToFrameworks />
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="text-muted-foreground text-xs">
+          <BackToFrameworks />
+        </div>
+        {actions ? <div className="ml-auto">{actions}</div> : null}
       </div>
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
         <div className="grid min-w-0 gap-2">
@@ -523,6 +529,9 @@ export function FrameworkPage({
   onSearchChange: (next: RequirementSearch) => void;
 }) {
   const framework = useFramework(id);
+  // The latest answer for each run asked for from this page, kept with the framework it was asked
+  // on, so another framework's page never shows it.
+  const [suggestions, setSuggestions] = useState<{ frameworkId: string; outcomes: SuggestionOutcome[] } | null>(null);
 
   if (framework.isPending) {
     return (
@@ -546,11 +555,31 @@ export function FrameworkPage({
     );
   }
 
+  const shown = framework.data;
+  const outcomes = suggestions !== null && suggestions.frameworkId === shown.id ? suggestions.outcomes : [];
+
+  /** A run's new answer replaces its old one; the other run's answer stays. */
+  const record = (next: SuggestionOutcome) =>
+    setSuggestions((prev) => {
+      const kept = prev !== null && prev.frameworkId === shown.id ? prev.outcomes : [];
+      return { frameworkId: shown.id, outcomes: [...kept.filter((o) => o.run.id !== next.run.id), next] };
+    });
+  const dismiss = (runId: string) =>
+    setSuggestions((prev) =>
+      prev === null ? null : { ...prev, outcomes: prev.outcomes.filter((o) => o.run.id !== runId) },
+    );
+
   return (
     <>
-      <FrameworkHeader framework={framework.data} />
-      <div className="px-8 py-6">
-        <RequirementsTable framework={framework.data} search={search} onSearchChange={onSearchChange} />
+      <FrameworkHeader
+        framework={shown}
+        actions={<SuggestMappingsActions frameworkKey={shown.key} onOutcome={record} />}
+      />
+      <div className="space-y-4 px-8 py-6">
+        {outcomes.map((outcome) => (
+          <SuggestionNotice key={outcome.run.id} outcome={outcome} onDismiss={() => dismiss(outcome.run.id)} />
+        ))}
+        <RequirementsTable framework={shown} search={search} onSearchChange={onSearchChange} />
       </div>
     </>
   );
