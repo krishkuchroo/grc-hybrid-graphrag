@@ -3,8 +3,11 @@
 import type { CreateRecordInput, LinkType, RecordKind } from '@grc/shared';
 import type { SizeSpec } from './sizes.js';
 
-/** Bumped whenever the same seed and size would give a different answer key (D45.8). */
-export const GENERATOR_VERSION = '1';
+/**
+ * Bumped whenever the same seed and size would give a different answer key or different files
+ * (D45.8). 2: policy documents and audit reports also come as PDF and DOCX (S8-007).
+ */
+export const GENERATOR_VERSION = '2';
 
 /** A record: its stable key (`AST-0001` …) plus exactly the fields of S1's create schema for its kind. */
 export type WorldRecord<K extends RecordKind = RecordKind> = { key: string } & CreateRecordInput<K>;

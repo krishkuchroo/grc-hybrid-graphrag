@@ -8,8 +8,10 @@
 //   AST-0001, …). A link goes into the batch that writes the later of its two ends, so both ends
 //   exist when it is drawn, and every link is in exactly one batch.
 // - Document batches: the org's documents (policies, SOC tickets, audit reports), in file order, cut
-//   into runs of at most `batchSize`. Files are identified by their content (D45.5): a file whose
-//   content an earlier file of the same org already has is left out and counted as a repeat.
+//   into runs of at most `batchSize`, each with the bytes an upload would carry (PDF and DOCX as
+//   written, the others as UTF-8 text) and its format. Files are identified by their content
+//   (D45.5): a file whose content an earlier file of the same org already has is left out and
+//   counted as a repeat.
 // - Everything is checked before anything is written: record keys unique in their org, labels and
 //   field values plain, every link's ends known and its type allowed between their kinds
 //   (`isAllowedLink`), every document's kind, format, name and size as an upload's would be.
@@ -39,7 +41,7 @@ import {
   type RecordKind,
   type RecordType,
 } from '@grc/shared';
-import type { RenderedSources, SourceFile } from '../sources/index.js';
+import { fileBytesOf, type RenderedSources, type SourceFile } from '../sources/index.js';
 import type { AnswerKey, WorldOrg, WorldRecord } from '../world/index.js';
 
 /** At most this many records (with their links) per graph batch, and documents per document batch. */
@@ -108,8 +110,8 @@ export interface FastLoadDocument {
   fileName: string;
   format: FileFormat;
   contentType: string;
-  /** The file's text; stored as its UTF-8 bytes. */
-  body: string;
+  /** The file's bytes, stored as they are: PDF and DOCX as written, the others as UTF-8 text. */
+  bytes: Uint8Array;
   sizeBytes: number;
   /** The lowercase hex SHA-256 of the bytes. */
   contentHash: string;
@@ -202,7 +204,16 @@ function toDocument(orgKey: string, index: number, file: SourceFile): FastLoadDo
   const fileName = typeof file.fileName === 'string' ? fileNameOf(file.fileName) : null;
   if (fileName === null) throw new FastLoadPlanError('bad_document', `${where} file name`);
   if (typeof file.body !== 'string') throw new FastLoadPlanError('bad_document', `${where} body`);
-  const bytes = Buffer.from(file.body, 'utf8');
+  if (file.bytes !== undefined && !(file.bytes instanceof Uint8Array)) {
+    throw new FastLoadPlanError('bad_document', `${where} body`);
+  }
+  // A copy, so the plan's bytes are its own.
+  let bytes: Uint8Array;
+  try {
+    bytes = fileBytesOf(file);
+  } catch {
+    throw new FastLoadPlanError('bad_document', `${where} body`);
+  }
   if (bytes.length === 0 || bytes.length > MAX_UPLOAD_BYTES)
     throw new FastLoadPlanError('bad_document', `${where} size`);
   let source: string | null = null;
@@ -217,7 +228,7 @@ function toDocument(orgKey: string, index: number, file: SourceFile): FastLoadDo
     fileName,
     format: file.format,
     contentType: FORMAT_CONTENT_TYPES[file.format],
-    body: file.body,
+    bytes,
     sizeBytes: bytes.length,
     contentHash: createHash('sha256').update(bytes).digest('hex'),
     source,

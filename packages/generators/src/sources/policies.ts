@@ -1,5 +1,6 @@
-// Policy documents (D18): one text file per policy of the answer key. Each states the controls the
-// policy governs (GOVERNED_BY) and the risks those controls mitigate (MITIGATED_BY), every fact in a
+// Policy documents (D18): one document per policy of the answer key, drafted as text (render-sources
+// writes a seeded third each as TXT, DOCX and PDF, S8-007). Each states the controls the policy
+// governs (GOVERNED_BY) and the risks those controls mitigate (MITIGATED_BY), every fact in a
 // sentence that names both ends.
 import type { Faker } from '@faker-js/faker';
 import {
@@ -95,7 +96,7 @@ export function draftPolicies(world: OrgWorld, faker: Faker): DocDraft[] {
     const approver = `${faker.person.fullName()}, ${faker.helpers.arrayElement(OWNERS)}`;
     doc
       .line(org)
-      .line(policy.name)
+      .title(policy.name)
       .line(
         `Version ${policy.policyVersion} | Effective ${policy.effectiveDate} | Classification: ${capitalise(policy.label ?? 'internal')}`,
       )
@@ -146,6 +147,7 @@ export function draftPolicies(world: OrgWorld, faker: Faker): DocDraft[] {
       format: 'txt' as const,
       paragraphs: doc.paragraphs,
       render: () => doc.render(),
+      layout: () => doc.layout(),
     };
   });
 }
