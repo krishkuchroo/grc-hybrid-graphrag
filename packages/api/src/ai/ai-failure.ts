@@ -55,6 +55,22 @@ export function isAiFailure(err: unknown, code?: AiFailureCode): err is AiFailur
   return err instanceof AiFailure && (code === undefined || err.code === code);
 }
 
+/**
+ * The caller stopped the call with its abort signal: while it waited for the program's model slot
+ * (it never ran), or while a call in a turn was running (S6-002). Carries nothing of the call. A
+ * stream stopped while it ran doesn't throw this: it ends as `stopped`, keeping what was written.
+ */
+export class AiStopped extends Error {
+  constructor() {
+    super('The model call was stopped.');
+    this.name = 'AiStopped';
+  }
+}
+
+export function isAiStopped(err: unknown): err is AiStopped {
+  return err instanceof AiStopped;
+}
+
 /** The caller's input can't be sent (for example an empty text to embed). Names positions only. */
 export class AiInputError extends Error {
   constructor(message: string) {
