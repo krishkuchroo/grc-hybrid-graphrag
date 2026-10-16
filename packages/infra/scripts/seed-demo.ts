@@ -48,6 +48,14 @@
 //   worker, a document that failed) leave it for a later run, and the seed says how many wait.
 //   Without the processing and review migrations the whole step is skipped, the others still run,
 //   and the seed ends saying so (exit code 1).
+// - Then (S6-008) the S6 demo's search and chat (docs/demo/s6.md): its questions are answered from
+//   the records, links and mappings above and from the passages of the demo documents. The review
+//   step reads only the documents its findings come from, so this step reads the others (the
+//   Confidential policy documents) into chunks the same way, in case their S3 read job never ran
+//   (`seedSearchChunks`). A document that has chunks already, or is processed, failed or removed,
+//   is left alone, so a re-run adds nothing. Nothing calls Gemma or bge-m3 (D82): once Ollama is up,
+//   the worker embeds the chunks (and Gemma reads them), and the questions find their passages. It
+//   needs the processing migration and bge-m3's tokenizer file, as the review step does.
 // - DEMO_ORG_SLUG_SUFFIX (optional, lowercase letters and digits) makes each slug
 //   `<slug>-<suffix>`. The org IDs come from the slugs, so tests use it to stay off the live demo
 //   orgs (D176).
@@ -1808,6 +1816,86 @@ function reviewLine(r: ReviewAdded): string {
   return r.waiting > 0 ? `${line}; waiting for what they need: ${r.waiting} (run seed:demo again later)` : line;
 }
 
+// ---- S6-008: every demo document's passages, for search and chat ----
+
+/** What the search step did in one org. */
+interface SearchAdded {
+  /** Demo documents read into chunks by this run. */
+  documentsRead: number;
+  /** Demo documents with no chunks yet that this run could not read: not uploaded, or no tokenizer. */
+  waiting: number;
+  /** Demo documents that ended `failed` (unreadable), here or before: never read again. */
+  failed: number;
+}
+
+/** The document's status and whether it has any chunk yet; undefined when it isn't there. */
+async function documentChunkState(
+  isvc: IntakeServices,
+  orgId: string,
+  documentId: string,
+): Promise<{ status: string; hasChunks: boolean } | undefined> {
+  return isvc.inSystemContext(orgId, async (tx) => {
+    const found = await tx.execute(
+      sql`SELECT d.status,
+                 EXISTS (SELECT 1 FROM chunks c WHERE c.org_id = d.org_id AND c.document_id = d.id) AS has_chunks
+          FROM documents d
+          WHERE d.org_id = ${orgId}::uuid AND d.id = ${documentId}::uuid`,
+    );
+    const row = found.rows[0];
+    if (!row) return undefined;
+    return { status: String(row['status']), hasChunks: row['has_chunks'] === true };
+  });
+}
+
+/**
+ * Makes sure every demo document (the policy documents and the SOC ticket file uploaded by the S3
+ * step) has its chunks, so each demo question of docs/demo/s6.md finds its passages once the worker
+ * has embedded them. The review step already read the documents its findings come from; this reads
+ * the others (the Confidential policy documents) the same way, with S4's reader (`readDocument`:
+ * the stored file read in the file sandbox, the same chunker, the document moved to `processing` and
+ * its embed job queued for the worker). No Gemma and no bge-m3 call: the worker embeds the chunks
+ * when it runs (D82). Only a `stored` or `processing` document with no chunk at all is read; one
+ * already read, processed, failed or removed (S5-004) is left alone, so a re-run adds nothing.
+ */
+async function seedSearchChunks(
+  isvc: IntakeServices,
+  rsvc: ReviewServices,
+  orgId: string,
+  data: DemoIntake,
+): Promise<SearchAdded> {
+  const added: SearchAdded = { documentsRead: 0, waiting: 0, failed: 0 };
+  for (const doc of data.documents) {
+    const documentId = await documentWithContent(isvc, orgId, sha256Hex(demoIntakeFile(doc.file)));
+    if (documentId === undefined) {
+      added.waiting += 1;
+      continue;
+    }
+    const state = await documentChunkState(isvc, orgId, documentId);
+    if (!state || state.hasChunks) continue;
+    if (state.status === 'failed') {
+      added.failed += 1;
+      continue;
+    }
+    if (state.status !== 'stored' && state.status !== 'processing') continue;
+    if ((await rsvc.tokenizerProblem()) !== null) {
+      added.waiting += 1;
+      continue;
+    }
+    const read = await rsvc.readDocument({ orgId, documentId });
+    if (read.status === 'processing') added.documentsRead += 1;
+    else if (read.status === 'failed') added.failed += 1;
+  }
+  return added;
+}
+
+/** One line about the search step: counts only. */
+function searchLine(s: SearchAdded): string {
+  let line = `  search: demo documents read into chunks: ${s.documentsRead}`;
+  if (s.waiting > 0) line += `; waiting to be read: ${s.waiting} (run seed:demo again later)`;
+  if (s.failed > 0) line += `; could not be read (Failed in Data intake): ${s.failed}`;
+  return line;
+}
+
 const conn = await connect();
 let intake: IntakeServices | undefined;
 try {
@@ -1867,8 +1955,11 @@ try {
     if (reviewReady) {
       const reviewed = await seedReview(svc, isvc, rsvc, caller, DEMO_REVIEW[org.slug]!, userOf);
       lines.push(reviewLine(reviewed));
+      // S6-008: the rest of the demo documents read into chunks, for search and chat.
+      lines.push(searchLine(await seedSearchChunks(isvc, rsvc, orgId, DEMO_INTAKE[org.slug]!)));
     } else {
       lines.push('  review findings: not added (the review migrations are not applied)');
+      lines.push('  search: demo documents not read into chunks (the processing migration is not applied)');
     }
   }
   console.log('Demo logins (every user signs in with the DEMO_USER_PASSWORD value from .env):');
@@ -1876,7 +1967,8 @@ try {
   if (!reviewReady) {
     console.error(
       "seed:demo: the database doesn't have the review tables yet: the processing and review migrations " +
-        "aren't applied. Apply the migrations, then run it again: it adds the review findings.",
+        "aren't applied. Apply the migrations, then run it again: it adds the review findings and reads the " +
+        'demo documents into chunks.',
     );
     process.exitCode = 1;
   }
@@ -1886,8 +1978,8 @@ try {
   if (tokenizerProblem !== null) {
     console.error(`seed:demo: ${tokenizerProblem}`);
     console.error(
-      'seed:demo: the demo documents could not be read into chunks, so their review findings were not added; ' +
-        'run seed:demo again once that is done: it adds them.',
+      'seed:demo: the demo documents could not be read into chunks, so their review findings and search ' +
+        'passages were not added; run seed:demo again once that is done: it adds them.',
     );
     process.exitCode = 1;
   }
