@@ -11,13 +11,15 @@
 //      removed before is dropped: never raised again, never made live again;
 //   3. the links that pass all three go live in one Neo4j transaction with their `link.created`
 //      entries (./live-links.ts): origin `ai`, with their source document, chunk, sentence, model,
-//      prompt version and the document's label;
+//      prompt version and the document's label. Only a link everyone who sees both its ends may
+//      see the document of goes live (D50, D51; `endsCoverSource`): any other waits as `pending`;
 //   4. in one Postgres transaction: one `record` finding per proposed new risk, control, policy or
 //      incident (per document, kind and normalised name; never an asset, D40), a `link` finding for
 //      each link (`live` for one made live, else `pending` with its failed checks, each end's match
-//      or candidates, and the sentence; a link already in the graph from elsewhere waits as
-//      `pending` too), a chunk-to-record row for every clearly matched record, the chunk's move to
-//      `resolved`, and, when it was the document's last chunk, the document's move to `processed`.
+//      or candidates, and the sentence; a link already in the graph from elsewhere, or one whose
+//      document some reader of its ends may not see, waits as `pending` too), a chunk-to-record
+//      row for every clearly matched record, the chunk's move to `resolved`, and, when it was the
+//      document's last chunk, the document's move to `processed`.
 // Mentions mode (embed-only, fast-loaded documents, D42; stage `embedded`): no Gemma answer. The
 // chunk is linked to the org's active records whose number or normalised name it names as whole
 // words, in the uploader's view (Admin at Restricted for the system's fast load); only chunk-to-record
@@ -61,6 +63,7 @@ import {
 } from '../processing.schema.js';
 import { CHUNK_RESOLVE_MODES, PROCESSING_CONCURRENCY, PROCESSING_QUEUES, type ChunkResolveMode } from '../queues.js';
 import {
+  endsCoverSource,
   evaluateLinks,
   identityOfLink,
   identityOfProposal,
@@ -71,6 +74,7 @@ import {
   proposedRecords,
   type EvaluatedLink,
   type LinkIdentity,
+  type LinkSourceDocument,
   type ProposedRecord,
 } from './decide-rules.js';
 import { LinkEndsChanged, writeLiveLinks, type LiveLinkOutcome, type LiveLinkWrite } from './live-links.js';
@@ -343,8 +347,10 @@ async function resolveFull(deps: ChunkResolveDeps, log: Logger, loaded: Loaded):
   const refused = await refusedLinks(deps.db, ids.orgId, evaluated);
   const kept = evaluated.filter((link) => !isRefused(identityOfLink(link), refused));
 
-  // 3. The confident ones go live, in one Neo4j transaction with their audit entries.
-  const confident = kept.flatMap(toWrite);
+  // 3. The confident ones go live, in one Neo4j transaction with their audit entries, if everyone
+  //    who sees both ends may see the document they were read from (D51).
+  const source: LinkSourceDocument = { recordType: loaded.recordType, label: loaded.label };
+  const confident = kept.flatMap((link) => toWrite(link, source));
   const outcomes =
     view !== null && confident.length > 0
       ? await writeLiveLinks(
@@ -357,6 +363,7 @@ async function resolveFull(deps: ChunkResolveDeps, log: Logger, loaded: Loaded):
             model: loaded.model,
             promptVersion: loaded.promptVersion,
             sourceLabel: loaded.label,
+            sourceRecordType: loaded.recordType,
           },
           confident,
         )
@@ -423,12 +430,15 @@ async function resolveFull(deps: ChunkResolveDeps, log: Logger, loaded: Loaded):
   };
 }
 
-// A link that passed every rule check (so both ends are clear matches) as a live link to write;
-// none for any other.
-function toWrite(link: EvaluatedLink): LiveLinkWrite[] {
+// A link that passed every rule check (so both ends are clear matches), and whose document anyone
+// who sees both its ends may see (D51), as a live link to write; none for any other.
+function toWrite(link: EvaluatedLink, source: LinkSourceDocument): LiveLinkWrite[] {
   const from = link.from.match;
   const to = link.to.match;
   if (link.failed.length > 0 || !from || !to) return [];
+  if (!endsCoverSource(source, { kind: link.from.kind, label: from.label }, { kind: link.to.kind, label: to.label })) {
+    return [];
+  }
   return [
     {
       key: link.key,

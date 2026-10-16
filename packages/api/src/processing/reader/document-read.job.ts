@@ -5,7 +5,8 @@
 //   1. makes sure bge-m3's tokenizer is set up; when it isn't, it logs which command to run and
 //      puts the job off (`RunLater`, no try used up), leaving the document `stored`;
 //   2. reads the stored file from the org's own bucket;
-//   3. reads its text in the file sandbox (./document-text.ts: its own Worker, 256 MB, 30 s);
+//   3. reads its text in the file sandbox (./document-text.ts: its own process, 256 MB for the
+//      whole read, decompressed PDF and DOCX data included, and 30 s);
 //   4. cuts the text into chunks of at most 500 bge-m3 tokens, each starting 50 tokens before the
 //      previous one ended (./chunker.ts);
 //   5. in one transaction (D29): saves the chunks (stage `read`, the document's record type and
@@ -27,7 +28,7 @@ import { createLogger } from '../../common/logger.js';
 import type { Db } from '../../db/client.js';
 import { withOrgContext, type Tx } from '../../db/org-context.js';
 import { documents } from '../../intake/intake.schema.js';
-import { runInSandbox, SandboxError, type SandboxLimits } from '../../intake/imports/file-sandbox.js';
+import { runInProcessSandbox, SandboxError, type SandboxLimits } from '../../intake/imports/file-sandbox.js';
 import { INTAKE_SYSTEM_CONTEXT } from '../../intake/queues.js';
 import { RunLater, type JobHandlerInput, type JobsService } from '../../jobs/jobs.module.js';
 import type { FileStore } from '../../storage/file-store.js';
@@ -86,9 +87,14 @@ const DOCUMENT_TEXT = {
   exportName: 'readDocumentText',
 } as const;
 
-/** The default reader: ./document-text.ts in the file sandbox, with the sandbox's limits. */
+/**
+ * The default reader: ./document-text.ts in the file sandbox's own process, with the sandbox's
+ * limits. The memory limit holds for the whole process, not only its heap (D53): PDF and DOCX data
+ * decompress into buffers outside it, and a file that would take more ends `too_much_memory`
+ * while this program carries on.
+ */
 export function sandboxedTextReader(limits: SandboxLimits = {}): TextReader {
-  return (format, bytes) => runInSandbox<string>({ ...DOCUMENT_TEXT, input: bytes, args: [format] }, limits);
+  return (format, bytes) => runInProcessSandbox<string>({ ...DOCUMENT_TEXT, input: bytes, args: [format] }, limits);
 }
 
 export interface DocumentReaderDeps {

@@ -17,6 +17,11 @@
 // - Labels (D51): a finding carries the document's label, raised to the label of any record it
 //   names (a clear match, or an uncertain end's candidates), so nobody below that record's label
 //   ever sees its number or name in a finding. A link is visible only if both ends are.
+// - A link goes live only if everyone who can see both its ends may also see the document it was
+//   read from (D50, D51): a live link shows to anyone who sees both ends, and what it states comes
+//   from the document. So the document's label must be at or below the higher of the ends' labels,
+//   and every role that views both ends' record types must view the document's record type too (a
+//   Viewer sees assets and risks, never a SOC ticket). Any other link waits as a `pending` finding.
 // - A link the Analyst rejected or removed is never raised again or made live again: its identity
 //   (type, and each end's record or kind and normalised name) is compared with the refused ones.
 // - Mentions (D42, embed-only documents): the records whose number, or whose name after
@@ -24,8 +29,11 @@
 import { createHash } from 'node:crypto';
 import {
   PROPOSED_RECORD_KINDS,
+  ROLES,
   RULE_CHECKS,
+  can,
   failedRuleChecks,
+  isVisible,
   linkProposalSchema,
   matchCandidateSchema,
   normaliseName,
@@ -82,6 +90,35 @@ export interface EvaluatedLink {
   to: MatchedEnd;
   /** The finding's label: the document's, raised to the labels of the records it names. */
   label: Label;
+}
+
+/** A link end's record type and label, as matched or as stored. */
+export interface LabelledEnd {
+  kind: RecordKind;
+  label: Label;
+}
+
+/** The document a link was read from: the record type its chunks carry (its D50 row) and its label. */
+export interface LinkSourceDocument {
+  recordType: string;
+  label: Label;
+}
+
+/**
+ * Whether everyone who can see both ends of a link may also see the document it was read from
+ * (see the top of the file): by label, the document's is at or below the higher of the ends'
+ * labels, so any clearance that sees both ends sees the document; by type, every role that views
+ * both ends' record types (an "own" cell counted as viewing) also views the document's record type.
+ * An unknown record type is never viewed, so a link from it never goes live (fail safe).
+ */
+export function endsCoverSource(source: LinkSourceDocument, from: LabelledEnd, to: LabelledEnd): boolean {
+  if (!isVisible(higherLabel(from.label, to.label), source.label)) return false;
+  return ROLES.every(
+    (role) =>
+      !can(role, from.kind, 'view', { isOwner: true }) ||
+      !can(role, to.kind, 'view', { isOwner: true }) ||
+      can(role, source.recordType, 'view'),
+  );
 }
 
 /** What a link is, to tell whether the Analyst refused it before. */
