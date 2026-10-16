@@ -7,8 +7,8 @@
 //      counts and errors cleared;
 //   3. the `import.started` entry is appended (`AuditService.appendInTx`).
 // They commit together or not at all. The job's data names the runner: who ran it, their role and
-// clearance (an API key runs with its one role at `internal`, D54), which the worker uses for the
-// label checks (D198) and the audit entries.
+// clearance (an API key runs with its one role at its own clearance, D54, D230), which the worker
+// uses for the label checks (D198) and the audit entries.
 import { LABELS, ROLES, canImportAssets, type ImportMapping, type Label, type Role } from '@grc/shared';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -96,8 +96,9 @@ export async function startImportRunInTx(
 /**
  * The person or API key that stored a document, as an import runner, when they may import assets
  * (`canImportAssets`): a person by their membership of the org (role and clearance), a key by its
- * one role at `internal` while it is neither revoked nor expired. Anything else is null (a system
- * upload, a member who left, a key that no longer works, or a role that can't import).
+ * one role at its own clearance (D230) while it is neither revoked nor expired. Anything else is
+ * null (a system upload, a member who left, a key that no longer works, a role that can't import,
+ * or a role or clearance row value that isn't known).
  */
 export async function uploaderAsRunner(
   tx: Tx,
@@ -115,15 +116,21 @@ export async function uploaderAsRunner(
   }
   if (doc.uploaderType === 'api_key' && UUID.test(doc.uploaderId)) {
     const [row] = await tx
-      .select({ role: apiKeys.role, expiresAt: apiKeys.expiresAt, revokedAt: apiKeys.revokedAt })
+      .select({
+        role: apiKeys.role,
+        clearance: apiKeys.clearance,
+        expiresAt: apiKeys.expiresAt,
+        revokedAt: apiKeys.revokedAt,
+      })
       .from(apiKeys)
       .where(and(eq(apiKeys.orgId, doc.orgId), eq(apiKeys.id, doc.uploaderId)))
       .limit(1);
     if (!row || row.revokedAt !== null || row.expiresAt <= now || !canImportAssets(row.role)) return null;
+    if (!(LABELS as readonly string[]).includes(row.clearance)) return null;
     return {
       userId: `api_key:${doc.uploaderId}`,
       role: row.role as Role,
-      clearance: 'internal',
+      clearance: row.clearance,
       apiKeyId: doc.uploaderId,
     };
   }

@@ -1,6 +1,7 @@
 // Machine API keys (D54), for an org's Admin only (D50 "admin" row), signed in with MFA checked:
-//   POST   /api/v1/api-keys      { name, role, expiresAt } -> 201 { id, key } (the key is shown only here)
-//   GET    /api/v1/api-keys      paged, never shows the key or its hash
+//   POST   /api/v1/api-keys      { name, role, clearance, expiresAt } -> 201 { id, key } (the key is
+//                                shown only here); a clearance above the Admin's own -> 403 (D230)
+//   GET    /api/v1/api-keys      paged, with each key's role and clearance; never the key or its hash
 //   DELETE /api/v1/api-keys/:id  revokes -> 204; another org's key or an unknown ID -> 404
 // A request made with an API key can't manage keys, whatever its role: only a person can.
 // Decorators are applied as plain calls, so the code runs without decorator syntax support.
@@ -11,7 +12,7 @@ import { ApiError } from '../common/errors.js';
 import { documentRoute } from '../common/openapi.js';
 import type { Paged } from '../common/paging.js';
 import type { OrgContext } from '../db/org-context.js';
-import { ApiKeysService, createdKeySchema, keyListSchema, type KeyItem } from './api-keys.service.js';
+import { ApiKeysService, createKeySchema, createdKeySchema, keyListSchema, type KeyItem } from './api-keys.service.js';
 import type { AuthedRequest } from './session.guard.js';
 
 function adminContext(request: AuthedRequest): OrgContext {
@@ -59,6 +60,7 @@ documentRoute({
   method: 'post',
   path: '/api-keys',
   summary: 'Create a machine API key (Admin only); the key is shown only in this response',
+  body: createKeySchema,
   response: createdKeySchema,
 });
 documentRoute({

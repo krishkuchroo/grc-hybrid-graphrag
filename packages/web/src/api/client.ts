@@ -209,12 +209,21 @@ export type PostApiKeysResponse = {
   key: string;
 };
 
+/** POST /api/v1/api-keys request body. */
+export type PostApiKeysBody = {
+  name: string;
+  role: 'admin' | 'risk_manager' | 'compliance_manager' | 'control_owner' | 'auditor' | 'analyst' | 'viewer';
+  clearance: 'public' | 'internal' | 'confidential' | 'restricted';
+  expiresAt: string;
+};
+
 /** GET /api/v1/api-keys response. */
 export type GetApiKeysResponse = {
   items: Array<{
     id: string;
     name: string;
     role: string;
+    clearance: 'public' | 'internal' | 'confidential' | 'restricted';
     expiresAt: string;
     revokedAt: unknown;
     createdAt: string;
@@ -2349,7 +2358,8 @@ export type PostUploadsBody = {
 
 export const api = {
   /** Create a machine API key (Admin only); the key is shown only in this response */
-  postApiKeys: (): Promise<PostApiKeysResponse> => request<PostApiKeysResponse>('POST', '/api/v1/api-keys'),
+  postApiKeys: (body: PostApiKeysBody): Promise<PostApiKeysResponse> =>
+    request<PostApiKeysResponse>('POST', '/api/v1/api-keys', body),
   /** The org's machine API keys, paged (Admin only); never the keys themselves */
   getApiKeys: (query?: ListQuery): Promise<GetApiKeysResponse> =>
     request<GetApiKeysResponse>('GET', `/api/v1/api-keys${queryString(query)}`),

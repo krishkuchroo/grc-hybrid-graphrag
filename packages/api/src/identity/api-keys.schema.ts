@@ -1,8 +1,10 @@
-// Machine API keys (D54): one org and one role per key, an expiry, revocable. An org table
-// (D73, M0-009 rule), created by migration 0005_api_keys.sql. `key_hash` is the SHA-256 of the
-// whole key; the plain key is never stored.
+// Machine API keys (D54, D230): one org, one role and one clearance per key, an expiry, revocable.
+// An org table (D73, M0-009 rule), created by migration 0005_api_keys.sql; the clearance came with
+// 0007_api_key_clearance.sql (keys made before it keep `internal`). `key_hash` is the SHA-256 of
+// the whole key; the plain key is never stored.
 import { sql } from 'drizzle-orm';
 import { check, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { LABELS } from '../db/org-context.js';
 import { organization, user } from './schema.js';
 
 export const apiKeys = pgTable(
@@ -14,6 +16,7 @@ export const apiKeys = pgTable(
       .references(() => organization.id),
     name: text('name').notNull(),
     role: text('role').notNull(),
+    clearance: text('clearance', { enum: LABELS }).notNull().default('internal'),
     keyHash: text('key_hash').notNull().unique(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
@@ -27,5 +30,6 @@ export const apiKeys = pgTable(
       'api_keys_role_check',
       sql`${t.role} IN ('admin', 'risk_manager', 'compliance_manager', 'control_owner', 'auditor', 'analyst', 'viewer')`,
     ),
+    check('api_keys_clearance_check', sql`${t.clearance} IN ('public', 'internal', 'confidential', 'restricted')`),
   ],
 );

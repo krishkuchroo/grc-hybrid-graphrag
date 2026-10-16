@@ -3,13 +3,17 @@
 // - A key is `grc_` plus 32 random bytes in base64url. Only its SHA-256 is stored, so the plain
 //   key is shown once, in the create response, and can't be read back. The key is high-entropy
 //   random, so a plain SHA-256 is enough to make it unrecoverable (no password-style stretching).
-// - Each key has one org and one role, and a required expiry in the future. Revoking sets
-//   `revoked_at`; rows are never deleted.
+// - Each key has one org, one role and one clearance (D230), and a required expiry in the future.
+//   The creating Admin picks the clearance, never above their own (403, nothing stored or audited).
+//   The key signs in at that clearance everywhere: the API's checks, the Postgres org context (row
+//   security) and the Neo4j read account for its role × clearance. Keys made before the clearance
+//   column keep `internal`. Revoking sets `revoked_at`; rows are never deleted.
 // - Create, revoke and each refused use of an expired or revoked key write an audit event in the
 //   key's org. A key that matches nothing has no org, so its refusal goes to the API's own log.
 // - Expiry reads the JavaScript clock, and every request reads the key's row again (no cache), so
 //   a revoke or an expiry applies from the very next request.
 import { createHash, randomBytes } from 'node:crypto';
+import { isVisible } from '@grc/shared';
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import { z } from 'zod';
@@ -17,7 +21,7 @@ import type { AuditService } from '../audit/audit.service.js';
 import { ApiError } from '../common/errors.js';
 import { pageQuerySchema, type Paged } from '../common/paging.js';
 import type { Db } from '../db/client.js';
-import { ROLES, withOrgContext, type OrgContext, type Role } from '../db/org-context.js';
+import { LABELS, ROLES, withOrgContext, type Label, type OrgContext, type Role } from '../db/org-context.js';
 import { apiKeys } from './api-keys.schema.js';
 
 export const KEY_PREFIX = 'grc_';
@@ -29,6 +33,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const createKeySchema = z.object({
   name: z.string().trim().min(1).max(200),
   role: z.enum(ROLES),
+  clearance: z.enum(LABELS),
   expiresAt: z.iso
     .datetime({ offset: true })
     .refine((value) => new Date(value).getTime() > Date.now(), { message: 'must be in the future' }),
@@ -42,6 +47,7 @@ export const keyItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   role: z.string(),
+  clearance: z.enum(LABELS),
   expiresAt: z.string(),
   revokedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -61,9 +67,19 @@ export interface KeyPrincipal {
   orgId: string;
   userId: string;
   role: Role;
-  clearance: 'internal';
+  clearance: Label;
   apiKeyId: string;
 }
+
+/** A row of `app_api_key_by_hash`, as Postgres gives it (role and clearance unchecked). */
+type KeyRow = {
+  id: string;
+  org_id: string;
+  role: string;
+  clearance: string;
+  expires_at: Date | string;
+  revoked_at: Date | string | null;
+};
 
 export function hashKey(plain: string): string {
   return createHash('sha256').update(plain, 'utf8').digest('hex');
@@ -71,6 +87,14 @@ export function hashKey(plain: string): string {
 
 function unauthorized(): ApiError {
   return new ApiError(401, 'unauthorized', 'The API key is not valid.');
+}
+
+function isRole(value: string): value is Role {
+  return (ROLES as readonly string[]).includes(value);
+}
+
+function isLabel(value: string): value is Label {
+  return (LABELS as readonly string[]).includes(value);
 }
 
 export class ApiKeysService {
@@ -81,6 +105,10 @@ export class ApiKeysService {
 
   async create(ctx: OrgContext, body: unknown): Promise<{ id: string; key: string }> {
     const input = createKeySchema.parse(body);
+    // Never above the creating Admin's own clearance (D230, as D198 does for labels).
+    if (!isVisible(ctx.clearance, input.clearance)) {
+      throw new ApiError(403, 'forbidden', 'You may not make a key above your own clearance.');
+    }
     const key = KEY_PREFIX + randomBytes(KEY_BYTES).toString('base64url');
     const [row] = await withOrgContext(this.db, ctx, (tx) =>
       tx
@@ -89,6 +117,7 @@ export class ApiKeysService {
           orgId: ctx.orgId,
           name: input.name,
           role: input.role,
+          clearance: input.clearance,
           keyHash: hashKey(key),
           expiresAt: new Date(input.expiresAt),
           createdBy: ctx.userId,
@@ -103,7 +132,12 @@ export class ApiKeysService {
       action: 'api_key.created',
       targetType: 'api_key',
       targetId: row.id,
-      after: { name: input.name, role: input.role, expiresAt: new Date(input.expiresAt).toISOString() },
+      after: {
+        name: input.name,
+        role: input.role,
+        clearance: input.clearance,
+        expiresAt: new Date(input.expiresAt).toISOString(),
+      },
     });
     return { id: row.id, key };
   }
@@ -119,6 +153,7 @@ export class ApiKeysService {
           id: apiKeys.id,
           name: apiKeys.name,
           role: apiKeys.role,
+          clearance: apiKeys.clearance,
           expiresAt: apiKeys.expiresAt,
           revokedAt: apiKeys.revokedAt,
           createdAt: apiKeys.createdAt,
@@ -133,6 +168,7 @@ export class ApiKeysService {
           id: r.id,
           name: r.name,
           role: r.role,
+          clearance: r.clearance,
           expiresAt: r.expiresAt.toISOString(),
           revokedAt: r.revokedAt ? r.revokedAt.toISOString() : null,
           createdAt: r.createdAt.toISOString(),
@@ -172,12 +208,13 @@ export class ApiKeysService {
   }
 
   /**
-   * The principal for a presented key, or a 401. An expired or revoked key writes
-   * `api_key.refused` into its org's chain; a key that matches nothing is logged, without the key.
+   * The principal for a presented key, at the key's own role and clearance, or a 401. An expired
+   * or revoked key writes `api_key.refused` into its org's chain; a key that matches nothing, or
+   * whose row holds an unknown role or clearance (fail safe), is logged, without the key.
    */
   async authenticate(plain: string, log: FastifyBaseLogger): Promise<KeyPrincipal> {
     const found = KEY_SHAPE.test(plain) ? await this.findByHash(hashKey(plain)) : null;
-    if (!found || !(ROLES as readonly string[]).includes(found.role)) {
+    if (!found || !isRole(found.role) || !isLabel(found.clearance)) {
       log.warn({ event: 'api_key.refused', reason: 'unknown' }, 'API key refused');
       throw unauthorized();
     }
@@ -202,26 +239,16 @@ export class ApiKeysService {
     return {
       orgId: found.org_id,
       userId: `api_key:${found.id}`,
-      role: found.role as Role,
-      clearance: 'internal',
+      role: found.role,
+      clearance: found.clearance,
       apiKeyId: found.id,
     };
   }
 
-  private async findByHash(hash: string): Promise<{
-    id: string;
-    org_id: string;
-    role: string;
-    expires_at: Date | string;
-    revoked_at: Date | string | null;
-  } | null> {
-    const res = await this.db.execute<{
-      id: string;
-      org_id: string;
-      role: string;
-      expires_at: Date | string;
-      revoked_at: Date | string | null;
-    }>(sql`SELECT id, org_id, role, expires_at, revoked_at FROM app_api_key_by_hash(${hash})`);
+  private async findByHash(hash: string): Promise<KeyRow | null> {
+    const res = await this.db.execute<KeyRow>(
+      sql`SELECT id, org_id, role, clearance, expires_at, revoked_at FROM app_api_key_by_hash(${hash})`,
+    );
     return res.rows[0] ?? null;
   }
 }
