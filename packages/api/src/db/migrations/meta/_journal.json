@@ -50,6 +50,13 @@
       "when": 1791014400000,
       "tag": "0006_intake",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791100800000,
+      "tag": "0007_api_key_clearance",
+      "breakpoints": true
     }
   ]
 }

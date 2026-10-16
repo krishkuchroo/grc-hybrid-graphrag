@@ -6,11 +6,12 @@
 //   git keeps out (D81). The same seed and size always write the same files (D45.8).
 // - `--mode full`: provisions one org per answer-key org, slugs `gen-<seed>-<n>`, with
 //   provisionOrg like `pnpm seed:demo` (safe to re-run: the slug names the org), makes one
-//   Admin-role API key per org that expires in 1 hour (through ApiKeysService, so it is audited),
-//   and runs `runFullPipeline` against `--base-url`: the sources go through the real API as a
-//   customer's connector would send them. The keys are revoked when the run ends, also when it fails
-//   or is stopped (Ctrl-C). A re-run adds nothing: the mappings are unchanged, the batches and files
-//   come back `duplicate: true`.
+//   Admin-role API key per org at clearance Restricted (D230, so every label the generated world
+//   holds loads) that expires in 1 hour (through ApiKeysService, so it is audited, made by the
+//   org's Admin, who holds Restricted), and runs `runFullPipeline` against `--base-url`: the
+//   sources go through the real API as a customer's connector would send them. The keys are
+//   revoked when the run ends, also when it fails or is stopped (Ctrl-C). A re-run adds nothing:
+//   the mappings are unchanged, the batches and files come back `duplicate: true`.
 // - `--mode fast` (S3-019; D42, D48, D213 (7)): provisions one org per answer-key org the same way,
 //   slugs `fast-<seed>-<size>-<n>` (so a fast load never lands in a full-pipeline org or in another
 //   size's org), and writes the answer key's records, links and documents straight into Neo4j,
@@ -273,6 +274,7 @@ async function runFull(): Promise<void> {
       const made = await svc.apiKeys.create(ctx, {
         name: `gen:data ${folder}`,
         role: 'admin',
+        clearance: 'restricted',
         expiresAt: new Date(Date.now() + KEY_LIFETIME_MS).toISOString(),
       });
       keys.push({ id: made.id, ctx });
