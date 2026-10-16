@@ -74,6 +74,16 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | S3-022 | S3 | builder-frontend | done | Evidence review in the web app: "Accept" and "Reject" on each evidence row of the control page, shown only when `canReviewEvidence` holds, with the reviewer and time shown after. Tests (unit): `pnpm --filter web test -- evidence-review-ui` | logs/tasks/S3-022.md | |
 | S3-023 | S3 | builder-platform | done | Clearance per API key (D230, changes D54): making a key takes a clearance (public, internal, confidential, restricted), refused if above the creating Admin's own; stored on the key (a new migration); the key signs in at that clearance everywhere (API checks, Postgres row security, the Neo4j read account for its role × clearance); keys made before keep `internal`; the clearance shown where keys are listed and in the `api_key.created` entry; `pnpm gen:data --mode full` makes its keys at Restricted, so `pnpm gen:data --mode full --size tiny` loads every answer-key asset and link. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S3-023.md | |
 | S3-024 | S3 | builder-backend | done | Asset imports never link to, or reveal, a parent asset above the runner's clearance (D200, D51, S3-007; security send-back of run wf_36787acc-74b): such a parent counts as unknown in the plan, is skipped in the link step, and is refused again inside the write transaction; the row gets `unknown_parent`, no link is drawn and no `link.created` entry is written, the same answer as for a missing parent. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S3-024.md | |
+| S4-001 | S4 | builder-backend | done | Shared processing model in `@grc/shared`: chunk size (500 bge-m3 tokens, 50 overlap), the extraction answer Gemma must give (5 record kinds, the 7 spec links, a verbatim sentence per link), finding kinds and statuses, the three rule-check names (D39), the matching steps, outcomes and cut-offs (D43), `normaliseName`, and `canSuggestMappings`. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S4-001.md | |
+| S4-002 | S4 | builder-platform | done | Processing tables (a new migration): `chunks` (partitioned by org, `vector(1024)`, HNSW cosine per partition), `chunk_records` and `review_findings`, with org-wall RLS forced and role and label checks (D71, D73); `documents.failure_code`; a chunk partition for every existing and new org; the processing queue names; job handlers told when they're on their last try and able to queue a job for later; the processing module laid out as one empty part per task. Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S4-002.md |
+| S4-003 | S4 | builder-backend | done | AI clients behind small interfaces (D8, D31, D45.2): Gemma (`gemma4:12b`) giving schema-checked answers, one call at a time per program, temperature 0; bge-m3 embeddings of exactly 1024 numbers; clear "unavailable" failures when Ollama is down; `OLLAMA_BASE_URL` setting; nothing from the text in logs; a check command for the real models. Fast mode (D222): lint + type checks; no new tests. Real Gemma: `pnpm --filter api exec tsx src/ai/check.ts` | logs/tasks/S4-003.md | |
+| S4-004 | S4 | builder-backend | done | Document reading and chunking: the `processing.document-read` job reads policy documents, SOC tickets and audit reports (PDF, DOCX, TXT, JSON) only inside the file sandbox (D53), chunks the text with bge-m3's own tokenizer (500 tokens, 50 overlap, D71), stores the chunks and queues embedding in one transaction (D29); unreadable files end `failed` with a code; a one-time `setup:tokenizer` command; fast load queues the same job for its documents (D42, D213 (7)). Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S4-004.md |
+| S4-005 | S4 | builder-backend | done | Embeddings: the `processing.document-embed` job gives every chunk its bge-m3 vector, then queues extraction (or, for fast-loaded documents, mention linking only); a worker sweep fills each record's `nameEmbedding` for new and renamed records (D203, D70) and queues its duplicate check; Ollama being down never fails a document (D45.7). Fast mode (D222): lint + type checks; no new tests | logs/tasks/S4-005.md | |
+| S4-006 | S4 | builder-backend | done | Gemma extraction: the `processing.chunk-extract` job (one at a time, D72) asks Gemma for the records and links in one chunk, with the text marked as data in `<UNSTRUCTURED_DOCUMENT_CONTEXT>` and its section markers neutralised (D52.3), checks the answer against the shared schema (D52.4), stores it on the chunk with model and prompt version, and queues resolution; a try command for the real Gemma. Fast mode (D222): lint + type checks; no new tests. Real Gemma: `pnpm --filter api exec tsx src/processing/extract/try.ts` | logs/tasks/S4-006.md | |
+| S4-007 | S4 | builder-backend | done | Duplicate matching with no Gemma (D43, D70): exact, then close spelling (Neo4j full-text), then close meaning (name vectors), only over records the uploader could see; a matcher for names found in documents; and the `processing.record-dedupe` job: clear exact duplicates merge automatically (older record kept, aliases and links moved, the other retired), uncertain ones become one "possible duplicate" finding per pair. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S4-007.md | |
+| S4-008 | S4 | builder-backend | done | Rule checks and the decision (D24, D38, D39): the `processing.chunk-resolve` job matches each extracted record, runs the three checks on each link, writes confident links to Neo4j as origin `ai` with their source and their `link.created` entries in one transaction (D37, D69), and sends the rest to `review_findings` (new risks, controls, policies and incidents too); chunk-to-record links; mention linking for fast-loaded documents; the document ends `processed`. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S4-008.md | |
+| S4-009 | S4 | builder-backend | done | AI mapping suggestions (D16(b), D20, D212 (4)): `POST /api/v1/mappings/suggestions` (Admin and Compliance Manager, 202 with a job ID) starts a background run in which Gemma picks, from the closest catalog items by name, the requirements a control satisfies, or the NIST 800-53 controls a SOC 2 criterion maps to; every pick waits in `review_findings` for the Analyst, never live; security-matrix row; web client regenerated. Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S4-009.md |
+| S4-010 | S4 | builder-frontend | done | "Suggest mappings" on a framework's page, and "Suggest links to NIST 800-53" on the SOC 2 page, for Admins and Compliance Managers only: a confirmation that says it runs in the background on the local AI and that the suggestions go to the Analyst's review queue, then "Started" or "Already running". Fast mode (D222): lint + type checks; no new tests | logs/tasks/S4-010.md | |
 | S7-001 | S7 | builder-backend | in review | Shared admin model in `@grc/shared`: the add-person and change-person schemas (new people start at Internal, D51), the set-up link limits (24 h, single use, 256-bit token, TOTP within 10 min, D214 (1)), the cross-org kinds and limits (auditor grants by email up to 90 days, default clearance Internal, parent links to a named group with an end date, break-glass 1 h with a second operator's confirmation and a review, D55, D214 (2)–(4)), the audit-entry view and `maskAuditEntry` (contents hidden above the reader's clearance; who, when, record number and action kept, D186), the notification kinds (including the expiry reminders) and the S7 audit action names. Tests (unit): `pnpm --filter shared test -- admin` | | `logs/tasks/S7-001.md` |
 | S7-002 | S7 | builder-platform | to do | In-app alerts for Admins (D55, D56, D214 (2)): a `notifications` table (a new migration; org wall with FORCE, Admins only), `NotificationsService.notifyAdminsInTx`, `GET /api/v1/notifications` and `POST /api/v1/notifications/:id/read`, and the nightly chain check alerting the org's Admins once per break; the table also takes S7-005's "access ending soon" reminders; security-matrix rows and D59 tests. Tests (unit + db): `pnpm --filter api test -- notifications` | | `logs/tasks/S7-002.md` |
 | S7-003 | S7 | builder-platform | to do | Cross-org tables (a new migration, D214 (2)–(4)): auditor grants made by email and claimed by the auditor's existing account, with their clearance (default Internal); parent links with a clearance, an end date and a named group of the parent org's people; break-glass sessions with who ended, confirmed and reviewed them; the parent side's request and end and the auditor's claim through checked database functions; `app_visible_org` updated (claimed grants only; parent links only for the named people and until their end date); the session's "viewing org"; each account's home org; org wall kept, every org pair tested. Tests (db): `pnpm --filter api test -- cross-org-tables` | | `logs/tasks/S7-003.md` |
@@ -2875,6 +2885,364 @@ Task: S3-024
 5. Lint and type checks pass.
 
 **Test command:** none in fast mode (lint + type checks only).
+
+---
+
+### S4 shared notes (every S4 brief includes these)
+S4 is slice 4, "Processing: chunks, embeddings, Gemma extraction, duplicate matching, rule checks" (D76). It runs alone, after S3, in the chained MVP run (D221–D223). The M0 and S1 shared notes above (layout, code style, graph reads and writes, audit entries, no values in logs, 404 for anything hidden) still apply. The S3 shared notes describe the documents, the upload kinds and the system context S4 builds on.
+
+- **Fast mode (D222–D224, D227, D229):** each brief gives behaviour and pass criteria only. Write no new tests and change no test files; the finish check is lint + type checks. Existing tests stay as they are, even if they now fail; testing comes after the MVP. The two reviewers look at the whole slice once, at its end. The running stack keeps its older code until the one rebuild at the end of the MVP (D229), so nothing here needs a Docker rebuild.
+- **Scope (planner's reading, D24, D25, D38, D39, D41–D43, D45, D52, D69–D72, D76, D203, D212 (4), D213 (7)):**
+  - Turn each stored policy document, SOC ticket and audit report into chunks with vectors (Path A of S6 searches them).
+  - Gemma extracts the records and links each chunk states; duplicate matching ties every name to an existing record or not; the three rule checks decide: confident links go live in Neo4j, everything else waits in the Postgres review queue (`review_findings`).
+  - Every record gets its name embedding (D203), and records that duplicate each other are merged (clear) or flagged (uncertain) (D43).
+  - Gemma suggests control-to-requirement mappings and SOC 2 cross-framework links, all for the Analyst (D16(b), D20, D212 (4)).
+  - Fast-loaded documents get only chunks, vectors and mention links, no Gemma (D42, D213 (7)).
+  - **Not in S4:** the Analyst's queue screen, approving or rejecting findings, and "remove everything from one bad upload" (S5, D52.5); search, chat and RRF (S6); the benchmark and PDF/DOCX generation (S8, D213 (8)); re-running failed jobs from the Admin screen (S7, D72). Evidence files are not chunked or extracted (S3 queues no job for them; planner's reading R1). Asset lists still go only through S3's column mapping, with no Gemma (D40).
+- **Folders S4 owns (D183):** `packages/api/src/processing/`, `packages/api/src/ai/`, `packages/shared/src/processing/`, the processing parts of the migrations, and `packages/web/src/features/frameworks/` for S4-010 only. S4 reads S1–S3 code (`records/`, `frameworks/`, `intake/`, `graph/`, `audit/`) and changes it only where a brief says so.
+- **The processing module (S4-002 lays it out):** `packages/api/src/processing/processing.module.ts` imports one Nest module per part, each in its own folder, so later tasks never edit `processing.module.ts`: `reader/` (S4-004), `embed/` (S4-005), `extract/` (S4-006), `match/` (S4-007), `decide/` (S4-008), `suggest/` (S4-009). Each part's module registers its job handlers in the worker program only (`JobsService.work` throws in the API) and declares its own imports. The AI clients live in `packages/api/src/ai/` (S4-003), exported by `AiModule`.
+- **The job chain (planner's reading; every name and payload is what the sending and handling tasks agree on, D29, D72):**
+
+  | queue | payload | at once (D72) | job key | sent by | handled by |
+  |---|---|---|---|---|---|
+  | `processing.document-read` (already `INTAKE_QUEUES.documentRead`) | `{ orgId, documentId }` | 4 | `<orgId>:<contentHash>` | uploads (S3), fast load (S4-004) | S4-004 |
+  | `processing.document-embed` | `{ orgId, documentId }` | 2 | document ID | S4-004 | S4-005 |
+  | `processing.chunk-extract` | `{ orgId, chunkId }` | 1 (Gemma) | chunk ID | S4-005 | S4-006 |
+  | `processing.chunk-resolve` | `{ orgId, chunkId, mode: 'full' \| 'mentions' }` | 4 (duplicate matching) | chunk ID | S4-005 (`mentions`), S4-006 (`full`) | S4-008 |
+  | `processing.record-dedupe` | `{ orgId, recordId }` | 4 (duplicate matching) | `<recordId>:<the name embedded>` | S4-005 | S4-007 |
+  | `processing.mapping-suggest` | `{ orgId, kind, framework, startedBy, role, clearance }` | 1 (Gemma) | `<orgId>:<kind>:<framework>` | S4-009's route | S4-009 |
+
+  S4-002 adds the five new names to `packages/api/src/processing/queues.ts` (re-exporting `documentRead` from `intake/queues.ts`). Every handler runs under the intake system context (`INTAKE_SYSTEM_CONTEXT(orgId)`, S3 planner's reading R10), so the org wall still applies, with actor `system:processing` for anything it writes. Every handler is safe to run twice: a repeat changes nothing more (D45.5). Retries are D72's (3, growing waits, then the failed-jobs list).
+- **Fast-loaded documents are embed-only (D42):** a document whose uploader type is `system` (fast load, S3-019) gets chunks, vectors and mention links, and never goes to Gemma. Every other document goes through the full chain.
+- **Document status (S3's `stored`, `processing`, `processed`, `failed`):** `processing` once its chunks are stored (S4-004); `processed` once every chunk is resolved (S4-008); `failed` when the file can't be read, or a step has used its last try, with a short code in the new `documents.failure_code` (S4-002). Ollama being down never fails a document: the step waits and tries again later (D45.7). Status changes write no audit entry (as in S3).
+- **Chunks (D71):** windows of at most 500 bge-m3 tokens, each starting 50 tokens before the previous one ended; each chunk's text is an exact slice of the document's text; each carries its document's record type and label (D51: anything taken from a document inherits its label). A chunk's stage is `read`, `embedded`, `extracted`, `resolved` or `failed`.
+- **The extraction answer (S4-001 defines it, S4-006 asks for it, S4-008 reads it):** a list of records and a list of links. A record has a short reference, a kind (`asset`, `risk`, `control`, `policy`, `incident`) and its name exactly as written in the text, plus optional plain details (for example severity or status as written). A link has one of the 7 spec types with the spec's direction (`HOSTS` and `RUNS` asset to asset, `EXPOSED_TO` asset to risk, `MITIGATED_BY` risk to control, `GOVERNED_BY` control to policy, `IMPACTS` incident to asset, `EXPOSES` incident to risk; `LINK_TYPES` in `packages/shared/src/records/links.ts`), the references of its two ends, and the one sentence that states it, copied word for word.
+- **Duplicate matching (D43, D70, planner's reading):** in steps, with no Gemma. (1) **exact:** the name after `normaliseName` (lowercase, Unicode-folded, every run of spaces, punctuation, `_` and `-` made one space, trimmed) equals a record's, or the text is the record's number or one of its source IDs; (2) **close spelling:** the `record_names` full-text index, scored by edit similarity; (3) **close meaning:** the label's `<label>_name_embedding` vector index (cosine). A match is **clear** when exactly one record matches exactly, or the best spelling or meaning score is at or above its clear cut-off and ahead of the next by the margin; **uncertain** when there are candidates above the lower cut-off (up to 3 kept); otherwise **none**. Names whose digits differ never match by spelling or meaning (`srv-app-01` is not `srv-app-02`). Only active records count, and only those the person behind the work could see: the role views the record type and the label is at or below their clearance (D51, the precedent of S3-024). The cut-offs live in one shared place (S4-001) and the benchmark tunes them later (S8).
+- **Whose view:** for a document, the uploader's: a person's current role and clearance in that org, an API key's role and clearance (D230), or Admin at Restricted for `system` (fast load). An uploader who can't be found sees nothing, so every link goes to the Analyst (fail safe). For mapping suggestions, the person who started the run.
+- **Rule checks (D39), on each extracted link:** `same_sentence`: the sentence is in the chunk's text (spacing ignored) and both ends' names, as written, are in that sentence; `ontology_fit`: the type and direction fit the ontology for the kinds of the matched records (Gemma's kinds when an end has no match); `both_ends_known`: both ends are clear matches. All three pass: the link goes live. Any fails: it waits for the Analyst with its failed checks listed. No Gemma self-rating, no double runs.
+- **`review_findings` (D24, D38, D73):** one row per proposal. Kinds: `link` (a proposed link), `record` (a proposed new risk, control, policy or incident; never an asset, which come only from asset lists, D40), `duplicate` (two records that may be one), `mapping` (a suggested `SATISFIES` or `MAPS_TO`). Statuses: `pending` (waits for the Analyst), `live` (made live by the rule checks; kept so S5 and the benchmark see every proposal), and `approved`, `rejected`, `removed`, which only S5 sets. Each row holds its proposal, its source (document, chunk, sentence) where it has one, its failed checks, its label (the document's; for `duplicate` and `mapping`, the higher of the two records'), the model and prompt version, and a key that makes a repeat proposal add nothing. A proposal the Analyst has rejected or removed is never raised again or made live again.
+- **Live AI links (D37, D69, D73):** written by the writer in one Neo4j transaction with their `link.created` audit entries (`AuditOutbox.withAuditedWrite`), origin `ai`, `createdBy` `system:processing`, and on the link: `sourceDocId`, `chunkId`, `sentence`, `model`, `promptVersion` and `sourceLabel` (the document's label). A link of the same type between the same two records is never doubled, whatever its origin. Note for S5 and S6: the sentence comes from the document, so only people cleared for `sourceLabel` may be shown it.
+- **AI calls (D8, D19, D25, D31, D34, D45.8, D52):** only through S4-003's clients: `gemma4:12b` for extraction and suggestions, `bge-m3` for every vector, both on the Mac's Ollama (`OLLAMA_BASE_URL`; the compose file already gives the containers `http://host.docker.internal:11434`). Temperature 0 and a fixed seed. At most one Gemma call at a time per program. Prompts carry a version string, recorded with everything they produce. Document text always sits inside `<UNSTRUCTURED_DOCUMENT_CONTEXT>` as data, never instructions, and the AI sees nothing the person behind the work couldn't see (D52.1, D52.3).
+- **Logs (D163):** never a document's text, a chunk, a prompt, a model's answer, a record's name or an embedding. IDs, counts, timings, model names and error codes only.
+- **Record name embeddings (D203, D70):** written on the node as `nameEmbedding` (1024 numbers) by S4-005, never shown in an API answer or an audit entry.
+- **Security matrix (D175, D59):** S4 adds one route, `POST /api/v1/mappings/suggestions` (S4-009), and its row. No new record type.
+- **Never** change Neo4j accounts or privileges, Postgres roles, live settings or shared state to make something work (D131, D144, D176).
+- **Migrations (D183):** S4-002 adds "a new migration"; never pick its number, the integrator numbers it at merge. Any other task that finds it needs one says "a new migration" too.
+- **Hot files (D183):** each brief lists its hot files; only one task at a time changes each.
+- **Git (D112, D159):** branch `task/<ID>` in its own worktree; commit messages start with the task ID and never mention Claude, Anthropic or AI tooling.
+- **Planner's readings for the user to confirm (not blocking):** the tokenizer file kept out of git (S4-004); records merged automatically only on an exact name match of the same type and label (S4-007); name embeddings written with no audit entry and no version change (S4-005); mapping suggestions started by hand, never automatically (S4-009); SOC 2 cross-framework links from SOC 2 criteria to NIST 800-53 controls only (S4-009); the AI proposing new risks, controls, policies and incidents but never assets (S4-008). The questions are in the S4 planning hand-off.
+
+---
+
+Task: S4-001
+
+**Goal:** One shared definition of what processing produces and how it decides, used by the API, the worker, the web app (S5) and the benchmark (S8), so every part agrees on chunk sizes, Gemma's answer, finding kinds and statuses, rule checks and matching.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D24, D38, D39, D43, D50 (Framework mappings row), D51, D67, D69, D70, D71, D73, D16, D20, D212 (3), (4), D30 (Zod), D45.7. Read the S4 shared notes.
+
+**Depends on:** nothing.
+
+**Hot files:** `packages/shared/src/index.ts`.
+
+**Files:** create `packages/shared/src/processing/` (with its own `index.ts`); export it from `packages/shared/src/index.ts`. Follow the style of `packages/shared/src/intake/` and `packages/shared/src/frameworks/`.
+
+**Behaviour (what it defines):**
+1. **Chunks:** the chunk size (500 tokens) and overlap (50), the embedding size (1024), the chunk stages and the document processing modes (`full`, `embed_only`), as in the shared notes. The document failure codes S4 uses: `unreadable`, `no_text`, `timed_out`, `too_much_memory`, `read_failed`, `embed_failed`, `extract_failed`, `resolve_failed`.
+2. **The extraction answer:** a strict Zod schema for what Gemma must return for one chunk (shared notes, "The extraction answer"): at most 50 records and 50 links; a reference is short (letters, digits, `_`, `-`); a name is 1 to 200 characters; a sentence is 1 to 1,000 characters; details are a small flat map of short strings; a link's ends must be references of records in the same answer. Also a lenient reader that keeps every valid record and link and drops the invalid ones, reporting how many it dropped, so one bad item doesn't lose the chunk (D52.4).
+3. **Findings:** the kinds (`link`, `record`, `duplicate`, `mapping`) and statuses (`pending`, `live`, `approved`, `rejected`, `removed`); a Zod schema for each kind's proposal: for `link`, the type and each end (kind, name as written, the clear match's record ID and number or none, up to 3 candidates with ID, number, name, step and score, and the `record` finding it points to when the end is a proposed new record); for `record`, kind, name and details; for `duplicate`, the record kind, the record kept and the other (IDs and numbers), the step and score; for `mapping`, the type (`SATISFIES` or `MAPS_TO`), both ends' IDs and numbers, and Gemma's short reason (up to 300 characters).
+4. **Rule checks (D39):** the three names `same_sentence`, `ontology_fit`, `both_ends_known`, and a pure function that, given a link's sentence, the chunk text, both ends' names as written, their kinds and whether each is a clear match, gives the list of failed checks (`ontology_fit` uses `isAllowedLink` from `packages/shared/src/records/links.ts`).
+5. **Matching (D43):** the steps (`exact`, `spelling`, `meaning`), the outcomes (`clear`, `uncertain`, `none`), `normaliseName`, a pure check that two names' digits agree, an edit-similarity score from 0 to 1, and the cut-offs as named constants (planner's reading, tuned in S8): spelling clear at 0.92 or above and kept as a candidate at 0.80; meaning clear at 0.90 cosine or above and kept at 0.80; a clear match must lead the next candidate by at least 0.05; up to 3 candidates.
+6. **Who may start suggestions:** `canSuggestMappings(role)`: true exactly when the role has the Framework-mappings `edit` cell (Admin and Compliance Manager, D212 (3)); the Analyst's `approve` cell is S5's.
+7. Pure: no I/O, no clock, no randomness; nothing here imports from the API.
+
+**Pass criteria:**
+1. The API, the web app and the benchmark can import every name above from `@grc/shared`.
+2. The extraction schema accepts a well-formed answer for the spec's ontology and refuses a link whose end isn't one of its records, an unknown link type or kind, and anything past the size caps; the lenient reader keeps the valid items of a mixed answer and counts the dropped ones.
+3. The rule-check function fails `same_sentence` when the sentence isn't in the chunk or misses an end's name, `ontology_fit` for a wrong direction (for example a policy `GOVERNED_BY` a control), and `both_ends_known` when either end isn't a clear match; a link that meets all three gets an empty list.
+4. `normaliseName` makes `Payroll-DB`, `payroll db` and ` PAYROLL_DB ` equal; the digit check tells `srv-app-01` from `srv-app-02`.
+5. `canSuggestMappings` is true for Admin and Compliance Manager only.
+6. Lint and type checks pass.
+
+---
+
+Task: S4-002
+
+**Goal:** The Postgres side of processing exists and is walled: chunks with vectors, chunk-to-record links and the review queue, each behind the org wall and the role and label checks; plus the queues, the job helpers and the processing module's layout the other S4 tasks build in.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Don't run `pnpm db:migrate` against the live database: the one migrate happens at the end of the MVP (D229).
+
+**Decisions:** D13, D29, D38, D45.5, D50, D51, D56, D57, D71, D72, D73, D176. Read the S4 shared notes and the S3 shared notes ("Postgres tables").
+
+**Depends on:** nothing. It follows the lists in the S4 shared notes and S4-001's brief; it doesn't import S4-001's code.
+
+**Hot files:** the migrations folder and its journal (`packages/api/src/db/migrations/`), `packages/api/src/db/role-visibility.sql.ts`, `packages/api/src/jobs/jobs.module.ts`, `packages/api/src/identity/provision-org.ts`, `packages/api/src/processing/processing.module.ts`.
+
+**Where things are now:** migrations are hand-written SQL (`0006_intake.sql` and `0007_api_key_clearance.sql` show the style, the `orgTablePolicySql` policies, `app_role_views` and `app_label_visible`). Audit partitions per org: `audit_create_partition` in `0003_audit.sql`, called at org provisioning (`provision-org.ts`) through `createAuditPartition`. Drizzle table definitions sit beside their module (`packages/api/src/intake/intake.schema.ts`). Jobs: `JobsService` in `jobs.module.ts`. The processing module is empty (`processing.module.ts`).
+
+**Behaviour:**
+1. **A new migration** (never pick its number) adds:
+   - `chunks`: org, document, its position in the document, the text, token count, start and end offsets in the document's text, record type and label (copied from the document), the vector (`vector(1024)`, empty until embedded), stage, the stored extraction answer with its model and prompt version (empty until extracted), and times. One chunk per document and position. **List-partitioned by org** with one partition per org, each with an HNSW cosine index on the vector (D71); the partition is made for every org that already exists and, at provisioning, for every new org (the way audit partitions are, safe to call again).
+   - `chunk_records`: which records a chunk names (chunk, record ID, record kind, the chunk's label), one row per pair.
+   - `review_findings`: the columns in the shared notes ("`review_findings`"), with checks on kind and status, the document and chunk it came from (empty for `duplicate` and `mapping`), the decision fields S5 fills (who, when, a note), and a key unique per org so a repeat proposal adds nothing.
+   - `documents.failure_code`: empty unless the document failed, checked against S4-001's codes.
+2. **Row security, FORCE on, for the restricted app account (D57, D73):** the org wall on all three tables. `chunks`: SELECT also needs the role to view the chunk's record type and its label to be at or below the clearance (`app_role_views`, `app_label_visible`). `chunk_records`: the same checks on the chunk's record type and label, and the role views the record's kind. `review_findings`: SELECT also needs the role's D50 "Review queue" cell to be `view` or `work` (Admin and Analyst), built from `ROLE_TABLE` the way `role-visibility.sql.ts` builds `app_role_views`, and the label check. Inserts and updates only inside the caller's own org. Nothing grants the app account more than it needs (no DELETE on `review_findings`: findings are kept, D24).
+3. **Drizzle definitions** for the three tables and the new column, beside the processing module.
+4. **Queue names:** `packages/api/src/processing/queues.ts` with the shared notes' table (names, and each queue's D72 concurrency as a constant).
+5. **Jobs:** a handler can tell which try it is on and whether it is the last (so the step can mark the document `failed` on its last try), and a job can be queued to start after a delay (so a step can wait for Ollama). The API program still never processes jobs.
+6. **Module layout:** `processing.module.ts` imports the six empty part modules (`reader`, `embed`, `extract`, `match`, `decide`, `suggest`), each in its own folder, as the shared notes say. Nothing else changes in `feature-modules.ts` or the app modules.
+
+**Pass criteria:**
+1. After the migration, an org's people see only their own org's chunks, chunk links and findings; within the org, a chunk is visible only to roles that view its record type and clearances at or above its label; findings only to Admins and Analysts at or above their label.
+2. Every existing org has a chunk partition with its HNSW index, and a newly provisioned org gets one; provisioning twice changes nothing.
+3. A second insert of the same chunk position, or of the same finding key, adds nothing.
+4. A job handler knows when it is on its last try, and a job can be queued for later.
+5. The six part modules exist and are imported; the API and worker programs still start.
+6. Lint and type checks pass.
+
+---
+
+Task: S4-003
+
+**Goal:** The app can ask Gemma for a schema-checked answer and ask bge-m3 for vectors, through two small interfaces that a test or another model can stand in for (D8, D45.2), safely and locally.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D8, D19, D25, D31 (Vercel AI SDK v7; Ollama through a community provider or Ollama's OpenAI-compatible endpoint, chosen by testing structured output with Gemma 4), D32/D34 (`gemma4:12b`; the size test ran with `num_ctx` 8192 and temperature 0), D45.2, D45.7, D45.8, D52, D57 (Ollama listens on the Mac only), D63, D82, D163. Read the S4 shared notes ("AI calls", "Logs").
+
+**Depends on:** nothing.
+
+**Hot files:** `packages/api/package.json`, `pnpm-lock.yaml`, `packages/api/src/config/app-settings.ts`, `packages/api/src/ai/ai.module.ts`.
+
+**Behaviour:**
+1. **Text model:** given fixed instructions, data and a Zod schema, returns an answer that passes the schema, or a typed failure: `unavailable` (Ollama can't be reached, or the model isn't there), `timed_out`, or `invalid_output` (no answer passes the schema). It uses `gemma4:12b` by default, temperature 0, a fixed seed and an 8,192-token context. At most one call runs at a time in the program; others wait their turn, in order. It reports the model name it used, so callers can record it (D69).
+2. **Embedder:** turns a list of texts into one vector each of exactly 1,024 numbers (`bge-m3` by default), in batches; an empty text is refused; a vector of the wrong size is a failure, never stored. Same typed failures.
+3. **Settings:** `OLLAMA_BASE_URL` joins `APP_SETTINGS` (Mac default `http://127.0.0.1:11434`; the compose file already sets the containers' value), and the two model names can be changed by optional settings, so the model stays swappable (D8). Nothing else is called: no other host, no telemetry (D63).
+4. **Safety:** no prompt, data, answer or vector is ever logged, and failures carry no model output (D163); only model, timings, token counts and codes.
+5. **Provider (D31):** use AI SDK v7 with one of the two Ollama routes; whichever is picked sits behind the interfaces, so switching is local to `src/ai/`.
+6. **Check command:** `pnpm --filter api exec tsx src/ai/check.ts` sends one short built-in text through the text model with a small schema and embeds two short texts, and prints only: whether the answer passed the schema, the seconds taken, the model names, and the vector size. It changes nothing and reads no database.
+7. `AiModule` exports both clients for the processing parts.
+
+**Pass criteria:**
+1. With Ollama running and both models pulled, the check command shows a schema-valid Gemma answer and two vectors of 1,024 numbers. If the chosen route can't give schema-valid answers from Gemma 4, the builder of the real-Gemma step switches to the other route (D31) and says which one works in the hand-off.
+2. With Ollama stopped, both clients fail with `unavailable` within a few seconds, and nothing crashes.
+3. Two calls made at once to the text model run one after the other.
+4. No log line holds any text, answer or vector.
+5. Lint and type checks pass.
+
+---
+
+Task: S4-004
+
+**Goal:** Each stored policy document, SOC ticket and audit report is read safely, cut into 500-token chunks with bge-m3's own tokenizer, and handed on to embedding, all re-runnable; fast-loaded documents join the same chain.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D25, D29, D33 (unpdf + mammoth), D41, D42, D45.5, D45.7, D51, D53 (only the worker opens files, with time and memory limits; macros and embedded files ignored), D71 (chunks counted with bge-m3's tokenizer), D72, D81 (model files never pushed), D163, D213 (7). Read the S4 shared notes and the S3 shared notes ("Upload safety", "Upload kinds").
+
+**Depends on:** S4-001 (chunk sizes, failure codes), S4-002 (tables, queues, the `reader/` module, last-try info).
+
+**Hot files:** `packages/api/package.json`, `pnpm-lock.yaml`, `.gitignore`, `packages/infra/scripts/fast-load.ts` (and the fast-load files under `packages/generators/src/fast-load/` if the change lands there).
+
+**Where things are now:** uploads queue `processing.document-read` with `{ orgId, documentId }` and key `<orgId>:<hash>` (`uploads.service.ts`, `queueNextStep`). The sandbox is `runInSandbox` in `packages/api/src/intake/imports/file-sandbox.ts` (its header says S4's readers reuse it). Files are read from the org's bucket through `FileStore`. Fast load (S3-019) writes documents as `stored` with uploader type `system` and queues nothing.
+
+**Behaviour:**
+1. **The job** (`processing.document-read`, 4 at once) takes a `stored` document of kind `policy_document`, `soc_ticket` or `audit_report` and reads its text **only inside the sandbox**, with time and memory limits: PDF text through unpdf, DOCX raw text through mammoth (macros, embedded objects and images ignored), TXT as UTF-8, JSON as readable lines (each value with its key path, nested keys joined with `.`, list items numbered). Line endings are made `\n`. Any other kind is left alone.
+2. **Chunks:** the text is cut into windows of at most 500 bge-m3 tokens, each starting 50 tokens before the previous one ended; each chunk's text is the exact slice of the document's text it covers, with its token count, offsets and position; record type and label come from the document. The chunks, the document's move to `processing` and the `processing.document-embed` job are saved in one transaction (D29).
+3. **Re-runs:** if the document already has its chunks, the job only makes sure the embed job is queued; it never makes a second set.
+4. **Failures:** a file that can't be read (broken or encrypted PDF, broken DOCX, bad JSON) ends `failed` with `unreadable`, a file with no text with `no_text`, a sandbox limit with `timed_out` or `too_much_memory`; none of these is retried (the same file fails the same way). Storage or database errors are retried (D72), and on the last try the document ends `failed` with `read_failed`. Logs hold only IDs and codes.
+5. **Tokenizer (planner's reading, S4-Q1):** bge-m3's own `tokenizer.json` (BAAI/bge-m3 on Hugging Face, at a fixed revision), loaded from a local file through a tokenizer library that reads that format with no network. `pnpm --filter api setup:tokenizer` downloads it once to a git-ignored folder inside `packages/api/` (not `models/`, which the Docker build skips), checks its SHA-256 against the value pinned in the repo beside the revision and source URL, and refuses a mismatch. The app never downloads at run time. When the file is missing, the worker's processing says so clearly, naming the command, and leaves documents `stored`.
+6. **Fast load (D42, D213 (7)):** `pnpm gen:data --mode fast` also queues `processing.document-read` for each document it writes, in the same transaction, with the same key style, so fast-loaded documents are chunked and embedded (they stay embed-only by the shared notes' rule). A re-run of fast load queues nothing new.
+
+**Pass criteria:**
+1. A TXT, a JSON, a PDF and a DOCX upload of a policy document, a SOC ticket or an audit report each end with chunks of at most 500 bge-m3 tokens, overlapping by 50, whose texts are exact slices of the document's text, and with the embed job queued; the document shows Processing.
+2. Running the job twice for one document leaves one set of chunks.
+3. A broken PDF ends Failed (`unreadable`), an empty-text file Failed (`no_text`), and neither is retried; nothing of the file reaches the logs.
+4. Files are opened only inside the sandbox, never in the API program.
+5. `setup:tokenizer` fetches and checks the file; a changed file is refused; with no file the worker says which command to run.
+6. Fast load queues one read job per new document, and a re-run queues none.
+7. Lint and type checks pass.
+
+---
+
+Task: S4-005
+
+**Goal:** Every chunk gets its bge-m3 vector so S6 can search it, and every record gets its name embedding so duplicate matching and mapping suggestions can compare meanings (D203, D70).
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D25, D42, D45.5, D45.7, D68, D70, D71, D72 (embed ×2), D163, D203. Read the S4 shared notes.
+
+**Depends on:** S4-002 (tables, queues, the `embed/` module, jobs helpers), S4-003 (the embedder).
+
+**Hot files:** none (its own `processing/embed/` folder).
+
+**Where things are now:** the audit relay lists orgs with `audit.orgIds()` and runs every 2 s (`outbox-relay.job.ts`, wired in `audit.module.ts`). Every org database has a `<label>_name_embedding` vector index per record label and the `record_names` full-text index (`org-schema.ts`). Record reads use `properties(n)`; S1's schemas drop unknown properties, so `nameEmbedding` never reaches an answer.
+
+**Behaviour:**
+1. **Chunk vectors** (`processing.document-embed`, 2 at once): embeds every chunk of the document that has no vector yet, in batches, and stores the vectors (stage `embedded`). Then, in the same transaction as the last vectors: for an embed-only (fast-loaded) document, queues `processing.chunk-resolve` with mode `mentions` for each chunk; for any other document, `processing.chunk-extract` for each chunk. Re-runs embed nothing twice and queue nothing twice.
+2. **Ollama down (D45.7):** the document stays Processing and the job tries again later, without using up its retries and without ever ending Failed for that reason. Any other error follows D72, and on the last try the document ends `failed` with `embed_failed`.
+3. **Name embeddings (D203, planner's reading S4-Q5):** a sweep in the worker, every 30 s, for each org, finds active records of the nine record labels with no name embedding or one made from an older name, embeds their names in batches, and writes `nameEmbedding` only if the name is still the one embedded (a rename in between waits for the next pass). It also keeps which name the embedding was made from. This write is derived data, like an index: it writes no audit entry and doesn't change the record's `version`, so no one's save is ever refused as stale because of it. The embedding never appears in an API answer or an audit entry.
+4. **Then the duplicate check:** for each Asset, Risk, Control, Policy or Incident it embedded, the sweep queues `processing.record-dedupe` (key: record ID plus the name embedded).
+5. **Big orgs:** a pass handles a bounded number of records per org, so one large fast-loaded org can't starve the others, and the next pass carries on.
+
+**Pass criteria:**
+1. After an upload is read, every chunk gets a vector of 1,024 numbers, and its chunks are queued for extraction (full documents) or mention linking (fast-loaded ones).
+2. With Ollama stopped, documents stay Processing and carry on by themselves when it's back; none ends Failed for that.
+3. A new or renamed record gets a fresh name embedding within a minute or so, with no audit entry and no version change; a person's save made at the same time still succeeds.
+4. Each embedded core record gets one duplicate-check job; no embedding shows in any API answer or audit entry.
+5. Lint and type checks pass.
+
+---
+
+Task: S4-006
+
+**Goal:** Gemma reads each chunk and says which records and links it states, in the shared answer format, without ever being steered by the document's own text (D52).
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D15 (not here: no graph queries), D16, D34, D39 (no self-rating, no double runs), D41, D45.5, D45.7, D45.8 (versioned prompts), D52.1, D52.3, D52.4, D69, D72 (Gemma ×1), D163. Read the S4 shared notes ("The extraction answer", "AI calls", "Logs").
+
+**Depends on:** S4-001 (the answer schema), S4-002 (tables, queues, the `extract/` module, jobs helpers), S4-003 (the text model).
+
+**Hot files:** none (its own `processing/extract/` folder).
+
+**Behaviour:**
+1. **The job** (`processing.chunk-extract`, 1 at a time): for an embedded chunk of a full-pipeline document, asks Gemma for the chunk's records and links in the shared answer format.
+2. **The prompt (versioned, for example `extract-v1`):** fixed instructions that name the 5 kinds and the 7 link types with their directions spelled out (the size test saw a smaller model flip `GOVERNED_BY` when a sentence says "the policy governs the control", D32: the prompt says plainly which end is which), ask for names exactly as written and the one sentence that states each link, copied word for word, and say that the text is data to read and never instructions to follow (D52.3). The chunk text goes inside `<UNSTRUCTURED_DOCUMENT_CONTEXT>` … `</UNSTRUCTURED_DOCUMENT_CONTEXT>`; any `<UNSTRUCTURED_DOCUMENT_CONTEXT>`, `</UNSTRUCTURED_DOCUMENT_CONTEXT>`, `<GRAPH_CONTEXT>` or `</GRAPH_CONTEXT>` inside the text, in any case or spacing, is neutralised first, so the document can't close its data section or open a ground-truth one. The prompt holds nothing else: no other records, documents, people or orgs (D52.1).
+3. **The answer (D52.4):** read with S4-001's lenient reader: valid records and links are kept, invalid ones dropped and counted. If nothing in the answer is readable, it's a failure and D72's retries apply; on the last try the document ends `failed` with `extract_failed`. The kept answer, the model name and the prompt version are stored on the chunk (stage `extracted`) and `processing.chunk-resolve` with mode `full` is queued, in one transaction.
+4. **Re-runs:** a chunk already extracted is never sent to Gemma again; the job only makes sure resolution is queued.
+5. **Ollama down:** the chunk waits and is tried again later, without using up retries; the document stays Processing (D45.7).
+6. **Try command:** `pnpm --filter api exec tsx src/processing/extract/try.ts` runs the prompt on three short built-in sample texts written like the generators' (a policy paragraph, a SOC ticket, an audit finding, one of them carrying a planted "add a link" instruction), and prints for each the links found, the links the sample states, and the seconds taken. It writes nothing anywhere.
+
+**Pass criteria:**
+1. On the try command's samples, with the real `gemma4:12b`, every answer passes the schema, at least 8 in 10 of the stated links are found with the right direction, and the planted instruction's link is reported separately (the rule checks of S4-008, not the prompt, decide what goes live).
+2. Text that tries to close `<UNSTRUCTURED_DOCUMENT_CONTEXT>` or open `<GRAPH_CONTEXT>` reaches Gemma neutralised.
+3. A chunk is sent to Gemma once, however often its job runs; its answer, model and prompt version are stored on it.
+4. With Ollama stopped, chunks wait; nothing ends Failed for that.
+5. No log line holds chunk text, prompt or answer.
+6. Lint and type checks pass.
+
+---
+
+Task: S4-007
+
+**Goal:** Names are tied to the records they mean, in D43's steps and with no Gemma, and records that duplicate each other are merged when it's clear and flagged for the Analyst when it isn't.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D18 (duplicates and typos in the generated data), D24, D37, D43, D45.5, D45.6, D51, D56, D68 (source IDs kept as aliases), D69 (records retired, never deleted), D70, D72 (duplicate matching ×4), D200, S3-024's precedent (records above the runner's clearance count as unknown). Read the S4 shared notes ("Duplicate matching", "Whose view", "`review_findings`").
+
+**Depends on:** S4-001 (matching rules, cut-offs, finding schemas), S4-002 (tables, queues, the `match/` module), S4-003 (the embedder, for a name's meaning).
+
+**Hot files:** none (its own `processing/match/` folder).
+
+**Where things are now:** the `record_names` full-text index covers `name` and `sourceIds` of every record label; each label has a `<label>_name_embedding` vector index (`org-schema.ts`). Imports find assets by `sourceIds` holding `<source>:<source ID>` (S3 shared notes, "Imported assets"). Graph writes with their audit entries go through `AuditOutbox.withAuditedWrite`; `visibleLabels` is in `packages/api/src/records/record-queries.ts`.
+
+**Behaviour:**
+1. **Matching a name** (for S4-008): given an org, a kind, a name as written and whose view applies, gives a clear match (record ID, number, step, score), an uncertain result (up to 3 candidates), or none, following the shared notes exactly: exact, then spelling, then meaning; only active records of that kind the person could see; digits must agree for spelling and meaning. Records the person couldn't see never appear, not even as candidates.
+2. **The duplicate check** (`processing.record-dedupe`, 4 at once): for one record (Asset, Risk, Control, Policy or Incident), compares it with the other active records of the same kind in the org, as Admin at Restricted (it's housekeeping, and nothing is shown to anyone here).
+3. **Clear duplicates merge automatically (planner's reading, S4-Q3):** only when exactly one other record has the same name after `normaliseName` and the same label. The older record (lower number) is kept: it gains the other's source IDs (they move, so imports from either source now find it), and the other's links move to it (a link it already has isn't doubled, and one that would join it to itself is dropped). The other is retired with `mergedInto` set to the kept record's ID. All of it is one Neo4j transaction with its audit entries (D37): `record.merged` on the kept record (meta: the other's number and the step), `record.retired` on the other (meta: `mergedInto`), and `link.created` / `link.removed` for each moved link, actor `system:processing`. If either record changed since the check began (its version moved), nothing is merged and the check runs again later.
+4. **Everything else goes to the Analyst:** spelling or meaning candidates, an exact match with a different label, or more than one exact match each give one `duplicate` finding per pair (pending, label the higher of the two), never two for the same pair in either order, and never again once the Analyst has decided that pair.
+5. Retired records are never matched, merged or flagged.
+
+**Pass criteria:**
+1. `Payroll DB` (from one CMDB source) and `payroll-db` (from another), both Internal, end as one active asset holding both source IDs and every link of both; the other is retired and points to it; the audit trail shows the merge.
+2. `Payrol DB` against `Payroll DB` gives one possible-duplicate finding, not a merge; so does an exact pair with different labels; running the check again adds nothing.
+3. `srv-app-01` and `srv-app-02` are never matched or flagged.
+4. A name matches only records the person could see; a Restricted record is never a match or candidate for someone at Internal.
+5. Re-importing either CMDB source after a merge updates the kept asset, not the retired one.
+6. Lint and type checks pass.
+
+---
+
+Task: S4-008
+
+**Goal:** The AI proposes and our code decides (D45.6): each chunk's extracted links are checked against the rules, confident ones go live in the graph with their source, and the rest wait for the Analyst, so the graph holds only live facts (D38).
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D16 (a), (c), D24, D37, D38, D39, D40, D41, D45.5, D45.6, D51, D52.4, D52.5 (every live link and finding traceable to its document), D56, D67, D69, D73, D207 (AI links are removed only through the Analyst). Read the S4 shared notes ("Rule checks", "`review_findings`", "Live AI links", "Whose view", "Document status").
+
+**Depends on:** S4-001 (schemas and the rule-check function), S4-002 (tables, queues, the `decide/` module, jobs helpers), S4-007 (the matcher).
+
+**Hot files:** none (its own `processing/decide/` folder).
+
+**Behaviour:**
+1. **Full mode** (`processing.chunk-resolve`, 4 at once): takes the chunk's stored extraction answer and matches each record in it with S4-007's matcher, in the uploader's view.
+2. **Each link:** S4-001's rule checks, with the matched records' kinds. All three pass, it's not already in the graph, and the Analyst hasn't rejected or removed that link before: it goes **live** (shared notes, "Live AI links"), with a `link` finding at status `live`. Otherwise: a `pending` `link` finding with its failed checks, each end's match or candidates, and the sentence. A link the Analyst rejected or removed is never raised again.
+3. **New records (planner's reading, S4-Q6):** a record in the answer with no match (none or uncertain) of kind risk, control, policy or incident becomes one `record` finding (pending) per document per normalised name and kind, and any link ending at it points to that finding. Unmatched assets never become proposals (assets come only from asset lists, D40); links to them wait as `link` findings. Nothing new is written to Neo4j for a proposal.
+4. **All in one go per chunk:** the live links and their `link.created` entries in one Neo4j transaction (D37); the findings, the chunk-to-record rows (every clearly matched record) and the chunk's move to `resolved` in one Postgres transaction. A crash between the two is safe: a re-run makes no second link (merged) and no second finding (the finding key).
+5. **Mentions mode** (embed-only documents): no Gemma answer; links the chunk to the org's active records whose number, or whose name after `normaliseName`, appears in the chunk's text as whole words; writes only chunk-to-record rows and the stage; no findings, no graph writes.
+6. **Labels (D51):** findings and proposed records carry the document's label; live links carry it as `sourceLabel`.
+7. **The document's end:** when its last chunk is resolved, the document becomes `processed`; when a chunk's step has used its last try, the document becomes `failed` with that step's code (the other chunks still finish).
+8. **Nothing else changes in S1–S3 code:** live links show on the record pages through S1's link reads (origin `ai`), and `POST /api/v1/links/remove` keeps refusing them (D207).
+
+**Pass criteria:**
+1. A policy text whose sentence names an existing control and an existing policy ("Control X is governed by the Access Control Policy") yields a live `GOVERNED_BY` link from the control to the policy, origin `ai`, with its source document, chunk, sentence, model, prompt version and label, a `link.created` audit entry, and a `live` finding.
+2. A link whose sentence doesn't name both ends, whose direction is wrong, or one of whose ends isn't a clear match waits as a `pending` finding listing exactly the failed checks; nothing is written to Neo4j for it.
+3. A SOC ticket about an incident not yet in the graph gives one `record` finding for the incident and `pending` link findings pointing to it.
+4. Resolving the same chunk twice adds no link, finding or chunk-to-record row.
+5. A fast-loaded document's chunks get chunk-to-record rows for the records they name, and no findings.
+6. A document ends Processed when every chunk is resolved; records the uploader couldn't see are never linked or named in a finding.
+7. Lint and type checks pass.
+
+---
+
+Task: S4-009
+
+**Goal:** Gemma suggests which framework requirements each control satisfies, and which NIST 800-53 controls each SOC 2 criterion maps to, and every suggestion waits for the Analyst (D16(b), D20, D212 (4)).
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D16 (b), D20 (SOC 2 links: the AI suggests, the Analyst approves), D47 (long tasks return a job ID), D50 (Framework mappings row), D51, D52.1, D52.3, D56, D59, D66, D67, D72 (Gemma ×1), D175, D212 (3), (4). Read the S4 shared notes and the S2 shared notes ("Links", "Who may map").
+
+**Depends on:** S4-001 (finding schemas, `canSuggestMappings`), S4-002 (tables, queues, the `suggest/` module), S4-003 (the text model).
+
+**Hot files:** `packages/shared/src/access/security-matrix.ts`, `packages/web/src/api/client.ts` (regenerated).
+
+**Behaviour:**
+1. **Route** `POST /api/v1/mappings/suggestions` with either `{ kind: 'controls', framework }` (one of the four framework keys: suggest `SATISFIES` links from the starter's controls to that framework's requirements) or `{ kind: 'soc2_to_nist' }` (suggest `MAPS_TO` links from each SOC 2 criterion to NIST 800-53 controls; planner's reading S4-Q7: 800-53 only, the direction S2 uses for citing to cited). Only people with the Framework-mappings `edit` cell (`canSuggestMappings`; Admin and Compliance Manager, and API keys with those roles) may start one; others get 403. Answers 202 with the job ID; while the same run is still queued or running for the org, another start answers 202 with no new job and says one is already running. Audited as `mapping_suggestions.started` (meta: kind and framework). Its security-matrix row: `framework_mapping` / `edit`, org-walled, labels on.
+2. **The run** (`processing.mapping-suggest`, Gemma one at a time): for each item (each active control the starter can see at their clearance, or each SOC 2 criterion), takes the 5 closest catalog items of the target framework by name embedding (the vector indexes; items with no embedding yet are skipped and counted), and asks Gemma (prompt version, for example `suggest-mappings-v1`) which of those 5, if any, truly fit, each with a short reason. The control's own text is org data, so it goes inside `<UNSTRUCTURED_DOCUMENT_CONTEXT>` (D52.3), and the prompt holds nothing the starter couldn't see (D52.1). Picks outside the 5 are dropped.
+3. **Every pick waits for the Analyst:** one `mapping` finding (pending) per pick, label the higher of the two ends', model and prompt version recorded. Never written to Neo4j here. A pair already linked, or already suggested (any status), is skipped.
+4. **Ollama down:** the run waits and carries on later (D45.7). Re-running a finished run adds nothing for pairs already suggested.
+5. **Web client:** regenerate `packages/web/src/api/client.ts` so S4-010 can call the route.
+
+**Pass criteria:**
+1. A Compliance Manager starting `controls` for ISO 27001 gets 202 with a job ID; a second start while it runs gets "already running"; a Risk Manager, Auditor, Analyst or Viewer gets 403; another org's people never see or start this org's run.
+2. With the real Gemma, the run leaves `pending` `mapping` findings, each pairing a control with one of its 5 closest requirements, and writes nothing to Neo4j.
+3. `soc2_to_nist` leaves `MAPS_TO` suggestions from SOC 2 criteria to NIST 800-53 controls only.
+4. A control above the starter's clearance is never sent to Gemma or suggested.
+5. The route has its security-matrix row; the web client knows it.
+6. Lint and type checks pass.
+
+---
+
+Task: S4-010
+
+**Goal:** Admins and Compliance Managers can start AI mapping suggestions from the Frameworks screen, and know where the results will appear.
+
+**Fast mode (D222, D223, D227):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks.
+
+**Decisions:** D1 (looks like a finished product), D2 (ServiceNow style), D16 (b), D20, D27 #7, D50, D212 (3), (4). Read the S4 shared notes and the S2 shared notes.
+
+**Depends on:** S4-009 (the route and the regenerated client).
+
+**Hot files:** none (the frameworks feature folder; it reads `packages/web/src/api/client.ts` and changes nothing there).
+
+**Where things are now:** the Frameworks screen is `packages/web/src/features/frameworks/` (`FrameworkList.tsx`, `FrameworkPage.tsx`, `RequirementPage.tsx`).
+
+**Behaviour:**
+1. On each framework's page, people for whom `canSuggestMappings` holds see a **"Suggest mappings"** action; on the SOC 2 page they also see **"Suggest links to NIST 800-53"**. Nobody else sees either.
+2. Choosing one opens a short confirmation in plain words: it runs in the background on the local AI, it can take a long time, and the suggestions go to the Analyst's review queue for approval before anything changes. Confirming calls the route.
+3. Afterwards the page shows "Started" or "Already running", and errors (403, rate limit, server error) the app's usual way with the reference ID.
+4. The look matches the rest of the app (shadcn/ui).
+
+**Pass criteria:**
+1. An Admin or Compliance Manager sees the action(s), confirms, and sees "Started"; doing it again while it runs shows "Already running".
+2. A Risk Manager, Control Owner, Auditor, Analyst or Viewer sees neither action.
+3. Lint and type checks pass.
 
 ---
 
