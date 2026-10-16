@@ -19,6 +19,11 @@ export const APP_SETTINGS: readonly AppSetting[] = [
   { name: 'BETTER_AUTH_SECRET', required: true },
   { name: 'NEO4J_URI', required: true, macDefault: 'bolt://127.0.0.1:7687' },
   { name: 'S3_ENDPOINT', required: true, macDefault: 'http://127.0.0.1:8333' },
+  // Ollama on the Mac (D19, D57); the containers get http://host.docker.internal:11434 (compose).
+  { name: 'OLLAMA_BASE_URL', required: true, macDefault: 'http://127.0.0.1:11434' },
+  // The model names, so the model stays swappable (D8); gemma4:12b and bge-m3 when unset.
+  { name: 'AI_TEXT_MODEL', required: false },
+  { name: 'AI_EMBEDDING_MODEL', required: false },
   { name: 'BETTER_AUTH_URL', required: false, macDefault: 'https://grc.localhost' },
   { name: 'HOST', required: false },
   { name: 'PORT', required: false },
