@@ -12,7 +12,11 @@
 //      assets again with a write lock, decides each row again against them, takes the new numbers
 //      in one go, then creates and updates. A batch that fails keeps none of its changes or entries;
 //   5. draws the HOSTS and RUNS links in batches of 200 the same way (MERGE: an existing link is
-//      left alone, a new one is `link.created`);
+//      left alone, a new one is `link.created`). Both ends must be at or below the runner's
+//      clearance (D200, D51): an end above it is `unknown_parent`, the same as a missing one, when
+//      the links are resolved, and is refused again inside the link batch's transaction (both ends
+//      write-locked, then their labels checked), so a label raised meanwhile draws no link, counts
+//      nothing and writes no entry;
 //   6. ends the import `done` with its counts and at most 200 row problems, with the
 //      `import.finished` entry in the same Postgres transaction.
 // Every asset it creates or changes and every link it adds stores `importId`; every entry it writes
@@ -27,7 +31,7 @@
 import { randomUUID } from 'node:crypto';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import neo4j, { type ManagedTransaction } from 'neo4j-driver';
-import { canImportAssets, isLabel, LABELS, type ImportMapping, type Label } from '@grc/shared';
+import { canImportAssets, isLabel, isVisible, LABELS, type ImportMapping, type Label } from '@grc/shared';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import type { AuditService } from '../../audit/audit.service.js';
@@ -42,6 +46,7 @@ import { member, user } from '../../identity/schema.js';
 import type { JobsService } from '../../jobs/jobs.module.js';
 import { linkTargetId } from '../../records/links.service.js';
 import { NUMBER_CLASH_ATTEMPTS, isNumberClash } from '../../records/record-numbers.js';
+import { visibleLabels } from '../../records/record-queries.js';
 import type { FileStore } from '../../storage/file-store.js';
 import {
   MAX_IMPORT_ERRORS,
@@ -343,12 +348,17 @@ interface ResolvedLink {
   childId: string;
 }
 
-/** Draws one batch of HOSTS and RUNS links in one transaction; answers how many were new. */
+/**
+ * Draws one batch of HOSTS and RUNS links in one transaction; answers how many were new. Both ends
+ * are write-locked and their labels checked against the runner's clearance first: a link with an
+ * end above it is not drawn, not counted and gets no entry (D200, D51).
+ */
 async function writeLinkBatch(deps: AssetImportDeps, ctx: RunContext, batch: ResolvedLink[]): Promise<number> {
   return deps.outbox.withAuditedWrites(ctx.orgId, runnerActor(ctx.runner), async (tx) => {
     const audits: OutboxAudit[] = [];
     let added = 0;
     const now = ctx.now();
+    const visible = visibleLabels(ctx.planRunner.clearance);
     for (const type of ['HOSTS', 'RUNS'] as const) {
       const links = batch
         .map((l, i) => ({ i, parentId: l.parentId, childId: l.childId, type: l.link.type }))
@@ -359,6 +369,10 @@ async function writeLinkBatch(deps: AssetImportDeps, ctx: RunContext, batch: Res
         `UNWIND $links AS l
          MATCH (p:Asset {id: l.parentId})
          MATCH (c:Asset {id: l.childId})
+         SET p.__lock = true, c.__lock = true
+         REMOVE p.__lock, c.__lock
+         WITH l, p, c
+         WHERE p.sensitivity IN $visible AND c.sensitivity IN $visible
          MERGE (p)-[r:${type}]->(c)
          ON CREATE SET r.createdAt = $now, r.createdBy = $userId, r.origin = 'import', r.importId = $importId,
                        r.__created = $token
@@ -366,7 +380,7 @@ async function writeLinkBatch(deps: AssetImportDeps, ctx: RunContext, batch: Res
          REMOVE r.__created
          RETURN l.i AS i, created, p.number AS fromNumber, p.sensitivity AS fromLabel,
                 c.number AS toNumber, c.sensitivity AS toLabel`,
-        { links, now, userId: ctx.runner.userId, importId: ctx.importId, token },
+        { links, now, userId: ctx.runner.userId, importId: ctx.importId, token, visible },
       );
       for (const record of res.records) {
         if (record.get('created') !== true) continue;
@@ -585,15 +599,19 @@ async function importRows(
     if (deps.afterBatch) await deps.afterBatch(batchNo);
   }
 
-  // The links of the rows imported, their ends found by alias in what the graph holds now.
+  // The links of the rows imported, their ends found by alias in what the graph holds now. That read
+  // runs as the writer, which sees every label, so an end above the runner's clearance is skipped
+  // and noted as `unknown_parent`, the same as a missing one (D200, D51).
   const links = plan.links.filter((l) => !refusedRows.has(l.row));
   if (links.length > 0) {
     const now = await readStoredBySource(deps.graph, data.orgId, imp.source);
+    const ifVisible = (asset: StoredAsset | undefined): StoredAsset | undefined =>
+      asset !== undefined && isVisible(ctx.planRunner.clearance, asset.sensitivity) ? asset : undefined;
     const resolved: ResolvedLink[] = [];
     const noted = new Set(problems.filter((p) => p.code === 'unknown_parent').map((p) => `${p.row}:${p.field ?? ''}`));
     for (const link of links) {
-      const parent = now.get(link.parentAlias);
-      const child = now.get(link.childAlias);
+      const parent = ifVisible(now.get(link.parentAlias));
+      const child = ifVisible(now.get(link.childAlias));
       if (parent && child) {
         // Two aliases of one asset never link it to itself.
         if (parent.id !== child.id) resolved.push({ link, parentId: parent.id, childId: child.id });

@@ -23,7 +23,9 @@
 // - `hostedOn` X gives `(X)-[:HOSTS]->(this)` and `runsOn` X gives `(X)-[:RUNS]->(this)`, X found
 //   by the same source's alias among the known assets and this file's imported rows; a cell may
 //   name several, separated by `;` or `,`. An X found nowhere is a note (`unknown_parent`); a row
-//   naming itself is a note (`bad_value`) and draws nothing.
+//   naming itself is a note (`bad_value`) and draws nothing. A known asset labelled above the
+//   runner's clearance counts as found nowhere (D200, D51): no link to it is planned and the row
+//   gets the same `unknown_parent`, so the runner can't learn that it exists.
 // A row problem holds the row number, our field name and a code, never a cell value (D163).
 import {
   ASSET_TYPES,
@@ -458,7 +460,12 @@ export function planImport(input: ImportPlanInput): ImportPlan {
   });
 
   const importedAliases = new Set(plan.accepted.map((c) => c.alias));
-  const isKnown = (alias: string): boolean => input.stored.has(alias) || importedAliases.has(alias);
+  // A stored asset the runner's clearance doesn't cover is unknown to them, the same as a missing one.
+  const isKnown = (alias: string): boolean => {
+    const stored = input.stored.get(alias);
+    if (stored !== undefined) return isVisible(input.runner.clearance, stored.sensitivity);
+    return importedAliases.has(alias);
+  };
   for (const candidate of plan.accepted) {
     const { links, notes } = rowLinks(candidate, input.source, isKnown);
     plan.links.push(...links);
