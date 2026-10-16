@@ -26,12 +26,43 @@
 //   that is done is left alone, evidence already attached (the same file on the same control) and
 //   a finding already there (its `sourceReference`) are not added again, so a re-run adds nothing
 //   and writes no entry. A run that stopped part-way finishes the missing steps, the import too.
+// - Then (S5-007) each org's fixed review findings (demo-intake/demo-review.ts), what processing
+//   would have left for the Analyst, with no Gemma and no bge-m3 call (D82):
+//   - the few records they need beyond S1's (a pair of assets with close spellings, and in Acme a
+//     policy), added as the Admin through RecordsService, found again by their source IDs;
+//   - the demo documents they come from get their chunks the way S4's reader stores them
+//     (`readDocument`: the stored file read in the file sandbox, the same chunker, the document
+//     moved to `processing` and its embed job queued, so the worker later only embeds them). That
+//     needs bge-m3's tokenizer file: when it is missing the seed says which command sets it up, as
+//     the worker does, and adds those findings on the next run;
+//   - each document's Gemma-style answer goes through S4-008's own rules (decide-rules.ts) in the
+//     uploader's view: the rule checks, the finding keys and labels, the proposed new records, and
+//     the links that pass every check written live like S4's live links (`writeLiveLinks`: origin
+//     `ai` with their source, and their `link.created` entries); then, in one Postgres
+//     transaction, the `record` and `link` findings. A link the Analyst rejected or removed is
+//     never raised again;
+//   - the possible duplicate pair and the suggested mappings, with S4-007's and S4-009's keys.
+//   Every finding's key is S4's, so a re-run adds nothing, and a live link whose finding is there
+//   (whatever its status) is never written again. A removed upload gets nothing more (S5-004).
+//   Records or documents a finding needs that aren't there yet (an import still running in the
+//   worker, a document that failed) leave it for a later run, and the seed says how many wait.
+//   Without the processing and review migrations the whole step is skipped, the others still run,
+//   and the seed ends saying so (exit code 1).
 // - DEMO_ORG_SLUG_SUFFIX (optional, lowercase letters and digits) makes each slug
 //   `<slug>-<suffix>`. The org IDs come from the slugs, so tests use it to stay off the live demo
 //   orgs (D176).
 import { createHash, randomBytes, randomUUID, scrypt } from 'node:crypto';
 import { basename } from 'node:path';
 import type { DemoAssetList, DemoIntake, DemoIntakeRole } from './demo-intake/demo-intake.js';
+import type {
+  DemoAnswerLink,
+  DemoAnswerRecord,
+  DemoDocumentAnswer,
+  DemoMatched,
+  DemoRequirementRef,
+  DemoReview,
+  DemoReviewKind,
+} from './demo-intake/demo-review.js';
 import type { DemoMapping } from './demo-mappings.js';
 import type { DemoData, DemoKind } from './demo-records.js';
 import type { ScriptDb, ScriptTx } from './org-script-env.js';
@@ -49,6 +80,9 @@ const { DEMO_MAPPINGS } = (await import(
 const { DEMO_INTAKE, demoIntakeFile, demoValidUntil } = (await import(
   new URL('./demo-intake/demo-intake.ts', import.meta.url).href
 )) as typeof import('./demo-intake/demo-intake.js');
+const { DEMO_REVIEW } = (await import(
+  new URL('./demo-intake/demo-review.ts', import.meta.url).href
+)) as typeof import('./demo-intake/demo-review.js');
 const { toHostAddress } = (await import(
   new URL('./host-address.ts', import.meta.url).href
 )) as typeof import('./host-address.js');
@@ -811,12 +845,978 @@ function importLine(result: ImportResult): string {
     : 'asset list imported';
 }
 
+// ---- S5-007: the demo review findings ----
+
+type MatchStep = 'exact' | 'spelling' | 'meaning';
+
+/** A record a name may mean, as S4-007's matcher answers it (`MatchCandidate`). */
+interface MatchCandidate {
+  recordId: string;
+  number: string;
+  name: string;
+  step: MatchStep;
+  score: number;
+}
+/** What a name means (S4-007's `NameMatch`). */
+type NameMatch =
+  | { outcome: 'clear'; match: MatchCandidate; label: Label }
+  | { outcome: 'uncertain'; candidates: MatchCandidate[]; label: Label }
+  | { outcome: 'none' };
+/** A record and a link of an extraction answer (S4-001's `ExtractionRecord`, `ExtractionLink`). */
+interface AnswerRecord {
+  ref: string;
+  kind: DemoReviewKind;
+  name: string;
+  details?: Record<string, string>;
+}
+type AnswerLink = Pick<DemoAnswerLink, 'type' | 'from' | 'to' | 'sentence'>;
+/** One link after S4-008's rule checks (decide-rules.ts `EvaluatedLink`), the parts used here. */
+interface EvaluatedLink {
+  key: string;
+  type: string;
+  sentence: string;
+  failed: string[];
+  from: { kind: DemoReviewKind; match: { recordId: string; label: Label } | null };
+  to: { kind: DemoReviewKind; match: { recordId: string; label: Label } | null };
+  label: Label;
+}
+/** A proposed new record (decide-rules.ts `ProposedRecord`). */
+interface ProposedRecord {
+  key: string;
+  proposal: object;
+}
+/** Whose view a document's processing works in (S4's `MatchView`). */
+interface MatchView {
+  role: Role;
+  clearance: Label;
+  userId?: string;
+}
+/** Where a chunk's live links came from, and one link to write (live-links.ts). */
+interface LiveLinkSource {
+  documentId: string;
+  chunkId: string;
+  model: string;
+  promptVersion: string;
+  sourceLabel: Label;
+  sourceRecordType: string;
+}
+interface LiveLinkWrite {
+  key: string;
+  type: string;
+  from: { kind: DemoReviewKind; id: string };
+  to: { kind: DemoReviewKind; id: string };
+  sentence: string;
+}
+type LiveLinkOutcome = 'created' | 'ours' | 'exists';
+type Parser = { safeParse(value: unknown): { success: boolean } };
+
+/** The slices of @grc/shared and of the api's processing code the review step uses. */
+interface ReviewServices {
+  editSimilarity(a: string, b: string): number;
+  isRecordVisible(viewer: MatchView, end: { recordType: string; label: string; isOwner?: boolean }): boolean;
+  extractionAnswerSchema: Parser;
+  duplicateProposalSchema: Parser;
+  mappingProposalSchema: Parser;
+  // S4-008's decision rules (processing/decide/decide-rules.ts); `Ends` passes through unread.
+  matchedEnds(documentId: string, records: readonly AnswerRecord[], matches: readonly NameMatch[]): Ends;
+  proposedRecords(records: readonly AnswerRecord[], ends: Ends): ProposedRecord[];
+  evaluateLinks(input: {
+    chunkId: string;
+    chunkText: string;
+    documentLabel: Label;
+    links: readonly AnswerLink[];
+    ends: Ends;
+  }): EvaluatedLink[];
+  linkProposal(link: EvaluatedLink, recordFindingIds: ReadonlyMap<string, string>): object | null;
+  endsCoverSource(
+    source: { recordType: string; label: Label },
+    from: { kind: DemoReviewKind; label: Label },
+    to: { kind: DemoReviewKind; label: Label },
+  ): boolean;
+  identityOfLink(link: EvaluatedLink): unknown;
+  identityOfProposal(raw: unknown): unknown;
+  isRefused(link: unknown, refused: readonly unknown[]): boolean;
+  /** S4-004's reader, with the seed's job sender (the embed job goes to pg-boss for the worker). */
+  readDocument(job: { orgId: string; documentId: string }): Promise<{ status: string; code?: string }>;
+  /** Whether bge-m3's tokenizer files are set up; the message naming the command when they aren't. */
+  tokenizerProblem(): Promise<string | null>;
+  /** The same, but only if a document needed the tokenizer in this run (null otherwise). */
+  tokenizerProblemIfAsked(): Promise<string | null>;
+  writeLiveLinks(
+    orgId: string,
+    view: MatchView,
+    source: LiveLinkSource,
+    links: readonly LiveLinkWrite[],
+  ): Promise<Map<string, LiveLinkOutcome>>;
+  isLinkEndsChanged(err: unknown): boolean;
+  uploaderView(
+    tx: ScriptTx,
+    doc: { orgId: string; uploaderType: string; uploaderId: string },
+  ): Promise<MatchView | null>;
+  duplicateFindingKey(kind: DemoReviewKind, a: string, b: string): string;
+  mappingFindingKey(type: string, fromId: string, toId: string): string;
+  /** The text model processing names on what it proposes (`AI_TEXT_MODEL`, gemma4:12b by default). */
+  textModel: string;
+  extractionPromptVersion: string;
+  suggestPromptVersion: string;
+}
+type Ends = ReadonlyMap<string, unknown>;
+
+async function reviewServices(
+  deps: { db: ScriptDb; files: unknown },
+  outbox: object,
+  jobs: SeedJobs,
+): Promise<ReviewServices> {
+  const shared = (await import(new URL('../../shared/src/index.ts', import.meta.url).href)) as Pick<
+    ReviewServices,
+    | 'editSimilarity'
+    | 'isRecordVisible'
+    | 'extractionAnswerSchema'
+    | 'duplicateProposalSchema'
+    | 'mappingProposalSchema'
+  >;
+  const rules = await load<
+    Pick<
+      ReviewServices,
+      | 'matchedEnds'
+      | 'proposedRecords'
+      | 'evaluateLinks'
+      | 'linkProposal'
+      | 'endsCoverSource'
+      | 'identityOfLink'
+      | 'identityOfProposal'
+      | 'isRefused'
+    >
+  >('processing/decide/decide-rules.ts');
+  const { readDocument } = await load<{
+    readDocument(d: object, data: unknown): Promise<{ status: string; code?: string }>;
+  }>('processing/reader/document-read.job.ts');
+  const { BgeM3Tokenizer, TokenizerUnavailableError } = await load<{
+    BgeM3Tokenizer: new () => { get(): Promise<unknown>; check(): Promise<void> };
+    TokenizerUnavailableError: new (...args: never[]) => Error;
+  }>('processing/reader/tokenizer.ts');
+  const { writeLiveLinks, LinkEndsChanged } = await load<{
+    writeLiveLinks(
+      d: { outbox: object },
+      orgId: string,
+      view: MatchView,
+      source: LiveLinkSource,
+      links: readonly LiveLinkWrite[],
+    ): Promise<Map<string, LiveLinkOutcome>>;
+    LinkEndsChanged: new (...args: never[]) => Error;
+  }>('processing/decide/live-links.ts');
+  const { uploaderView } = await load<Pick<ReviewServices, 'uploaderView'>>('processing/decide/uploader-view.ts');
+  const { duplicateFindingKey } = await load<Pick<ReviewServices, 'duplicateFindingKey'>>(
+    'processing/match/record-dedupe.job.ts',
+  );
+  const { mappingFindingKey } = await load<Pick<ReviewServices, 'mappingFindingKey'>>(
+    'processing/suggest/mapping-suggest.job.ts',
+  );
+  const { SUGGEST_PROMPT_VERSION } = await load<{ SUGGEST_PROMPT_VERSION: string }>(
+    'processing/suggest/suggest-prompt.ts',
+  );
+  const { EXTRACTION_PROMPT_VERSION } = await load<{ EXTRACTION_PROMPT_VERSION: string }>(
+    'processing/extract/prompt.ts',
+  );
+  const { aiSettingsFromEnv } = await load<{
+    aiSettingsFromEnv(env: Record<string, string | undefined>): { textModel: string };
+  }>('ai/ai-settings.ts');
+  const { createLogger } = await load<{
+    createLogger(stream?: { write(line: string): void }): { level: string };
+  }>('common/logger.ts');
+
+  // The reader's own log lines (codes, counts and IDs only, D164): warnings and errors, on stderr.
+  const log = createLogger({ write: (line) => void process.stderr.write(line) });
+  log.level = 'warn';
+  // Loaded on the first document that needs its chunks (about 170 MB), and only then.
+  const tokenizer = new BgeM3Tokenizer();
+  let tokenizerChecked: Promise<string | null> | undefined;
+  const readerDeps = { db: deps.db, files: deps.files, jobs, tokenizer: () => tokenizer.get(), log };
+  const tokenizerProblem = (): Promise<string | null> =>
+    (tokenizerChecked ??= tokenizer.check().then(
+      () => null,
+      (err: unknown) => {
+        if (err instanceof TokenizerUnavailableError) return err.message;
+        throw err;
+      },
+    ));
+  return {
+    editSimilarity: shared.editSimilarity,
+    isRecordVisible: shared.isRecordVisible,
+    extractionAnswerSchema: shared.extractionAnswerSchema,
+    duplicateProposalSchema: shared.duplicateProposalSchema,
+    mappingProposalSchema: shared.mappingProposalSchema,
+    matchedEnds: rules.matchedEnds,
+    proposedRecords: rules.proposedRecords,
+    evaluateLinks: rules.evaluateLinks,
+    linkProposal: rules.linkProposal,
+    endsCoverSource: rules.endsCoverSource,
+    identityOfLink: rules.identityOfLink,
+    identityOfProposal: rules.identityOfProposal,
+    isRefused: rules.isRefused,
+    readDocument: (job) => readDocument(readerDeps, job),
+    tokenizerProblem,
+    tokenizerProblemIfAsked: () => (tokenizerChecked === undefined ? Promise.resolve(null) : tokenizerProblem()),
+    writeLiveLinks: (orgId, view, source, links) => writeLiveLinks({ outbox }, orgId, view, source, links),
+    isLinkEndsChanged: (err) => err instanceof LinkEndsChanged,
+    uploaderView,
+    duplicateFindingKey,
+    mappingFindingKey,
+    textModel: aiSettingsFromEnv({ AI_TEXT_MODEL: setting('AI_TEXT_MODEL') || undefined }).textModel,
+    extractionPromptVersion: EXTRACTION_PROMPT_VERSION,
+    suggestPromptVersion: SUGGEST_PROMPT_VERSION,
+  };
+}
+
+/** The fixed demo review data doesn't fit the fixed demo files or S4's schemas. Prints only the list,
+ * the place in it and a fixed code, never a name or a sentence (D164). */
+class DemoReviewError extends Error {
+  constructor(
+    readonly code: 'sentence_not_found' | 'bad_answer' | 'bad_proposal',
+    readonly list: 'answers' | 'duplicates' | 'mappings',
+    readonly index: number,
+  ) {
+    super(`demo review ${list} ${index}: ${code}`);
+    this.name = 'DemoReviewError';
+  }
+}
+
+function reviewProblem(err: DemoReviewError): string {
+  const where = `demo review ${err.list} item ${err.index} (demo-intake/demo-review.ts)`;
+  switch (err.code) {
+    case 'sentence_not_found':
+      return `${where} has a link whose sentence isn't in any chunk of its document.`;
+    case 'bad_answer':
+      return `${where} isn't an answer S4's extraction schema accepts.`;
+    case 'bad_proposal':
+      return `${where} makes a proposal S4's finding schemas refuse.`;
+  }
+}
+
+const LABEL_ORDER: readonly Label[] = ['public', 'internal', 'confidential', 'restricted'];
+
+function isKnownLabel(value: unknown): value is Label {
+  return typeof value === 'string' && (LABEL_ORDER as readonly string[]).includes(value);
+}
+
+function higherOf(a: Label, b: Label): Label {
+  return LABEL_ORDER.indexOf(a) >= LABEL_ORDER.indexOf(b) ? a : b;
+}
+
+/** Text with its spacing ignored, as S4's `same_sentence` check compares it. */
+function squashSpacing(text: string): string {
+  return text
+    .normalize('NFC')
+    .replace(/\p{White_Space}+/gu, ' ')
+    .trim();
+}
+
+/** A record of the org's graph, found by one of its source IDs. */
+interface FoundRecord {
+  id: string;
+  number: string;
+  name: string;
+  label: Label;
+  status: string;
+  owner: string;
+}
+
+function foundKey(kind: string, sourceId: string): string {
+  return `${kind} ${sourceId}`;
+}
+
+function requirementKey(ref: DemoRequirementRef): string {
+  return `${ref.framework} ${ref.code}`;
+}
+
+/** The records of these kinds carrying these source IDs, whatever their status, by `foundKey`. */
+async function recordsBySourceId(
+  svc: Services,
+  orgId: string,
+  wanted: readonly { kind: DemoReviewKind; sourceId: string }[],
+): Promise<Map<string, FoundRecord>> {
+  const out = new Map<string, FoundRecord>();
+  const kinds = [...new Set(wanted.map((w) => w.kind))];
+  for (const kind of kinds) {
+    const sourceIds = [...new Set(wanted.filter((w) => w.kind === kind).map((w) => w.sourceId))];
+    const rows = await svc.graph.read(orgId, async (tx) => {
+      const res = await tx.run(
+        `UNWIND $sourceIds AS sid
+         MATCH (n:${NODE_LABEL[kind]}) WHERE sid IN n.sourceIds
+         RETURN sid, n.id AS id, n.number AS number, n.name AS name, n.sensitivity AS label,
+                n.status AS status, n.owner AS owner`,
+        { sourceIds },
+      );
+      return res.records;
+    });
+    for (const row of rows) {
+      const key = foundKey(kind, row.get('sid') as string);
+      if (out.has(key)) continue;
+      const label = row.get('label');
+      out.set(key, {
+        id: String(row.get('id')),
+        number: String(row.get('number')),
+        name: typeof row.get('name') === 'string' ? (row.get('name') as string) : '',
+        // A node without a known label is invisible to every reader; treated as Restricted, as S4 does.
+        label: isKnownLabel(label) ? label : 'restricted',
+        status: String(row.get('status') ?? ''),
+        owner: String(row.get('owner') ?? ''),
+      });
+    }
+  }
+  return out;
+}
+
+/** The catalog requirements with these framework keys and codes, whatever their status. */
+async function requirementsByCode(
+  svc: Services,
+  orgId: string,
+  wanted: readonly DemoRequirementRef[],
+): Promise<Map<string, FoundRecord>> {
+  const rows = await svc.graph.read(orgId, async (tx) => {
+    const res = await tx.run(
+      `UNWIND $wanted AS w
+       MATCH (n:Requirement {framework: w.framework, code: w.code})
+       RETURN w.framework + ' ' + w.code AS key, n.id AS id, n.number AS number, n.name AS name,
+              n.sensitivity AS label, n.status AS status, n.owner AS owner
+       ORDER BY CASE n.status WHEN 'active' THEN 0 ELSE 1 END`,
+      { wanted: wanted.map((w) => ({ framework: w.framework, code: w.code })) },
+    );
+    return res.records;
+  });
+  const out = new Map<string, FoundRecord>();
+  for (const row of rows) {
+    const key = row.get('key') as string;
+    if (out.has(key)) continue;
+    const label = row.get('label');
+    out.set(key, {
+      id: String(row.get('id')),
+      number: String(row.get('number')),
+      name: typeof row.get('name') === 'string' ? (row.get('name') as string) : '',
+      label: isKnownLabel(label) ? label : 'restricted',
+      status: String(row.get('status') ?? ''),
+      owner: String(row.get('owner') ?? ''),
+    });
+  }
+  return out;
+}
+
+/** Every record the org's review data names by source ID, and every requirement by code. */
+function wantedOf(review: DemoReview): {
+  records: { kind: DemoReviewKind; sourceId: string }[];
+  requirements: DemoRequirementRef[];
+} {
+  const records: { kind: DemoReviewKind; sourceId: string }[] = [];
+  const requirements: DemoRequirementRef[] = [];
+  for (const answer of review.answers) {
+    for (const rec of answer.records) {
+      const named =
+        rec.match.outcome === 'clear'
+          ? [rec.match.match]
+          : rec.match.outcome === 'uncertain'
+            ? rec.match.candidates
+            : [];
+      for (const m of named) records.push({ kind: rec.kind, sourceId: m.record });
+    }
+  }
+  for (const d of review.duplicates) records.push({ kind: d.kind, sourceId: d.a }, { kind: d.kind, sourceId: d.b });
+  for (const m of review.mappings) {
+    if (m.type === 'SATISFIES') records.push({ kind: 'control', sourceId: m.control });
+    else requirements.push(m.from);
+    requirements.push(m.to);
+  }
+  return { records, requirements };
+}
+
+/** What the review step added in one org, and what waits for a later run. */
+interface ReviewAdded {
+  records: number;
+  documentsRead: number;
+  links: number;
+  live: number;
+  proposed: number;
+  duplicates: number;
+  mappings: number;
+  /** Findings not added yet: a record, a readable document or the tokenizer they need is missing. */
+  waiting: number;
+}
+
+interface ReviewContext {
+  svc: Services;
+  isvc: IntakeServices;
+  rsvc: ReviewServices;
+  orgId: string;
+  found: Map<string, FoundRecord>;
+  requirements: Map<string, FoundRecord>;
+  added: ReviewAdded;
+}
+
+/** True when the database has the review migration's `review_findings.outcome` (and so the
+ * processing migration's tables before it). Reads only the catalog, so it needs no org context. */
+async function reviewTablesReady(db: ScriptDb): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const found = await tx.execute(
+      sql`SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'review_findings' AND column_name = 'outcome'
+          ) AS ready`,
+    );
+    return found.rows[0]?.['ready'] === true;
+  });
+}
+
+interface DocumentRow {
+  status: string;
+  label: Label;
+  uploaderType: string;
+  uploaderId: string;
+}
+
+async function documentRow(ctx: ReviewContext, documentId: string): Promise<DocumentRow | undefined> {
+  return ctx.isvc.inSystemContext(ctx.orgId, async (tx) => {
+    const found = await tx.execute(
+      sql`SELECT status, label, uploader_type, uploader_id FROM documents
+          WHERE org_id = ${ctx.orgId}::uuid AND id = ${documentId}::uuid`,
+    );
+    const row = found.rows[0];
+    if (!row) return undefined;
+    return {
+      status: String(row['status']),
+      label: isKnownLabel(row['label']) ? row['label'] : 'restricted',
+      uploaderType: String(row['uploader_type']),
+      uploaderId: String(row['uploader_id']),
+    };
+  });
+}
+
+interface ChunkRow {
+  id: string;
+  text: string;
+  label: Label;
+  recordType: string;
+}
+
+/** The document's chunks, in order. */
+async function documentChunks(ctx: ReviewContext, documentId: string): Promise<ChunkRow[]> {
+  return ctx.isvc.inSystemContext(ctx.orgId, async (tx) => {
+    const found = await tx.execute(
+      sql`SELECT id::text AS id, text, label, record_type FROM chunks
+          WHERE org_id = ${ctx.orgId}::uuid AND document_id = ${documentId}::uuid
+          ORDER BY position`,
+    );
+    return found.rows.map((row) => ({
+      id: String(row['id']),
+      text: String(row['text']),
+      label: isKnownLabel(row['label']) ? row['label'] : 'restricted',
+      recordType: String(row['record_type']),
+    }));
+  });
+}
+
+/** `[a, b]` as a JSON list, for `jsonb_array_elements_text`: one parameter for any number of values. */
+function jsonList(values: readonly string[]): string {
+  return JSON.stringify(values);
+}
+
+/** The finding keys among `keys` the org already has, whatever their status. */
+async function existingKeys(ctx: ReviewContext, keys: readonly string[]): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  return ctx.isvc.inSystemContext(ctx.orgId, async (tx) => {
+    const found = await tx.execute(
+      sql`SELECT finding_key FROM review_findings
+          WHERE org_id = ${ctx.orgId}::uuid
+            AND finding_key IN (SELECT jsonb_array_elements_text(${jsonList(keys)}::jsonb))`,
+    );
+    return new Set(found.rows.map((row) => String(row['finding_key'])));
+  });
+}
+
+/** What the Analyst refused (rejected, or removed once live) among the org's links of these types. */
+async function refusedLinks(ctx: ReviewContext, types: readonly string[]): Promise<unknown[]> {
+  if (types.length === 0) return [];
+  const rows = await ctx.isvc.inSystemContext(ctx.orgId, async (tx) => {
+    const found = await tx.execute(
+      sql`SELECT proposal FROM review_findings
+          WHERE org_id = ${ctx.orgId}::uuid AND kind = 'link' AND status IN ('rejected', 'removed')
+            AND proposal ->> 'type' IN (SELECT jsonb_array_elements_text(${jsonList(types)}::jsonb))`,
+    );
+    return found.rows;
+  });
+  return rows.map((row) => ctx.rsvc.identityOfProposal(row['proposal'])).filter((identity) => identity !== null);
+}
+
+/** Locks the document's row for the rest of the transaction; its status then (undefined when gone). */
+async function lockDocument(tx: ScriptTx, orgId: string, documentId: string, mode: 'update' | 'share') {
+  const found = await tx.execute(
+    mode === 'update'
+      ? sql`SELECT status FROM documents WHERE org_id = ${orgId}::uuid AND id = ${documentId}::uuid FOR UPDATE`
+      : sql`SELECT status FROM documents WHERE org_id = ${orgId}::uuid AND id = ${documentId}::uuid FOR SHARE`,
+  );
+  const status = found.rows[0]?.['status'];
+  return typeof status === 'string' ? status : undefined;
+}
+
+/** One `review_findings` row as processing writes it (S4 shared notes, "`review_findings`"). */
+interface FindingInsert {
+  kind: 'link' | 'record' | 'duplicate' | 'mapping';
+  status: 'pending' | 'live';
+  key: string;
+  proposal: object;
+  documentId: string | null;
+  chunkId: string | null;
+  sentence: string | null;
+  failedChecks: readonly string[];
+  label: Label;
+  model: string | null;
+  promptVersion: string | null;
+}
+
+/** Adds the finding unless its key is there already (then nothing); answers the new row. */
+async function insertFinding(
+  tx: ScriptTx,
+  orgId: string,
+  f: FindingInsert,
+): Promise<{ id: string; status: string } | undefined> {
+  const added = await tx.execute(
+    sql`INSERT INTO review_findings
+          (org_id, kind, status, finding_key, proposal, document_id, chunk_id, sentence, failed_checks,
+           label, model, prompt_version)
+        VALUES (${orgId}::uuid, ${f.kind}, ${f.status}, ${f.key}, ${JSON.stringify(f.proposal)}::jsonb,
+                ${f.documentId}::uuid, ${f.chunkId}::uuid, ${f.sentence},
+                ARRAY(SELECT jsonb_array_elements_text(${jsonList(f.failedChecks)}::jsonb)),
+                ${f.label}, ${f.model}, ${f.promptVersion})
+        ON CONFLICT (org_id, finding_key) DO NOTHING
+        RETURNING id::text AS id, status`,
+  );
+  const row = added.rows[0];
+  return row ? { id: String(row['id']), status: String(row['status']) } : undefined;
+}
+
+/**
+ * What a name of the answer means, as S4-007's matcher would answer in the uploader's view: only
+ * active records the uploader could see are matched (D51), each scored as its step scores it (the
+ * same name 1, a close spelling by `editSimilarity`, a close meaning as the data gives it). Null
+ * when a record it names isn't in the org at all yet (the links naming it wait for a later run).
+ */
+function nameMatchOf(ctx: ReviewContext, rec: DemoAnswerRecord, view: MatchView | null): NameMatch | null {
+  const { rsvc } = ctx;
+  const m = rec.match;
+  if (m.outcome === 'none') return { outcome: 'none' };
+  const seen = (matched: DemoMatched): { label: Label; candidate: MatchCandidate } | 'missing' | 'unseen' => {
+    const r = ctx.found.get(foundKey(rec.kind, matched.record));
+    if (!r) return 'missing';
+    const isOwner = view !== null && typeof view.userId === 'string' && view.userId !== '' && r.owner === view.userId;
+    if (
+      r.status !== 'active' ||
+      !view ||
+      !rsvc.isRecordVisible(view, { recordType: rec.kind, label: r.label, isOwner })
+    ) {
+      return 'unseen';
+    }
+    const score =
+      matched.step === 'meaning' ? matched.score : matched.step === 'exact' ? 1 : rsvc.editSimilarity(rec.name, r.name);
+    return { label: r.label, candidate: { recordId: r.id, number: r.number, name: r.name, step: matched.step, score } };
+  };
+  if (m.outcome === 'clear') {
+    const s = seen(m.match);
+    if (s === 'missing') return null;
+    return s === 'unseen' ? { outcome: 'none' } : { outcome: 'clear', match: s.candidate, label: s.label };
+  }
+  const kept: { label: Label; candidate: MatchCandidate }[] = [];
+  for (const c of m.candidates) {
+    const s = seen(c);
+    if (s === 'missing') return null;
+    // A merged-away record's source IDs move to the one kept: the same record is one candidate.
+    if (s !== 'unseen' && !kept.some((k) => k.candidate.recordId === s.candidate.recordId)) kept.push(s);
+  }
+  if (kept.length === 0) return { outcome: 'none' };
+  return {
+    outcome: 'uncertain',
+    candidates: kept.map((k) => k.candidate),
+    label: kept.map((k) => k.label).reduce(higherOf),
+  };
+}
+
+/** A link that passed every rule check, both ends clear, whose document everyone who sees both ends
+ * may see (D51), as a live link to write (S4-008's `toWrite`); none for any other. */
+function liveWriteOf(rsvc: ReviewServices, link: EvaluatedLink, source: { recordType: string; label: Label }) {
+  const from = link.from.match;
+  const to = link.to.match;
+  if (link.failed.length > 0 || !from || !to) return [];
+  if (
+    !rsvc.endsCoverSource(source, { kind: link.from.kind, label: from.label }, { kind: link.to.kind, label: to.label })
+  ) {
+    return [];
+  }
+  const write: LiveLinkWrite = {
+    key: link.key,
+    type: link.type,
+    from: { kind: link.from.kind, id: from.recordId },
+    to: { kind: link.to.kind, id: to.recordId },
+    sentence: link.sentence,
+  };
+  return [write];
+}
+
+/**
+ * One chunk's share of a document's answer, decided as S4-008 decides a chunk Gemma has read: the
+ * rule checks, without the links the Analyst refused before; the confident links made live in one
+ * Neo4j transaction with their `link.created` entries, while the document's row is held shared
+ * and isn't removed; then, in one Postgres transaction holding the document's row, the proposed
+ * records' findings and the links' findings (`live` for one made live, else `pending`).
+ */
+async function seedChunkAnswer(
+  ctx: ReviewContext,
+  index: number,
+  doc: DocumentRow & { id: string },
+  chunk: ChunkRow,
+  records: readonly AnswerRecord[],
+  matches: readonly NameMatch[],
+  links: readonly AnswerLink[],
+  view: MatchView | null,
+): Promise<void> {
+  const { rsvc, orgId, added } = ctx;
+  if (!rsvc.extractionAnswerSchema.safeParse({ records, links }).success) {
+    throw new DemoReviewError('bad_answer', 'answers', index);
+  }
+  const ends = rsvc.matchedEnds(doc.id, records, matches);
+  const proposed = rsvc.proposedRecords(records, ends);
+  const label = higherOf(chunk.label, doc.label);
+  const evaluated = rsvc.evaluateLinks({ chunkId: chunk.id, chunkText: chunk.text, documentLabel: label, links, ends });
+  const refused = await refusedLinks(ctx, [...new Set(evaluated.map((l) => l.type))]);
+  const kept = evaluated.filter((link) => !rsvc.isRefused(rsvc.identityOfLink(link), refused));
+
+  // A link whose finding is already there was decided (or made live) before: never written again.
+  const known = await existingKeys(
+    ctx,
+    kept.map((l) => l.key),
+  );
+  const source = { recordType: chunk.recordType, label };
+  const confident = kept.filter((l) => !known.has(l.key)).flatMap((l) => liveWriteOf(rsvc, l, source));
+  const model = rsvc.textModel;
+  const promptVersion = rsvc.extractionPromptVersion;
+  let outcomes = new Map<string, LiveLinkOutcome>();
+  if (view !== null && confident.length > 0) {
+    const liveSource: LiveLinkSource = {
+      documentId: doc.id,
+      chunkId: chunk.id,
+      model,
+      promptVersion,
+      sourceLabel: label,
+      sourceRecordType: chunk.recordType,
+    };
+    try {
+      const written = await ctx.isvc.inSystemContext(orgId, async (tx) => {
+        const status = await lockDocument(tx, orgId, doc.id, 'share');
+        if (status === undefined || status === 'removed') return null;
+        return rsvc.writeLiveLinks(orgId, view, liveSource, confident);
+      });
+      if (written === null) return;
+      outcomes = written;
+    } catch (err) {
+      // A record changed since it was matched (S4 runs the chunk again later): left for a later run.
+      if (!rsvc.isLinkEndsChanged(err)) throw err;
+      added.waiting += kept.length;
+      return;
+    }
+  }
+
+  const saved = await ctx.isvc.inSystemContext(orgId, async (tx) => {
+    const status = await lockDocument(tx, orgId, doc.id, 'update');
+    if (status === undefined || status === 'removed') return null;
+    const ids = new Map<string, string>();
+    let proposedAdded = 0;
+    for (const p of proposed) {
+      const row = await insertFinding(tx, orgId, {
+        kind: 'record',
+        status: 'pending',
+        key: p.key,
+        proposal: p.proposal,
+        documentId: doc.id,
+        chunkId: chunk.id,
+        sentence: null,
+        failedChecks: [],
+        label,
+        model,
+        promptVersion,
+      });
+      if (row) {
+        ids.set(p.key, row.id);
+        proposedAdded += 1;
+      }
+    }
+    // Proposed before (by this chunk or another of the document): point to that finding.
+    const missing = proposed.map((p) => p.key).filter((key) => !ids.has(key));
+    if (missing.length > 0) {
+      const found = await tx.execute(
+        sql`SELECT id::text AS id, finding_key FROM review_findings
+            WHERE org_id = ${orgId}::uuid
+              AND finding_key IN (SELECT jsonb_array_elements_text(${jsonList(missing)}::jsonb))`,
+      );
+      for (const row of found.rows) ids.set(String(row['finding_key']), String(row['id']));
+    }
+    let linksAdded = 0;
+    let liveAdded = 0;
+    for (const link of kept) {
+      const proposal = rsvc.linkProposal(link, ids);
+      if (!proposal) throw new DemoReviewError('bad_proposal', 'answers', index);
+      const outcome = outcomes.get(link.key);
+      const row = await insertFinding(tx, orgId, {
+        kind: 'link',
+        status: outcome === 'created' || outcome === 'ours' ? 'live' : 'pending',
+        key: link.key,
+        proposal,
+        documentId: doc.id,
+        chunkId: chunk.id,
+        sentence: link.sentence,
+        failedChecks: link.failed,
+        label: link.label,
+        model,
+        promptVersion,
+      });
+      if (row) {
+        linksAdded += 1;
+        if (row.status === 'live') liveAdded += 1;
+      }
+    }
+    return { proposedAdded, linksAdded, liveAdded };
+  });
+  if (!saved) return;
+  added.proposed += saved.proposedAdded;
+  added.links += saved.linksAdded;
+  added.live += saved.liveAdded;
+}
+
+/**
+ * One demo document's answer: its document (found by the demo file's content hash), its chunks
+ * (stored here the way S4's reader stores them, if it has none yet), what each name means in the
+ * uploader's view, and each chunk's share of the answer (the links whose sentence it holds).
+ */
+async function seedDocumentAnswer(ctx: ReviewContext, index: number, answer: DemoDocumentAnswer): Promise<void> {
+  const { orgId, added, rsvc } = ctx;
+  const documentId = await documentWithContent(ctx.isvc, orgId, sha256Hex(demoIntakeFile(answer.document)));
+  if (documentId === undefined) {
+    added.waiting += answer.links.length;
+    return;
+  }
+  const row = await documentRow(ctx, documentId);
+  // A removed upload is never processed again (S5-004, D52.5).
+  if (!row || row.status === 'removed') return;
+  const doc = { ...row, id: documentId };
+
+  let chunks = await documentChunks(ctx, documentId);
+  if (chunks.length === 0) {
+    // Only a stored document is read; one that failed keeps its findings back.
+    if ((doc.status !== 'stored' && doc.status !== 'processing') || (await rsvc.tokenizerProblem()) !== null) {
+      added.waiting += answer.links.length;
+      return;
+    }
+    const read = await rsvc.readDocument({ orgId, documentId });
+    if (read.status === 'processing') added.documentsRead += 1;
+    chunks = await documentChunks(ctx, documentId);
+    if (chunks.length === 0) {
+      added.waiting += answer.links.length;
+      return;
+    }
+  }
+
+  const view = await ctx.isvc.inSystemContext(orgId, (tx) =>
+    rsvc.uploaderView(tx, { orgId, uploaderType: doc.uploaderType, uploaderId: doc.uploaderId }),
+  );
+  const matches = new Map<string, NameMatch>();
+  for (const rec of answer.records) {
+    const m = nameMatchOf(ctx, rec, view);
+    if (m !== null) matches.set(rec.ref, m);
+  }
+
+  // Each link goes with the first chunk whose text holds its whole sentence (spacing ignored).
+  const byChunk = new Map<string, AnswerLink[]>();
+  for (const link of answer.links) {
+    if (!matches.has(link.from) || !matches.has(link.to)) {
+      added.waiting += 1;
+      continue;
+    }
+    const sentence = squashSpacing(link.sentence);
+    const chunk = chunks.find((c) => squashSpacing(c.text).includes(sentence));
+    if (!chunk) throw new DemoReviewError('sentence_not_found', 'answers', index);
+    const list = byChunk.get(chunk.id) ?? [];
+    list.push({ type: link.type, from: link.from, to: link.to, sentence: link.sentence });
+    byChunk.set(chunk.id, list);
+  }
+  for (const chunk of chunks) {
+    const links = byChunk.get(chunk.id);
+    if (!links) continue;
+    const refs = new Set(links.flatMap((l) => [l.from, l.to]));
+    const named = answer.records.filter((r) => refs.has(r.ref));
+    const records: AnswerRecord[] = named.map((r) => ({
+      ref: r.ref,
+      kind: r.kind,
+      name: r.name,
+      ...(r.details !== undefined ? { details: r.details } : {}),
+    }));
+    await seedChunkAnswer(
+      ctx,
+      index,
+      doc,
+      chunk,
+      records,
+      named.map((r) => matches.get(r.ref)!),
+      links,
+      view,
+    );
+  }
+}
+
+/** The possible duplicate pairs, as S4-007 flags them (close spelling): kept is the older record. */
+async function seedDuplicates(ctx: ReviewContext, review: DemoReview): Promise<void> {
+  const { rsvc, orgId, added } = ctx;
+  for (const [index, d] of review.duplicates.entries()) {
+    const a = ctx.found.get(foundKey(d.kind, d.a));
+    const b = ctx.found.get(foundKey(d.kind, d.b));
+    if (!a || !b) {
+      added.waiting += 1;
+      continue;
+    }
+    // Merged into one already, or one is retired: nothing left to ask.
+    if (a.id === b.id || a.status !== 'active' || b.status !== 'active') continue;
+    const [kept, other] = a.number <= b.number ? [a, b] : [b, a];
+    const proposal = {
+      kind: d.kind,
+      kept: { recordId: kept.id, number: kept.number },
+      other: { recordId: other.id, number: other.number },
+      step: 'spelling',
+      score: rsvc.editSimilarity(a.name, b.name),
+    };
+    if (!rsvc.duplicateProposalSchema.safeParse(proposal).success) {
+      throw new DemoReviewError('bad_proposal', 'duplicates', index);
+    }
+    const row = await ctx.isvc.inSystemContext(orgId, (tx) =>
+      insertFinding(tx, orgId, {
+        kind: 'duplicate',
+        status: 'pending',
+        key: rsvc.duplicateFindingKey(d.kind, a.id, b.id),
+        proposal,
+        documentId: null,
+        chunkId: null,
+        sentence: null,
+        failedChecks: [],
+        label: higherOf(a.label, b.label),
+        model: null,
+        promptVersion: null,
+      }),
+    );
+    if (row) added.duplicates += 1;
+  }
+}
+
+/** The suggested mappings, as S4-009 leaves them: never for a pair already linked. */
+async function seedMappingSuggestions(ctx: ReviewContext, review: DemoReview): Promise<void> {
+  const { rsvc, orgId, added, svc } = ctx;
+  for (const [index, m] of review.mappings.entries()) {
+    const from =
+      m.type === 'SATISFIES'
+        ? ctx.found.get(foundKey('control', m.control))
+        : ctx.requirements.get(requirementKey(m.from));
+    const to = ctx.requirements.get(requirementKey(m.to));
+    if (!from || !to) {
+      added.waiting += 1;
+      continue;
+    }
+    if (from.status !== 'active' || to.status !== 'active') continue;
+    const key = rsvc.mappingFindingKey(m.type, from.id, to.id);
+    if ((await existingKeys(ctx, [key])).size > 0) continue;
+    const linked = await graphHas(
+      svc,
+      orgId,
+      m.type === 'SATISFIES'
+        ? 'MATCH (:Control {id: $fromId})-[r:SATISFIES]->(:Requirement {id: $toId}) RETURN count(r) > 0 AS there'
+        : 'MATCH (:Requirement {id: $fromId})-[r:MAPS_TO]-(:Requirement {id: $toId}) RETURN count(r) > 0 AS there',
+      { fromId: from.id, toId: to.id },
+    );
+    if (linked) continue;
+    const proposal = {
+      type: m.type,
+      from: { recordId: from.id, number: from.number },
+      to: { recordId: to.id, number: to.number },
+      reason: m.reason,
+    };
+    if (!rsvc.mappingProposalSchema.safeParse(proposal).success) {
+      throw new DemoReviewError('bad_proposal', 'mappings', index);
+    }
+    const row = await ctx.isvc.inSystemContext(orgId, (tx) =>
+      insertFinding(tx, orgId, {
+        kind: 'mapping',
+        status: 'pending',
+        key,
+        proposal,
+        documentId: null,
+        chunkId: null,
+        sentence: null,
+        failedChecks: [],
+        label: higherOf(from.label, to.label),
+        model: rsvc.textModel,
+        promptVersion: rsvc.suggestPromptVersion,
+      }),
+    );
+    if (row) added.mappings += 1;
+  }
+}
+
+// Adds the org's demo review findings that aren't there yet (see the top of the file).
+async function seedReview(
+  svc: Services,
+  isvc: IntakeServices,
+  rsvc: ReviewServices,
+  admin: Caller,
+  review: DemoReview,
+  userOf: (role: string) => string,
+): Promise<ReviewAdded> {
+  const orgId = admin.orgId;
+  const added: ReviewAdded = {
+    records: 0,
+    documentsRead: 0,
+    links: 0,
+    live: 0,
+    proposed: 0,
+    duplicates: 0,
+    mappings: 0,
+    waiting: 0,
+  };
+  added.records = (await seedRecords(svc, admin, { records: review.records, links: [] }, userOf)).records;
+  const wanted = wantedOf(review);
+  const ctx: ReviewContext = {
+    svc,
+    isvc,
+    rsvc,
+    orgId,
+    found: await recordsBySourceId(svc, orgId, wanted.records),
+    requirements: await requirementsByCode(svc, orgId, wanted.requirements),
+    added,
+  };
+  for (const [index, answer] of review.answers.entries()) await seedDocumentAnswer(ctx, index, answer);
+  await seedDuplicates(ctx, review);
+  await seedMappingSuggestions(ctx, review);
+  return added;
+}
+
+/** One line about the review step: counts only. */
+function reviewLine(r: ReviewAdded): string {
+  const line =
+    `  review records added: ${r.records}; documents read into chunks: ${r.documentsRead}; review findings added: ` +
+    `links ${r.links} (live ${r.live}), new records ${r.proposed}, possible duplicates ${r.duplicates}, ` +
+    `suggested mappings ${r.mappings}`;
+  return r.waiting > 0 ? `${line}; waiting for what they need: ${r.waiting} (run seed:demo again later)` : line;
+}
+
 const conn = await connect();
 let intake: IntakeServices | undefined;
 try {
   const svc = await services(conn.deps);
   const isvc = await intakeServices(conn.deps, svc.outbox);
   intake = isvc;
+  const rsvc = await reviewServices(conn.deps, svc.outbox, isvc.jobs);
+  // The review step needs the processing and review migrations; without them every other step still runs.
+  const reviewReady = await reviewTablesReady(conn.deps.db);
   const lines: string[] = [];
   for (const org of ORGS) {
     const slug = suffix === '' ? org.slug : `${org.slug}-${suffix}`;
@@ -863,9 +1863,34 @@ try {
       `  uploads added: ${fed.uploads}; ${importLine(fed.assetImport)}; evidence added: ${fed.evidence}, ` +
         `audit findings added: ${fed.findings}`,
     );
+    // S5-007: the review findings, with the few records they need.
+    if (reviewReady) {
+      const reviewed = await seedReview(svc, isvc, rsvc, caller, DEMO_REVIEW[org.slug]!, userOf);
+      lines.push(reviewLine(reviewed));
+    } else {
+      lines.push('  review findings: not added (the review migrations are not applied)');
+    }
   }
   console.log('Demo logins (every user signs in with the DEMO_USER_PASSWORD value from .env):');
   console.log(lines.join('\n'));
+  if (!reviewReady) {
+    console.error(
+      "seed:demo: the database doesn't have the review tables yet: the processing and review migrations " +
+        "aren't applied. Apply the migrations, then run it again: it adds the review findings.",
+    );
+    process.exitCode = 1;
+  }
+  // Like the worker, the seed names the command that sets bge-m3's tokenizer up; the findings that
+  // need the documents' chunks are added by the next run.
+  const tokenizerProblem = await rsvc.tokenizerProblemIfAsked();
+  if (tokenizerProblem !== null) {
+    console.error(`seed:demo: ${tokenizerProblem}`);
+    console.error(
+      'seed:demo: the demo documents could not be read into chunks, so their review findings were not added; ' +
+        'run seed:demo again once that is done: it adds them.',
+    );
+    process.exitCode = 1;
+  }
 } catch (err) {
   if (err instanceof MissingSetting) {
     console.error(`seed:demo: missing setting (environment or .env): ${err.setting}. The records were not added.`);
@@ -876,6 +1901,8 @@ try {
     );
   } else if (err instanceof DemoIntakeError) {
     console.error(`seed:demo: ${intakeProblem(err)}`);
+  } else if (err instanceof DemoReviewError) {
+    console.error(`seed:demo: ${reviewProblem(err)}`);
   } else {
     console.error(`seed:demo: failed: ${describeError(err)}`);
   }
