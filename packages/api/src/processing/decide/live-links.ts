@@ -7,9 +7,12 @@
 // the sentence, S5 and S6).
 //
 // - Both ends are read again inside the transaction: each must still exist, be active and be
-//   visible in the uploader's view (D50, D51, with ownership for an "own" cell). If one isn't, the
-//   records changed since they were matched (a merge, a retirement, a relabel), nothing at all is
-//   written, and the caller runs the chunk again later (`LinkEndsChanged`).
+//   visible in the uploader's view (D50, D51, with ownership for an "own" cell), and everyone who
+//   sees both stored ends must still be allowed to see the document (`endsCoverSource`: its label at
+//   or below the higher end's, and its record type viewed by every role that views both ends). If
+//   not, the records changed since they were matched (a merge, a retirement, a relabel), nothing at
+//   all is written, and the caller runs the chunk again later (`LinkEndsChanged`), when the link
+//   that no longer qualifies waits for the Analyst.
 // - A link of the same type between the same two records, in that direction, is never doubled,
 //   whatever its origin: MERGE finds it (and locks both ends, so two chunks adding it at once make
 //   one link). The answer per link says whether it was made now (`created`), was made by this very
@@ -26,6 +29,7 @@ import { higherLabel } from '../match/match-rules.js';
 import type { MatchView } from '../match/name-matcher.js';
 import { PROCESSING_ACTOR } from '../match/record-merge.js';
 import { PROCESSING_ACTOR_ID } from '../queues.js';
+import { endsCoverSource } from './decide-rules.js';
 
 /** Where the chunk's live links came from. */
 export interface LiveLinkSource {
@@ -35,6 +39,8 @@ export interface LiveLinkSource {
   promptVersion: string;
   /** The document's label (D51). */
   sourceLabel: Label;
+  /** The record type the document's chunks carry (its D50 row). */
+  sourceRecordType: string;
 }
 
 /** One link to make live: its finding key, its type and its two matched records. */
@@ -49,7 +55,8 @@ export interface LiveLinkWrite {
 /** `created`: made now. `ours`: this chunk made it before. `exists`: it was already there. */
 export type LiveLinkOutcome = 'created' | 'ours' | 'exists';
 
-/** A matched record is gone, retired or no longer visible to the uploader: nothing was written. */
+/** A matched record is gone, retired, no longer visible to the uploader, or now labelled so that
+ * someone who sees both ends may not see the document: nothing was written. */
 export class LinkEndsChanged extends Error {
   readonly code = 'link_ends_changed';
 
@@ -122,6 +129,12 @@ export async function writeLiveLinks(
       const from = await readEnd(tx, view, link.from);
       const to = await readEnd(tx, view, link.to);
       if (!from || !to || link.from.id === link.to.id) throw new LinkEndsChanged();
+      const document = { recordType: source.sourceRecordType, label: source.sourceLabel };
+      if (
+        !endsCoverSource(document, { kind: link.from.kind, label: from.label }, { kind: link.to.kind, label: to.label })
+      ) {
+        throw new LinkEndsChanged();
+      }
       const token = randomUUID();
       const res = await tx.run(
         `MATCH (a:${NODE_LABELS[link.from.kind]} {id: $fromId}), (b:${NODE_LABELS[link.to.kind]} {id: $toId})

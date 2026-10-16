@@ -1,8 +1,10 @@
 // A document's text (S4-004; D33, D53): what the reader cuts into chunks. Only the worker runs this,
-// inside the file sandbox (src/intake/imports/file-sandbox.ts: its own Worker, a heap limit, a time
-// limit, an empty environment, its output thrown away), so the API program never opens a file.
-// Like the asset-list parsers it imports no module of ours (only types, which are erased), so the
-// sandbox's Worker loads it by itself.
+// inside the file sandbox's own process (src/intake/imports/file-sandbox.ts, `runInProcessSandbox`:
+// a Worker in a child process whose whole memory is limited, so the buffers unpdf and mammoth
+// decompress into count as well as the heap; a time limit, an empty environment, its output thrown
+// away), so the API program never opens a file and a file too big once decompressed can't take the
+// worker down. Like the asset-list parsers it imports no module of ours (only types, which are
+// erased), so the sandbox's Worker loads it by itself.
 //
 // - PDF: the text of every page through unpdf (PDF.js), pages joined with a line break. No fonts
 //   are loaded and nothing but the text is read (embedded files, scripts and images are ignored). A PDF that needs a password, or is encrypted at all, is `unreadable`.
