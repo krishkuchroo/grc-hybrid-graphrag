@@ -14,7 +14,9 @@
 //   5. in one transaction (D29): saves the chunks (stage `read`, the document's record type and
 //      label), moves the document to `processing`, and queues `processing.document-embed`.
 // Any other kind of document is left alone. A document that already has its chunks gets no second
-// set: the job only makes sure its embed job is queued (D45.5).
+// set: the job only makes sure its embed job is queued (D45.5). A document the Analyst removed
+// (S5-004, D52.5) is never read: the job ends doing nothing, also when the removal comes while the
+// file is being read (the status is checked again with the row locked, before anything is saved).
 //
 // Failures: a file that can't be read ends the document `failed` with `unreadable`, one with no
 // text with `no_text`, a sandbox limit with `timed_out` or `too_much_memory`, and a text longer
@@ -91,7 +93,7 @@ export type DocumentReadOutcome =
   | {
       status: 'skipped';
       documentId?: string;
-      reason: 'bad_job_data' | 'document_not_found' | 'not_a_readable_kind' | 'not_stored';
+      reason: 'bad_job_data' | 'document_not_found' | 'not_a_readable_kind' | 'not_stored' | 'document_removed';
     };
 
 /** Reads a document's text from its bytes; the default is the file sandbox. */
@@ -248,6 +250,10 @@ export async function readDocument(deps: DocumentReaderDeps, data: unknown): Pro
   if (!isReadableDocumentKind(doc.kind)) {
     return { status: 'skipped', documentId: doc.id, reason: 'not_a_readable_kind' };
   }
+  if (doc.status === 'removed') {
+    log.info({ ...ids, code: 'document_removed' }, 'a document read job found the document removed');
+    return { status: 'skipped', documentId: doc.id, reason: 'document_removed' };
+  }
   if (found.chunkCount > 0) {
     return { status: 'already_read', documentId: doc.id, embedJobId: found.embedJobId };
   }
@@ -321,6 +327,7 @@ export async function readDocument(deps: DocumentReaderDeps, data: unknown): Pro
       .where(whereDocument(doc.orgId, doc.id))
       .for('update');
     if (!locked) return { kind: 'gone' as const };
+    if (locked.status === 'removed') return { kind: 'removed' as const };
     if ((await chunkCountOf(tx, doc.orgId, doc.id)) > 0) {
       const embedJobId = locked.status === 'processing' ? await queueEmbed(deps, tx, doc.orgId, doc.id) : null;
       return { kind: 'already' as const, embedJobId };
@@ -351,6 +358,10 @@ export async function readDocument(deps: DocumentReaderDeps, data: unknown): Pro
   });
 
   if (saved.kind === 'gone') return { status: 'skipped', reason: 'document_not_found' };
+  if (saved.kind === 'removed') {
+    log.info({ ...ids, code: 'document_removed' }, 'a document was removed while it was read; nothing was saved');
+    return { status: 'skipped', documentId: doc.id, reason: 'document_removed' };
+  }
   if (saved.kind === 'not_stored') return { status: 'skipped', documentId: doc.id, reason: 'not_stored' };
   if (saved.kind === 'already') return { status: 'already_read', documentId: doc.id, embedJobId: saved.embedJobId };
 

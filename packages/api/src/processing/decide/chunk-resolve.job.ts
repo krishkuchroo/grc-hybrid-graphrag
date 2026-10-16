@@ -25,6 +25,13 @@
 // words, in the uploader's view (Admin at Restricted for the system's fast load); only chunk-to-record
 // rows and the stage are written: no findings, no graph writes.
 //
+// A document the Analyst removed (S5-004, D52.5): its chunks are resolved no more. The live links
+// are written inside a Postgres transaction that holds the document's row shared and checks its
+// status first, so either they commit before the removal starts (which then deletes them, with
+// every other AI link from the document) or none is written; the Postgres step locks the row too
+// and writes nothing, no findings, no chunk-to-record rows and no stage, once it is removed. A last
+// failed try never turns a removed document into a failed one.
+//
 // Re-runs (D45.5): a resolved chunk is skipped. A crash between the Neo4j and the Postgres steps is
 // safe: the re-run finds its own links (no second link, MERGE) and adds each finding once (the
 // finding key). Records that change between the match and the write (a merge, a retirement, a
@@ -37,7 +44,7 @@
 // text, a sentence, a name or an answer.
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { RECORD_KINDS, isLabel, readExtractionAnswer, type Label } from '@grc/shared';
-import { and, count, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, ne, notInArray, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { AiCallError, AiFailure, AiInputError, isAiFailure } from '../../ai/ai-failure.js';
@@ -77,7 +84,13 @@ import {
   type LinkSourceDocument,
   type ProposedRecord,
 } from './decide-rules.js';
-import { LinkEndsChanged, writeLiveLinks, type LiveLinkOutcome, type LiveLinkWrite } from './live-links.js';
+import {
+  LinkEndsChanged,
+  writeLiveLinks,
+  type LiveLinkOutcome,
+  type LiveLinkSource,
+  type LiveLinkWrite,
+} from './live-links.js';
 import { uploaderView } from './uploader-view.js';
 
 /** The code a document fails with when a chunk's resolution has used its last try. */
@@ -127,7 +140,8 @@ export type ChunkResolveOutcome =
         | 'not_ready'
         | 'already_resolved'
         | 'chunk_failed'
-        | 'changed_meanwhile';
+        | 'changed_meanwhile'
+        | 'document_removed';
     };
 
 export interface ChunkResolveDeps {
@@ -164,6 +178,8 @@ interface Loaded {
   label: Label;
   embedOnly: boolean;
   view: MatchView | null;
+  /** The document's status when the chunk was read. */
+  documentStatus: string;
 }
 
 /** What the Postgres step wrote. */
@@ -208,6 +224,12 @@ export async function resolveChunk(
   }
   const { ids } = loaded;
 
+  // A removed document's chunks are resolved no more (S5-004).
+  if (loaded.documentStatus === 'removed') {
+    log.info({ ...ids, mode, code: 'document_removed' }, 'a chunk-resolve job found its document removed');
+    return { status: 'skipped', chunkId, reason: 'document_removed' };
+  }
+
   // Embed-only documents are resolved by their mentions, every other document by Gemma's answer (D42).
   if ((mode === 'mentions') !== loaded.embedOnly) {
     log.warn({ ...ids, mode, code: 'wrong_mode' }, "a chunk-resolve job's mode doesn't fit its document");
@@ -241,6 +263,8 @@ export async function resolveChunk(
       );
     } else if (outcome.reason === 'changed_meanwhile') {
       log.info({ ...ids, mode, code: outcome.reason }, 'a chunk changed during resolution; nothing was saved');
+    } else if (outcome.reason === 'document_removed') {
+      log.info({ ...ids, mode, code: outcome.reason }, 'the document was removed during resolution; nothing was saved');
     }
     return outcome;
   } catch (err) {
@@ -289,6 +313,7 @@ async function load(deps: ChunkResolveDeps, orgId: string, chunkId: string): Pro
         documentLabel: documents.label,
         uploaderType: documents.uploaderType,
         uploaderId: documents.uploaderId,
+        documentStatus: documents.status,
       })
       .from(chunks)
       .innerJoin(documents, and(eq(documents.orgId, chunks.orgId), eq(documents.id, chunks.documentId)))
@@ -314,6 +339,7 @@ async function load(deps: ChunkResolveDeps, orgId: string, chunkId: string): Pro
       label: higherLabel(chunkLabel, documentLabel),
       embedOnly: row.uploaderType === 'system',
       view,
+      documentStatus: row.documentStatus,
     };
   });
 }
@@ -351,23 +377,22 @@ async function resolveFull(deps: ChunkResolveDeps, log: Logger, loaded: Loaded):
   //    who sees both ends may see the document they were read from (D51).
   const source: LinkSourceDocument = { recordType: loaded.recordType, label: loaded.label };
   const confident = kept.flatMap((link) => toWrite(link, source));
+  //    The document's row is held shared meanwhile, and none is written once it is removed (S5-004).
+  const liveSource: LiveLinkSource = {
+    documentId: ids.documentId,
+    chunkId: ids.chunkId,
+    model: loaded.model,
+    promptVersion: loaded.promptVersion,
+    sourceLabel: loaded.label,
+    sourceRecordType: loaded.recordType,
+  };
   const outcomes =
     view !== null && confident.length > 0
-      ? await writeLiveLinks(
-          { outbox: deps.outbox },
-          ids.orgId,
-          view,
-          {
-            documentId: ids.documentId,
-            chunkId: ids.chunkId,
-            model: loaded.model,
-            promptVersion: loaded.promptVersion,
-            sourceLabel: loaded.label,
-            sourceRecordType: loaded.recordType,
-          },
-          confident,
+      ? await unlessRemoved(deps.db, ids, () =>
+          writeLiveLinks({ outbox: deps.outbox }, ids.orgId, view, liveSource, confident),
         )
       : new Map<string, LiveLinkOutcome>();
+  if (outcomes === null) return { status: 'skipped', chunkId: ids.chunkId, reason: 'document_removed' };
 
   // 4. The findings, the chunk-to-record rows, the stage and the document's end, in one Postgres
   //    transaction.
@@ -416,6 +441,7 @@ async function resolveFull(deps: ChunkResolveDeps, log: Logger, loaded: Loaded):
       records: recordFindings.added,
     };
   });
+  if (saved === 'removed') return { status: 'skipped', chunkId: ids.chunkId, reason: 'document_removed' };
   if (!saved) return { status: 'skipped', chunkId: ids.chunkId, reason: 'changed_meanwhile' };
   return {
     status: 'resolved',
@@ -528,6 +554,7 @@ async function resolveMentions(deps: ChunkResolveDeps, loaded: Loaded): Promise<
   const saved = await save(deps, loaded, FROM_STAGE.mentions, named, () =>
     Promise.resolve({ live: 0, pending: 0, records: 0 }),
   );
+  if (saved === 'removed') return { status: 'skipped', chunkId: ids.chunkId, reason: 'document_removed' };
   if (!saved) return { status: 'skipped', chunkId: ids.chunkId, reason: 'changed_meanwhile' };
   return {
     status: 'resolved',
@@ -545,9 +572,10 @@ async function resolveMentions(deps: ChunkResolveDeps, loaded: Loaded): Promise<
 /**
  * The Postgres step, in one transaction under the intake system context: the document is locked
  * first (so the chunks of one document finish one after another and exactly one of them sees it
- * done), the chunk moves to `resolved` only from the stage this run read (else nothing is written
- * and the answer is null), then `findings` adds the findings, the chunk-to-record rows go in, and
- * the document becomes `processed` when every chunk of it is resolved.
+ * done), nothing at all is written once the Analyst removed it (the answer is `removed`, S5-004),
+ * the chunk moves to `resolved` only from the stage this run read (else nothing is written and the
+ * answer is null), then `findings` adds the findings, the chunk-to-record rows go in, and the
+ * document becomes `processed` when every chunk of it is resolved.
  */
 async function save(
   deps: ChunkResolveDeps,
@@ -555,11 +583,12 @@ async function save(
   fromStage: ChunkStage,
   named: ReadonlyMap<string, ChunkRecordKind>,
   findings: (tx: Tx) => Promise<Pick<Saved, 'live' | 'pending' | 'records'>>,
-): Promise<Saved | null> {
+): Promise<Saved | null | 'removed'> {
   const { ids } = loaded;
   return withOrgContext(deps.db, INTAKE_SYSTEM_CONTEXT(ids.orgId), async (tx) => {
     const now = deps.now?.() ?? new Date();
-    await lockDocument(tx, ids);
+    const status = await lockDocument(tx, ids);
+    if (status === undefined || status === 'removed') return 'removed' as const;
     const moved = await tx
       .update(chunks)
       .set({ stage: 'resolved', updatedAt: now })
@@ -591,13 +620,34 @@ async function save(
   });
 }
 
-// Locks the chunk's document row for the rest of the transaction.
-async function lockDocument(tx: Tx, ids: Ids): Promise<void> {
-  await tx
-    .select({ id: documents.id })
+// Locks the chunk's document row for the rest of the transaction, and answers its status as it is
+// then (undefined when the document is gone).
+async function lockDocument(tx: Tx, ids: Ids): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ status: documents.status })
     .from(documents)
     .where(and(eq(documents.orgId, ids.orgId), eq(documents.id, ids.documentId)))
     .for('update');
+  return row?.status;
+}
+
+/**
+ * Runs `write` (the live links' Neo4j transaction) inside a Postgres transaction that holds the
+ * chunk's document row shared, after checking it isn't removed (S5-004, D52.5). A removal marks the
+ * row first, so it waits for a write under way to commit, and then deletes those links with every
+ * other AI link from the document; a write that comes after it finds the document removed and
+ * writes nothing (the answer is null).
+ */
+async function unlessRemoved<T>(db: Db, ids: Ids, write: () => Promise<T>): Promise<T | null> {
+  return withOrgContext(db, INTAKE_SYSTEM_CONTEXT(ids.orgId), async (tx) => {
+    const [row] = await tx
+      .select({ status: documents.status })
+      .from(documents)
+      .where(and(eq(documents.orgId, ids.orgId), eq(documents.id, ids.documentId)))
+      .for('share');
+    if (!row || row.status === 'removed') return null;
+    return write();
+  });
 }
 
 // The document becomes `processed` (only from `processing`) when none of its chunks is left unresolved.
@@ -623,7 +673,8 @@ async function markFailed(deps: ChunkResolveDeps, log: Logger, ids: Ids, fromSta
   try {
     const marked = await withOrgContext(deps.db, INTAKE_SYSTEM_CONTEXT(ids.orgId), async (tx) => {
       const now = deps.now?.() ?? new Date();
-      await lockDocument(tx, ids);
+      const status = await lockDocument(tx, ids);
+      if (status === undefined || status === 'removed') return false;
       const failedChunk = await tx
         .update(chunks)
         .set({ stage: 'failed', updatedAt: now })
@@ -633,7 +684,13 @@ async function markFailed(deps: ChunkResolveDeps, log: Logger, ids: Ids, fromSta
       await tx
         .update(documents)
         .set({ status: 'failed', failureCode: RESOLVE_FAILURE_CODE, updatedAt: now })
-        .where(and(eq(documents.orgId, ids.orgId), eq(documents.id, ids.documentId), ne(documents.status, 'failed')));
+        .where(
+          and(
+            eq(documents.orgId, ids.orgId),
+            eq(documents.id, ids.documentId),
+            notInArray(documents.status, ['failed', 'removed']),
+          ),
+        );
       return true;
     });
     if (marked) {
