@@ -12,11 +12,20 @@
 //   is false.
 // Neither function reads a table, so neither needs SECURITY DEFINER; both run as the caller.
 //
+// `reviewQueueVisibilitySql()` builds, from the D50 "Review queue" row, the SQL for one more
+// function (S4-002, D24, D38, D73: the review findings table):
+// - `app_review_queue_visible() returns boolean`: true when the context role's "Review queue" cell
+//   is `view` or `work` (Admin and Analyst). Any other cell, an unknown role and no role set are
+//   false (fail safe). It reads no table either.
+//
 // Pure: no I/O, the same output for the same tables.
 import { LABELS, RECORD_TYPES, ROLE_TABLE, ROLES, isRole, type Cell, type RecordType, type Role } from '@grc/shared';
 
 /** The D50 cells that let a role's own context see a record type in Postgres. */
 const DB_VIEW_CELLS: ReadonlySet<Cell> = new Set<Cell>(['view', 'edit', 'approve']);
+
+/** The D50 "Review queue" cells that let a role's own context see the review findings. */
+const DB_REVIEW_QUEUE_CELLS: ReadonlySet<Cell> = new Set<Cell>(['view', 'work']);
 
 function isRecordType(value: unknown): value is RecordType {
   return typeof value === 'string' && (RECORD_TYPES as readonly string[]).includes(value);
@@ -42,6 +51,20 @@ export function roleViewPairs(): ReadonlyArray<readonly [Role, RecordType]> {
   return pairs;
 }
 
+/**
+ * What `app_review_queue_visible` answers for a role: its D50 "Review queue" cell is `view` or
+ * `work`. Anything unknown is false.
+ */
+export function roleSeesReviewQueueInDb(role: string): boolean {
+  if (!isRole(role)) return false;
+  return DB_REVIEW_QUEUE_CELLS.has(ROLE_TABLE.review_queue[role]);
+}
+
+/** Every role `app_review_queue_visible` answers true for, in `ROLES` order. */
+export function reviewQueueRoles(): readonly Role[] {
+  return ROLES.filter((role) => roleSeesReviewQueueInDb(role));
+}
+
 // The names are fixed lists of lowercase words, so they're safe as SQL literals; checked anyway.
 function literal(value: string): string {
   if (!/^[a-z_]+$/.test(value)) throw new Error(`roleVisibilitySql: unexpected name '${value}'`);
@@ -63,6 +86,17 @@ function roleViewsBody(): string {
     `  (nullif(current_setting('app.role', true), ''), $1) IN (`,
     list,
     `  ),`,
+    `  false`,
+    `)`,
+  ].join('\n');
+}
+
+function reviewQueueBody(): string {
+  const roles = reviewQueueRoles();
+  if (roles.length === 0) return 'SELECT false';
+  return [
+    `SELECT coalesce(`,
+    `  nullif(current_setting('app.role', true), '') IN (${roles.map(literal).join(', ')}),`,
     `  false`,
     `)`,
   ].join('\n');
@@ -101,5 +135,23 @@ export function roleVisibilitySql(): string {
     `REVOKE ALL ON FUNCTION app_label_visible(text) FROM PUBLIC;`,
     `GRANT EXECUTE ON FUNCTION app_role_views(text) TO grc_app;`,
     `GRANT EXECUTE ON FUNCTION app_label_visible(text) TO grc_app;`,
+  ].join('\n--> statement-breakpoint\n');
+}
+
+/**
+ * The SQL that creates `app_review_queue_visible()`, revokes it from PUBLIC and lets grc_app run
+ * it. Statements are separated by drizzle-kit's breakpoint marker, so the output pastes into a
+ * migration as it is.
+ */
+export function reviewQueueVisibilitySql(): string {
+  return [
+    `-- True when the context role's D50 "Review queue" cell is view or work; unknown values and no\n` +
+      `-- role are false (built from ROLE_TABLE by role-visibility.sql.ts).\n` +
+      `CREATE FUNCTION app_review_queue_visible() RETURNS boolean\n` +
+      `  LANGUAGE sql STABLE\n` +
+      `  SET search_path = pg_catalog\n` +
+      `  AS $$\n${reviewQueueBody()}\n$$;`,
+    `REVOKE ALL ON FUNCTION app_review_queue_visible() FROM PUBLIC;`,
+    `GRANT EXECUTE ON FUNCTION app_review_queue_visible() TO grc_app;`,
   ].join('\n--> statement-breakpoint\n');
 }

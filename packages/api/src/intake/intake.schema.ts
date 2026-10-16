@@ -4,7 +4,8 @@
 // also needs the context role to view the row's record type and the row's label to be at or below
 // the context clearance (`app_role_views`, `app_label_visible`, src/db/role-visibility.sql.ts).
 //
-// - `documents`: every stored file, identified by its content (unique content hash per org).
+// - `documents`: every stored file, identified by its content (unique content hash per org). The
+//   processing migration (S4-002) adds `failure_code`: why it failed, empty unless it did.
 // - `import_mappings`: the saved column mapping per source (D44).
 // - `imports`: one asset-list import of a document, with what it read and what it did.
 // - `push_batches`: the push API's batches, remembered so a repeat gets the first answer (D47).
@@ -41,6 +42,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { apiKeys } from '../identity/api-keys.schema.js';
 import { organization } from '../identity/schema.js';
+import { DOCUMENT_FAILURE_CODES, type DocumentFailureCode } from '../processing/failure-codes.js';
 
 /** Who stored a document: a person, a machine API key, or the system (S3-019's fast load). */
 export const UPLOADER_TYPES = ['user', 'api_key', 'system'] as const;
@@ -109,6 +111,8 @@ export const documents = pgTable(
     uploaderId: text('uploader_id').notNull(),
     source: text('source'),
     status: text('status').$type<DocumentStatus>().notNull().default('stored'),
+    /** Why the document failed (S4, the processing migration); null unless the status is `failed`. */
+    failureCode: text('failure_code').$type<DocumentFailureCode>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -135,6 +139,10 @@ export const documents = pgTable(
     check(
       'documents_source_check',
       sql`(${t.kind} = 'asset_list' AND ${t.source} IS NOT NULL) OR (${t.kind} <> 'asset_list' AND ${t.source} IS NULL)`,
+    ),
+    check(
+      'documents_failure_code_check',
+      sql`${t.failureCode} IS NULL OR (${t.status} = 'failed' AND ${inList(t.failureCode, DOCUMENT_FAILURE_CODES)})`,
     ),
   ],
 );
