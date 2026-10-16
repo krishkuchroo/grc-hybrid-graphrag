@@ -1,14 +1,14 @@
-// Org provisioning (M0-014; D4, D22, D45.5, D53, D57, D66, D73, D133): one call creates an org
-// everywhere: the Postgres org row, its audit partition, the first Admin, the `org.created` audit
-// event, `org-<orgId>` in Neo4j with its schema and the framework catalogs (S2-003), and
-// `grc-org-<orgId>` in storage.
+// Org provisioning (M0-014; D4, D22, D45.5, D53, D57, D66, D71, D73, D133): one call creates an org
+// everywhere: the Postgres org row, its audit partition and its chunk partition (S4-002), the first
+// Admin, the `org.created` audit event, `org-<orgId>` in Neo4j with its schema and the framework
+// catalogs (S2-003), and `grc-org-<orgId>` in storage.
 //
 // Safe to re-run (D45.5): the slug names the org. The org ID is derived from the slug (a
 // name-based UUID), so a re-run finds the same org without reading across the org wall, and every
 // step is "create if missing". A call that fails part-way is finished by calling it again.
 //
 // Postgres writes run as grc_app under the org's own context, so RLS applies (D57, D73). Only the
-// audit partition is made by the migration account, which owns the audit table.
+// audit and chunk partitions are made by the migration account, which owns those two tables.
 import { createHash, randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { AuditService, createAuditPartition } from '../audit/audit.service.js';
@@ -18,6 +18,7 @@ import type { CatalogFiles } from '../frameworks/catalog-files.js';
 import { loadFrameworkCatalogs } from '../frameworks/catalog-loader.js';
 import { ensureOrgSchema, type SchemaGraph } from '../graph/org-schema.js';
 import type { Tx } from '../db/org-context.js';
+import { createChunkPartition } from '../processing/chunk-partition.js';
 import { member, organization, user } from './schema.js';
 
 export interface ProvisionOrgInput {
@@ -29,7 +30,7 @@ export interface ProvisionOrgInput {
 export interface ProvisionOrgDeps {
   /** grc_app, the restricted runtime account. */
   db: Db;
-  /** grc_migrator, the migration account: only for the audit partition. */
+  /** grc_migrator, the migration account: only for the audit and chunk partitions. */
   migrator: Db;
   graph: SchemaGraph & { createOrgDatabase(orgId: string): Promise<void> };
   files: { ensureBucket(orgId: string): Promise<void> };
@@ -90,8 +91,10 @@ export async function provisionOrg(input: ProvisionOrgInput, deps: ProvisionOrgD
   const adminName = input.admin.name.trim();
   const orgId = orgIdForSlug(slug);
 
-  // 1. The audit partition, so the org.created event has somewhere to go.
+  // 1. The audit partition, so the org.created event has somewhere to go, and the chunk partition
+  // with its HNSW index (D71), so the org's documents have somewhere to be chunked.
   await createAuditPartition(deps.migrator, orgId);
+  await createChunkPartition(deps.migrator, orgId);
 
   // 2. The org row and its first Admin, in one transaction.
   const adminUserId = await inOrg(deps.db, orgId, async (tx) => {
