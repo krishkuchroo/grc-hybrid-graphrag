@@ -149,6 +149,13 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // The Home dashboard (S8-008, D27 #1): any signed-in person or key, counts only. A section only
+    // for a record type the role views (an "own" cell only over the person's own records; documents
+    // need the Uploads cell). The graph counts run as the caller's role x clearance account with a
+    // time limit, except the "own" cells' counts (a Control Owner's controls, the evidence on them
+    // and the untreated risks), read as the writer with the owner and label conditions in the
+    // query; documents are counted under Postgres row security. Not audited (a read).
+    { method: 'GET', path: '/api/v1/dashboard', access: 'any signed-in', orgWalled: true, labels: true },
     // Frameworks, the read side (S2-004). Every role views framework mappings (D50); the counts and
     // the controls under a requirement hold only what the caller can see (D51). A control's
     // requirements follow the control row, with a Control Owner limited to their own controls.
