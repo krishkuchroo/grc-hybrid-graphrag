@@ -1,14 +1,14 @@
 export const meta = {
   name: 'milestone',
-  description: 'Run one GRC milestone or a list of slices: plan each if needed, build its tasks (builder → integrator in fast mode), rebuild and push once per slice, or tag it',
+  description: 'Run one GRC milestone or a list of slices: plan each if needed, build its tasks (builder → integrator in fast mode), review and push once per slice, or tag it',
   whenToUse:
-    'Fast mode (D222, D223, the default): give the slices in order, e.g. ["s2", "s3", "s4", "s5", "s6", "s8"], with step "build". Each slice is planned if the board has no tasks for it, built builder → integrator per task (merged locally, lint and type checks only), then rebuilt and pushed to GitHub once, before the next slice starts. A blocked task stops the run after its slice. Full chain (D219): `fast: false`, one milestone or a parallel group (D181), step "plan" first, "build" after the user OKs the task list (D111). "tag" after the user approves a checkpoint (D81). Args: "s1", or { milestone: "s2" | ["s2", "s3"], step: "build", fast?: false, notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "test" | "review" | "merge" }, only?: ["<task ID>"] }.',
+    'Fast mode (D222, D223, the default): give the slices in order, e.g. ["s2", "s3", "s4", "s5", "s6", "s8"], with step "build". Each slice is planned if the board has no tasks for it, built builder → integrator per task (merged locally, lint and type checks only), then reviewed and pushed to GitHub once (no stack rebuild during the MVP, D229), before the next slice starts. A blocked task stops the run after its slice. Full chain (D219): `fast: false`, one milestone or a parallel group (D181), step "plan" first, "build" after the user OKs the task list (D111). "tag" after the user approves a checkpoint (D81). Args: "s1", or { milestone: "s2" | ["s2", "s3"], step: "build", fast?: false, notes?: { "<task ID>": "note" }, from?: { "<task ID>": "build" | "test" | "review" | "merge" }, only?: ["<task ID>"] }.',
   phases: [
     { title: 'Plan', detail: 'the planner splits a milestone into tasks and briefs' },
     { title: 'Build', detail: 'fast mode: builder → integrator (local merge, lint and type checks) per task; full chain: builder → test writer → reviewers → integrator (D219)' },
     { title: 'Real Gemma', detail: 'the real-Gemma steps, one at a time (D113)' },
     { title: 'Review and test', detail: 'fast mode: the test writer and both reviewers check the whole slice; fixes go to a builder; at most 3 rounds (D224)' },
-    { title: 'Push', detail: 'fast mode: the slice tests, one stack rebuild, a start check and one push per finished slice (D223, D224)' },
+    { title: 'Push', detail: 'fast mode: lint, type checks and one push per finished slice; the stack is rebuilt once at the end of the MVP (D223, D224, D229)' },
     { title: 'Tag', detail: 'the integrator tags the approved milestone' },
   ],
 }
@@ -26,9 +26,10 @@ const STAGES = ['build', 'test', 'review', 'merge']
 // Fast mode (D222, D223): MVP first, test after. Each task is builder →
 // integrator: the integrator merges into `main` locally and runs lint and
 // type checks only. No test writer, no reviewers, no suite, no Docker
-// rebuild and no push per task. When every task of a slice is merged, one
-// integrator rebuilds the stack once, checks the app starts and pushes once;
-// then the next slice in the list starts. Pass `fast: false` for the full
+// rebuild and no push per task. When every task of a slice is merged and
+// reviewed, one integrator pushes once; then the next slice in the list
+// starts. The stack is rebuilt once at the end of the MVP, before testing
+// (D229). Pass `fast: false` for the full
 // chain.
 const FAST = (typeof args === 'object' && args && !Array.isArray(args) && args.fast === false) ? false : true
 const FAST_RULES = [
@@ -235,7 +236,7 @@ async function planSlice(m, slices) {
       ...(FAST
         ? [
             'FAST MODE (D222–D224): each task is builder → integrator. After every task of the slice is merged, the test writer tests the whole slice and both reviewers review it, then it is pushed. Each brief describes the behaviour and the pass criteria the builder must meet, in plain words, not the shape of the code; the pass criteria are what the test writer tests. Leave out the "Tests to write" part and test commands.',
-            'Each task has one builder as its owner. The integrator merges each finished task into `main` locally (lint and type checks only); the slice is reviewed, tested, rebuilt and pushed once at its end.',
+            'Each task has one builder as its owner. The integrator merges each finished task into `main` locally (lint and type checks only); the slice is reviewed and pushed once at its end (no stack rebuild during the MVP, D229).',
             'Keep waiting chains short so many tasks can run at once (D210): give each task only the `dependsOn` it truly needs, and where a feature has a backend part and a screen, make them separate tasks so the screen waits only on what it calls.',
             'Every task costs a builder, a merge and a board update, so fold a very small change (one file, or a few lines) into the neighbouring task that needs it rather than giving it its own task (D215).',
           ]
@@ -312,9 +313,9 @@ async function listTasks(slices) {
 // at a time.
 const MERGE_LOCK = "Another run may be merging too (D210). Before you touch `main`, take the merge lock: `mkdir .git/grc-merge.lock` (it fails while another integrator holds it; then wait a minute and try again, and treat a lock older than 2 hours as stale and remove it). Hold it until your push is done or you hand in blocked, then `rmdir .git/grc-merge.lock`."
 const MIGRATIONS = 'If a branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only that task\'s own new migration (D183). Whenever `main` has a migration the live dev database lacks (after you merge into `main` or fast-forward it), run `pnpm db:migrate` in the main checkout before you run checks there (D220).'
-const FAST_MIGRATIONS = 'If a branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only that task\'s own new migration (D183). Do not apply it to the live dev database now: the slice-end step runs `pnpm db:migrate` before it rebuilds the stack (D223).'
+const FAST_MIGRATIONS = 'If a branch adds a database migration, give it the next free number on `main` at merge time and fix the migration journal to match; renumber only that task\'s own new migration (D183). Do not apply it to the live dev database now: `pnpm db:migrate` and the stack rebuild run once at the end of the MVP, before testing (D229).'
 const FAST_MERGE_RULES = [
-  'FAST MODE (D222, D223): no test suite, no browser tests, no Docker rebuild and no push now. The slice is rebuilt and pushed once when all of its tasks are merged. Your steps here are: lock, merge, lint and type checks, hand in.',
+  'FAST MODE (D222, D223, D229): no test suite, no browser tests, no Docker rebuild and no push now. The slice is pushed once when all of its tasks are merged and reviewed; the stack is rebuilt only at the end of the MVP. Your steps here are: lock, merge, lint and type checks, hand in.',
   'After the merge, run `pnpm lint` and `pnpm typecheck` in the main checkout. If only formatting fails, fix it with `prettier --write` on those files and commit the fix on `main`. Otherwise hand in "blocked" with the failing output and leave `main` as it is (never reset it).',
   'Hand in "done" with the merge commit in your findings, and `tests.run` as "none (fast mode)".',
 ]
@@ -393,23 +394,21 @@ async function pumpMerges() {
   }
 }
 
-// Fast mode (D223): when every task of a slice is merged, one integrator
-// rebuilds the stack once, checks the app starts, and pushes `main` once.
+// Fast mode (D223, D229): when every task of a slice is merged and reviewed,
+// one integrator pushes `main` once. No stack rebuild during the MVP (D229).
 async function pushSlice(m, testCommand = '') {
   const M = m.toUpperCase()
   return handIn(
     M,
     'integrator',
     [
-      `Slice ${M} is built, reviewed and tested: every task of it and its tests are merged into \`main\`. Finish the slice (D223, D224): rebuild the running stack once, check the app starts, and push \`main\` to GitHub. Merge nothing. The push is allowed without asking the user.`,
+      `Slice ${M} is built, reviewed and tested: every task of it and its tests are merged into \`main\`. Finish the slice (D223, D224, D229): push \`main\` to GitHub. Do not run \`pnpm db:migrate\` and do not rebuild or restart the Docker stack: that happens once at the end of the MVP (D229). Merge nothing. The push is allowed without asking the user.`,
       testCommand ? `Before the push, run the slice's tests once on \`main\`: \`${testCommand}\` (send the output to a file outside the repository and read the summary). If they fail, hand in "blocked" with the failures and push nothing.` : '',
       MERGE_LOCK,
       '1. In the main checkout, on `main`: `git status` must show a clean tree apart from `TASKS.md`, `RoughWork.md` and git-ignored files. If `TASKS.md` has changes (the board), commit them on `main` with the message `' + M + ': board`. Never commit `RoughWork.md` or `.env` (D81).',
       '2. Run `pnpm lint` and `pnpm typecheck`. If only formatting fails, fix it with `prettier --write` and commit; otherwise hand in "blocked" with the output and push nothing.',
-      '3. If `main` has migrations the live dev database lacks, run `pnpm db:migrate` in the main checkout (D220).',
-      `4. Rebuild and restart the stack from the main checkout: \`${STACK_UP}\`. Send the output to a file outside the repository and read only its end. Then check the app starts: within 2 minutes, \`${STACK_PS}\` shows grc-api and grc-worker running (not restarting), and \`curl -sk https://grc.localhost/api/v1/health\` returns 200 with Postgres and Neo4j reachable. If not, read \`docker logs grc-api --tail 100\`, hand in "blocked" with what it says, and push nothing.`,
-      '5. Push `main` to `origin` with a normal push (`git push origin main`). Branches stay (D84).',
-      '6. Hand in "done" with the pushed commit in your findings, and `tests.run` as "none (fast mode)".',
+      '3. Push `main` to `origin` with a normal push (`git push origin main`). Branches stay (D84).',
+      '4. Hand in "done" with the pushed commit in your findings, and `tests.run` as "none (fast mode)".',
     ],
     { label: `push:${M}`, phase: 'Push' },
   )
@@ -778,7 +777,7 @@ if (!FAST) {
 }
 
 // Fast mode (D223): the slices in order. Each one is planned if the board has
-// no tasks for it, built, then rebuilt and pushed once. A slice that ends with
+// no tasks for it, built, reviewed, then pushed once (no rebuild, D229). A slice that ends with
 // a blocked or waiting task is not pushed, and the run stops there so the user
 // hears straight away (D117); the slices after it wait for the next run.
 const slices = {}
@@ -809,7 +808,7 @@ for (const m of group) {
   // `review: ['s3']` still reviews and pushes a slice whose tasks were all done before this run.
   if (slices[m].done.every((t) => t.findings === 'already done') && !(given.review ?? []).includes(m)) {
     slices[m].pushed = 'nothing new to push'
-    log(`${M}: every task was already done, so no rebuild and no push`)
+    log(`${M}: every task was already done, so no push`)
     continue
   }
   phase(RT)
@@ -825,7 +824,7 @@ for (const m of group) {
   slices[m].pushed = h.status === 'done'
   slices[m].push = h.findings
   if (h.status !== 'done') {
-    slices[m].stoppedBecause = `the slice-end rebuild or push of ${M} failed, so the run stops here`
+    slices[m].stoppedBecause = `the slice-end push of ${M} failed, so the run stops here`
     break
   }
   log(`${M} is built and pushed`)
@@ -839,5 +838,5 @@ return {
   slices,
   next: stopped
     ? `Bring ${stopped[0].toUpperCase()} to the user: ${stopped[1].stoppedBecause ?? stopped[1].error} (D117). Fix the block (a note in \`notes\`, or \`from\`), then run again with the same slices; finished slices are skipped from the board.`
-    : 'Every slice in the list is built and pushed. Start the next slices of the MVP (D222 order: S2, S3, S4, S5, S6, S8), or, when the MVP demo works, testing and the checkpoints (D114).',
+    : 'Every slice in the list is built and pushed. Start the next slices of the MVP (D222 order: S2, S3, S4, S5, S6, S8), or, when the MVP is built: `pnpm db:migrate`, one stack rebuild and start check (D229), then testing and the checkpoints (D114).',
 }
