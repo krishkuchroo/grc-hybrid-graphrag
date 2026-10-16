@@ -10,8 +10,10 @@
 //   requirement (S2-006). /audit-findings/$id is an audit finding's page (S3-014), reached from the
 //   control and risk pages, with no menu item of its own. /intake is Data intake (S3-011): uploads
 //   and the uploaded documents, with the table's filters in the search params. /intake/imports/$id
-//   is an asset list's import (S3-012): its column mapping, run, progress and results. The other
-//   screens show their empty state until their slice.
+//   is an asset list's import (S3-012): its column mapping, run, progress and results. /review is
+//   the Analyst review queue (S5-005), its tab, status, document, record, sort and page in the search
+//   params, and /review/$id one finding with the Analyst's decisions. The other screens show their
+//   empty state until their slice.
 // Security is checked by the API (D7); these redirects only decide which screen to show.
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
@@ -40,6 +42,9 @@ import { FindingPage } from '@/features/intake/audit-findings/FindingPage';
 import { ImportPage } from '@/features/intake/imports/ImportPage';
 import { IntakePage } from '@/features/intake/IntakePage';
 import { validateIntakeSearch } from '@/features/intake/useDocuments';
+import { FindingPage as ReviewFindingPage } from '@/features/review/FindingPage';
+import { ReviewPage } from '@/features/review/ReviewPage';
+import { validateReviewSearch } from '@/features/review/useReview';
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -293,6 +298,26 @@ export function createAppRouter(queryClient: QueryClient) {
     },
   });
 
+  const reviewRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/review',
+    validateSearch: validateReviewSearch,
+    component: function ReviewRoute() {
+      const search = reviewRoute.useSearch();
+      const navigate = reviewRoute.useNavigate();
+      return <ReviewPage search={search} onSearchChange={(next) => void navigate({ search: next, replace: true })} />;
+    },
+  });
+
+  const reviewFindingRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/review/$id',
+    component: function ReviewFindingRoute() {
+      const { id } = reviewFindingRoute.useParams();
+      return <ReviewFindingPage key={id} id={id} />;
+    },
+  });
+
   const BUILT_SCREENS = new Set([
     '/risks',
     '/controls',
@@ -300,6 +325,7 @@ export function createAppRouter(queryClient: QueryClient) {
     '/assets',
     '/incidents',
     '/frameworks',
+    '/review',
     '/intake',
   ]);
   const screenRoutes = SCREENS.filter((screen) => !BUILT_SCREENS.has(screen.path)).map((screen) =>
@@ -337,6 +363,8 @@ export function createAppRouter(queryClient: QueryClient) {
       findingRoute,
       intakeRoute,
       importRoute,
+      reviewRoute,
+      reviewFindingRoute,
       ...screenRoutes,
     ]),
   ]);

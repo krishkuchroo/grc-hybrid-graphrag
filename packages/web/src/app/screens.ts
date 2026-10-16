@@ -94,7 +94,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
         path: '/review',
         label: 'Analyst review',
         icon: ClipboardList,
-        summary: 'Links the extraction was unsure about, waiting for an Analyst to approve or reject.',
+        summary:
+          'What the extraction couldn’t settle on its own (links, new records, possible duplicates and suggested mappings), waiting for an Analyst to approve or reject.',
         empty: 'Nothing is waiting for review.',
       },
     ],

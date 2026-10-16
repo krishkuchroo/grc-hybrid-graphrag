@@ -1,5 +1,8 @@
 // The signed-in frame, after ServiceNow's workspace (D2): a dark header with the org, the person,
-// their role and sign-out, and a dark left navigation to the screens (D27).
+// their role and sign-out, and a dark left navigation to the screens (D27). For the roles that see
+// the Analyst review queue (Admin and Analyst), its menu item shows how many findings wait (GET
+// /api/v1/review/counts), asked again every minute and after each decision (S5-005).
+import { canViewReviewQueue } from '@grc/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate } from '@tanstack/react-router';
 import { Building2, LogOut } from 'lucide-react';
@@ -8,8 +11,20 @@ import { HOME, SCREEN_GROUPS, type Screen } from '@/app/screens';
 import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/ui/button';
 import { formatRole, initials, ME_KEY } from '@/features/auth/session';
+import { useReviewCounts } from '@/features/review/useReview';
 
-function NavLink({ screen }: { screen: Screen }) {
+/** How many wait, as the menu shows it: nothing for none, `99+` past 99. */
+function WaitingBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="bg-brand text-chrome ml-auto min-w-5 shrink-0 rounded-full px-1.5 py-0.5 text-center text-[11px] leading-none font-bold tabular-nums">
+      {count > 99 ? '99+' : count}
+      <span className="sr-only"> waiting</span>
+    </span>
+  );
+}
+
+function NavLink({ screen, waiting }: { screen: Screen; waiting?: number | undefined }) {
   const Icon = screen.icon;
   return (
     <Link
@@ -19,6 +34,7 @@ function NavLink({ screen }: { screen: Screen }) {
     >
       <Icon className="size-4 shrink-0" aria-hidden />
       <span className="truncate">{screen.label}</span>
+      {waiting !== undefined ? <WaitingBadge count={waiting} /> : null}
     </Link>
   );
 }
@@ -28,6 +44,7 @@ export function AppShell() {
   const navigate = useNavigate();
   // The shell's route has just asked the API, so this reads the answer from the cache.
   const { data: me } = useQuery({ queryKey: ME_KEY, queryFn: api.getMe, staleTime: Infinity });
+  const reviewCounts = useReviewCounts(me !== undefined && canViewReviewQueue(me.role));
 
   const signOut = useMutation({
     mutationFn: () => api.postAuthSignOut({}),
@@ -87,7 +104,10 @@ export function AppShell() {
               <ul className="grid gap-0.5">
                 {group.screens.map((screen) => (
                   <li key={screen.path}>
-                    <NavLink screen={screen} />
+                    <NavLink
+                      screen={screen}
+                      waiting={screen.path === '/review' ? reviewCounts.data?.total : undefined}
+                    />
                   </li>
                 ))}
               </ul>

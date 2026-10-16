@@ -2131,6 +2131,686 @@ export type GetRequirementsIdResponse = {
   }>;
 };
 
+/** GET /api/v1/review/counts response. */
+export type GetReviewCountsResponse = {
+  pending: {
+    link: number;
+    record: number;
+    duplicate: number;
+    mapping: number;
+  };
+  total: number;
+};
+
+/** GET /api/v1/review/findings response. */
+export type GetReviewFindingsResponse = {
+  items: Array<
+    | {
+        id: string;
+        status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        createdAt: string;
+        decidedBy: {
+          id: string;
+          name: unknown;
+        } | null;
+        decidedAt: string | null;
+        document: {
+          id: string;
+          name: string;
+          kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        } | null;
+        kind: 'link';
+        summary: {
+          type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+          failedChecks: Array<'same_sentence' | 'ontology_fit' | 'both_ends_known'>;
+          from:
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'matched';
+                record: {
+                  recordId: string;
+                  number: string;
+                  name: string;
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                };
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'candidates';
+                candidateCount: number;
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'proposed';
+                findingId: string;
+                status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'hidden';
+              };
+          to:
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'matched';
+                record: {
+                  recordId: string;
+                  number: string;
+                  name: string;
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                };
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'candidates';
+                candidateCount: number;
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'proposed';
+                findingId: string;
+                status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'hidden';
+              };
+        };
+      }
+    | {
+        id: string;
+        status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        createdAt: string;
+        decidedBy: {
+          id: string;
+          name: unknown;
+        } | null;
+        decidedAt: string | null;
+        document: {
+          id: string;
+          name: string;
+          kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        } | null;
+        kind: 'record';
+        summary: {
+          recordKind: 'risk' | 'control' | 'policy' | 'incident';
+          name: string;
+          linkFindingCount: number;
+        };
+      }
+    | {
+        id: string;
+        status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        createdAt: string;
+        decidedBy: {
+          id: string;
+          name: unknown;
+        } | null;
+        decidedAt: string | null;
+        document: {
+          id: string;
+          name: string;
+          kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        } | null;
+        kind: 'duplicate';
+        summary: {
+          recordKind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+          kept:
+            | {
+                recordId: string;
+                number: string;
+                name: string;
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              }
+            | {
+                hidden: true;
+              };
+          other:
+            | {
+                recordId: string;
+                number: string;
+                name: string;
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              }
+            | {
+                hidden: true;
+              };
+          step: 'exact' | 'spelling' | 'meaning';
+          score: number;
+        };
+      }
+    | {
+        id: string;
+        status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        createdAt: string;
+        decidedBy: {
+          id: string;
+          name: unknown;
+        } | null;
+        decidedAt: string | null;
+        document: {
+          id: string;
+          name: string;
+          kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        } | null;
+        kind: 'mapping';
+        summary: {
+          type: 'SATISFIES' | 'MAPS_TO';
+          from:
+            | {
+                recordId: string;
+                number: string;
+                name: string;
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              }
+            | {
+                hidden: true;
+              };
+          to:
+            | {
+                recordId: string;
+                number: string;
+                name: string;
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              }
+            | {
+                hidden: true;
+              };
+        };
+      }
+  >;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** GET /api/v1/review/findings/{id} response. */
+export type GetReviewFindingsIdResponse =
+  | {
+      id: string;
+      status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      createdAt: string;
+      decidedBy: {
+        id: string;
+        name: unknown;
+      } | null;
+      decidedAt: string | null;
+      document: {
+        id: string;
+        name: string;
+        kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        uploader: {
+          type: 'user' | 'api_key' | 'system';
+          id: string;
+          name: unknown;
+        };
+        uploadedAt: string;
+      } | null;
+      sentence: unknown;
+      chunk: {
+        id: string;
+        text: string;
+        sentenceAt: {
+          start: number;
+          end: number;
+        } | null;
+      } | null;
+      model: unknown;
+      promptVersion: unknown;
+      note: unknown;
+      kind: 'link';
+      summary: {
+        type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+        failedChecks: Array<'same_sentence' | 'ontology_fit' | 'both_ends_known'>;
+        from:
+          | {
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+              name: string;
+              state: 'matched';
+              record: {
+                recordId: string;
+                number: string;
+                name: string;
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              };
+              candidates: Array<{
+                record:
+                  | {
+                      recordId: string;
+                      number: string;
+                      name: string;
+                      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                    }
+                  | {
+                      hidden: true;
+                    };
+                step: 'exact' | 'spelling' | 'meaning';
+                score: number;
+              }>;
+            }
+          | {
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+              name: string;
+              state: 'candidates';
+              candidateCount: number;
+              candidates: Array<{
+                record:
+                  | {
+                      recordId: string;
+                      number: string;
+                      name: string;
+                      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                    }
+                  | {
+                      hidden: true;
+                    };
+                step: 'exact' | 'spelling' | 'meaning';
+                score: number;
+              }>;
+            }
+          | {
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+              name: string;
+              state: 'proposed';
+              findingId: string;
+              status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+              candidates: Array<{
+                record:
+                  | {
+                      recordId: string;
+                      number: string;
+                      name: string;
+                      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                    }
+                  | {
+                      hidden: true;
+                    };
+                step: 'exact' | 'spelling' | 'meaning';
+                score: number;
+              }>;
+            }
+          | {
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+              name: string;
+              state: 'hidden';
+              candidates: Array<{
+                record:
+                  | {
+                      recordId: string;
+                      number: string;
+                      name: string;
+                      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                    }
+                  | {
+                      hidden: true;
+                    };
+                step: 'exact' | 'spelling' | 'meaning';
+                score: number;
+              }>;
+            };
+        to:
+          | {
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+              name: string;
+              state: 'matched';
+              record: {
+                recordId: string;
+                number: string;
+                name: string;
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              };
+              candidates: Array<{
+                record:
+                  | {
+                      recordId: string;
+                      number: string;
+                      name: string;
+                      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                    }
+                  | {
+                      hidden: true;
+                    };
+                step: 'exact' | 'spelling' | 'meaning';
+                score: number;
+              }>;
+            }
+          | {
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+              name: string;
+              state: 'candidates';
+              candidateCount: number;
+              candidates: Array<{
+                record:
+                  | {
+                      recordId: string;
+                      number: string;
+                      name: string;
+                      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                    }
+                  | {
+                      hidden: true;
+                    };
+                step: 'exact' | 'spelling' | 'meaning';
+                score: number;
+              }>;
+            }
+          | {
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+              name: string;
+              state: 'proposed';
+              findingId: string;
+              status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+              candidates: Array<{
+                record:
+                  | {
+                      recordId: string;
+                      number: string;
+                      name: string;
+                      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                    }
+                  | {
+                      hidden: true;
+                    };
+                step: 'exact' | 'spelling' | 'meaning';
+                score: number;
+              }>;
+            }
+          | {
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+              name: string;
+              state: 'hidden';
+              candidates: Array<{
+                record:
+                  | {
+                      recordId: string;
+                      number: string;
+                      name: string;
+                      kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                    }
+                  | {
+                      hidden: true;
+                    };
+                step: 'exact' | 'spelling' | 'meaning';
+                score: number;
+              }>;
+            };
+      };
+      outcome: {
+        result: 'created' | 'exists';
+        type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+        fromId: string;
+        fromNumber: string;
+        toId: string;
+        toNumber: string;
+        removed?: {
+          graph: 'deleted' | 'not_found';
+        };
+      } | null;
+    }
+  | {
+      id: string;
+      status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      createdAt: string;
+      decidedBy: {
+        id: string;
+        name: unknown;
+      } | null;
+      decidedAt: string | null;
+      document: {
+        id: string;
+        name: string;
+        kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        uploader: {
+          type: 'user' | 'api_key' | 'system';
+          id: string;
+          name: unknown;
+        };
+        uploadedAt: string;
+      } | null;
+      sentence: unknown;
+      chunk: {
+        id: string;
+        text: string;
+        sentenceAt: {
+          start: number;
+          end: number;
+        } | null;
+      } | null;
+      model: unknown;
+      promptVersion: unknown;
+      note: unknown;
+      kind: 'record';
+      summary: {
+        recordKind: 'risk' | 'control' | 'policy' | 'incident';
+        name: string;
+        linkFindingCount: number;
+        details: Record<string, never> | null;
+        linkFindings: Array<{
+          id: string;
+          status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+          type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+          side: 'from' | 'to';
+          other:
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'matched';
+                record: {
+                  recordId: string;
+                  number: string;
+                  name: string;
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                };
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'candidates';
+                candidateCount: number;
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'proposed';
+                findingId: string;
+                status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+              }
+            | {
+                kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                name: string;
+                state: 'hidden';
+              };
+        }>;
+      };
+      outcome: {
+        recordId: string;
+        number: string;
+        removed?: {
+          graph: 'retired' | 'already_retired';
+        };
+      } | null;
+    }
+  | {
+      id: string;
+      status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      createdAt: string;
+      decidedBy: {
+        id: string;
+        name: unknown;
+      } | null;
+      decidedAt: string | null;
+      document: {
+        id: string;
+        name: string;
+        kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        uploader: {
+          type: 'user' | 'api_key' | 'system';
+          id: string;
+          name: unknown;
+        };
+        uploadedAt: string;
+      } | null;
+      sentence: unknown;
+      chunk: {
+        id: string;
+        text: string;
+        sentenceAt: {
+          start: number;
+          end: number;
+        } | null;
+      } | null;
+      model: unknown;
+      promptVersion: unknown;
+      note: unknown;
+      kind: 'duplicate';
+      summary: {
+        recordKind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+        kept:
+          | {
+              recordId: string;
+              number: string;
+              name: string;
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              label: 'public' | 'internal' | 'confidential' | 'restricted';
+              status: 'active' | 'retired';
+              owner: {
+                id: string;
+                name: unknown;
+              };
+              sourceIds: Array<string>;
+              linkCount: number;
+            }
+          | {
+              hidden: true;
+            };
+        other:
+          | {
+              recordId: string;
+              number: string;
+              name: string;
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              label: 'public' | 'internal' | 'confidential' | 'restricted';
+              status: 'active' | 'retired';
+              owner: {
+                id: string;
+                name: unknown;
+              };
+              sourceIds: Array<string>;
+              linkCount: number;
+            }
+          | {
+              hidden: true;
+            };
+        step: 'exact' | 'spelling' | 'meaning';
+        score: number;
+      };
+      outcome: {
+        keptId: string;
+        keptNumber: string;
+        retiredId: string;
+        retiredNumber: string;
+      } | null;
+    }
+  | {
+      id: string;
+      status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      createdAt: string;
+      decidedBy: {
+        id: string;
+        name: unknown;
+      } | null;
+      decidedAt: string | null;
+      document: {
+        id: string;
+        name: string;
+        kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+        label: 'public' | 'internal' | 'confidential' | 'restricted';
+        uploader: {
+          type: 'user' | 'api_key' | 'system';
+          id: string;
+          name: unknown;
+        };
+        uploadedAt: string;
+      } | null;
+      sentence: unknown;
+      chunk: {
+        id: string;
+        text: string;
+        sentenceAt: {
+          start: number;
+          end: number;
+        } | null;
+      } | null;
+      model: unknown;
+      promptVersion: unknown;
+      note: unknown;
+      kind: 'mapping';
+      summary: {
+        type: 'SATISFIES' | 'MAPS_TO';
+        from:
+          | {
+              recordId: string;
+              number: string;
+              name: string;
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              label: 'public' | 'internal' | 'confidential' | 'restricted';
+              status: 'active' | 'retired';
+              framework: unknown;
+              code: unknown;
+              title: unknown;
+            }
+          | {
+              hidden: true;
+            };
+        to:
+          | {
+              recordId: string;
+              number: string;
+              name: string;
+              kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+              label: 'public' | 'internal' | 'confidential' | 'restricted';
+              status: 'active' | 'retired';
+              framework: unknown;
+              code: unknown;
+              title: unknown;
+            }
+          | {
+              hidden: true;
+            };
+        reason: string;
+      };
+      outcome: {
+        result: 'created' | 'exists';
+        type: 'SATISFIES' | 'MAPS_TO';
+        fromId: string;
+        fromNumber: string;
+        toId: string;
+        toNumber: string;
+        removed?: {
+          graph: 'deleted' | 'not_found';
+        };
+      } | null;
+    };
+
 /** POST /api/v1/review/findings/{id}/approve response. */
 export type PostReviewFindingsIdApproveResponse = {
   id: string;
@@ -2815,6 +3495,15 @@ export const api = {
   /** One requirement, the controls that satisfy it, and its links to other frameworks in both directions */
   getRequirementsId: (path: { id: string }): Promise<GetRequirementsIdResponse> =>
     request<GetRequirementsIdResponse>('GET', `/api/v1/requirements/${encodeURIComponent(path.id)}`),
+  /** The pending review findings per kind, and their total, in the caller's view */
+  getReviewCounts: (): Promise<GetReviewCountsResponse> =>
+    request<GetReviewCountsResponse>('GET', '/api/v1/review/counts'),
+  /** The Analyst review queue (Admins and Analysts): the AI findings in the caller's view, paged; pending and newest first by default. Filters: kind, status (one or more, comma-separated), documentId, recordId (any record a finding names) and failedCheck; sort newest or oldest. A record the caller can't see now shows as `{ hidden: true }`; findings above the caller's clearance are never listed */
+  getReviewFindings: (query?: ListQuery): Promise<GetReviewFindingsResponse> =>
+    request<GetReviewFindingsResponse>('GET', `/api/v1/review/findings${queryString(query)}`),
+  /** One review finding in full: its source document, the sentence inside its chunk text, failed checks, each end with its match or candidates, the details of its kind, and the decision and its outcome. 404 when missing, hidden or another org’s */
+  getReviewFindingsId: (path: { id: string }): Promise<GetReviewFindingsIdResponse> =>
+    request<GetReviewFindingsIdResponse>('GET', `/api/v1/review/findings/${encodeURIComponent(path.id)}`),
   /** Approve a pending review finding (the Analyst only; 403 for an Admin, every other role and API keys). The body depends on the finding's kind: a link takes `from` and `to` for an end that wasn't a clear match (one of that end's candidates; 400 end_not_chosen or end_not_candidate), and waits for a proposed new record it points to (409 end_not_approved or end_rejected); a proposed record takes `record`, the create body of its kind, labelled no lower than its document (400 label_below_source) and no higher than your clearance; a possible duplicate takes `keep`, the record to keep (by default the older one), and the kept record takes the higher of the two labels; a suggested mapping needs the Framework-mappings approve cell. Every kind takes an optional `note`. The graph change and its audit entries are written in one Neo4j transaction as origin `ai`, never doubled (outcome `exists` when the link is already there), then the finding becomes approved with its outcome and a review.approved entry. 404 when the finding or a record it names is missing or hidden; 409 already_decided when it isn't pending (the loser of two decisions at once), record_not_active when a record is retired or merged away, source_above_ends when the document is more sensitive than the link's ends allow (it can only be rejected); 400 link_not_allowed when the link doesn't fit the ontology */
   postReviewFindingsIdApprove: (
     path: { id: string },
