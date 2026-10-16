@@ -95,9 +95,13 @@ export function graphQueryData(question: string): string {
   return `${QUESTION_OPEN}\n${neutraliseQuestion(question)}\n${QUESTION_CLOSE}`;
 }
 
-/** What Gemma is held to while it writes: one field, the query, at most 2,000 characters. */
+/**
+ * What Gemma is held to while it writes: one field, the query. No length cap here, because
+ * Ollama can't turn a maxLength into a grammar; the 2,000-character limit is enforced after
+ * by `graphQueryAnswerSchema` and `checkGraphQuery`.
+ */
 export const GRAPH_QUERY_ANSWER_SHAPE = z.strictObject({
-  query: z.string().min(1).max(SEARCH_LIMITS.graphQueryMaxLength),
+  query: z.string().min(1),
 });
 
 /** What the answer must pass: the query, trimmed, 1 to 2,000 characters. */
