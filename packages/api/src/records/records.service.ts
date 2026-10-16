@@ -8,12 +8,17 @@
 // - Stale saves are refused (D69), records are retired, never deleted, and numbers come from a
 //   per-org, per-type counter (D68, D196).
 // - Log lines about a failed write hold only the error's type and code and the IDs (D163, D164).
+// - One server-side path creates with origin `ai` (S5-003): the Analyst approving a proposed record
+//   from the review queue, granted by the Review-queue `work` cell, with the finding's ID kept on
+//   the record so a retry never makes a second one (`CreateOptions`).
 import { randomUUID } from 'node:crypto';
 import neo4j, { type ManagedTransaction } from 'neo4j-driver';
 import type { Logger } from 'pino';
 import {
   LABELS,
+  NODE_LABELS,
   ROLE_TABLE,
+  can,
   canChangeLabel,
   createSchemas,
   defaultLabel,
@@ -22,6 +27,7 @@ import {
   updateSchemas,
   type Label,
   type RecordKind,
+  type RecordOrigin,
   type Role,
 } from '@grc/shared';
 import type { AuditActor, AuditOutbox, OutboxAudit } from '../audit/outbox.js';
@@ -71,6 +77,48 @@ export interface RecordOut {
   origin: 'manual' | 'import' | 'ai';
   rating?: { score: number; band: string };
   [field: string]: unknown;
+}
+
+/** A create's server-side options, which the API's create body can never set. */
+export interface CreateOptions {
+  /** Source IDs as aliases (the demo seed, imports). */
+  sourceIds?: string[];
+  /** Where the record came from (D68); `manual` unless given. `ai` is the Analyst approving a
+   * proposed record from the review queue (S5-003). */
+  origin?: RecordOrigin;
+  /** The review finding whose approval creates the record (S5-003). It is kept on the node as
+   * `findingId`, and a record that already carries it is answered as it is, with nothing written:
+   * a retry after a crash makes no second record and no second `record.created`. */
+  findingId?: string;
+  /** What grants the create: the record type's `edit` cell (`record`, the default), or, only for
+   * approving a proposed record from the review queue, the Review-queue `work` cell for a role
+   * that views the type (`review_queue`, planner's reading S5-Q2). */
+  permission?: 'record' | 'review_queue';
+}
+
+/** Whether the caller may create a record of this kind under the given permission. */
+function mayCreate(caller: Caller, kind: RecordKind, permission: 'record' | 'review_queue'): boolean {
+  if (permission === 'review_queue') {
+    return can(caller.role, 'review_queue', 'work') && can(caller.role, kind, 'view');
+  }
+  return ROLE_TABLE[kind][caller.role] === 'edit';
+}
+
+/** The record a review finding's approval made, if there is one. */
+function findingRecordQuery(kind: RecordKind, findingId: string): BuiltQuery {
+  return {
+    text: `MATCH (n:${NODE_LABELS[kind]} {findingId: $findingId}) RETURN properties(n) AS p LIMIT 1`,
+    params: { findingId },
+  };
+}
+
+/** Thrown inside a create's transaction (which then writes nothing) when the finding's record is
+ * already there; the create answers that record. */
+class AlreadyCreated extends Error {
+  constructor(readonly record: RecordOut) {
+    super('The record was already created.');
+    this.name = 'AlreadyCreated';
+  }
 }
 
 export interface RecordsServiceDeps {
@@ -170,17 +218,14 @@ export class RecordsService {
     this.log = (deps.log ?? createLogger()).child({ context: 'RecordsService' });
   }
 
-  /** `options.sourceIds` is for our own server-side callers (the demo seed, later imports): the
-   * API's create body refuses it, so a person can't set it. */
-  async create(
-    caller: Caller,
-    kind: RecordKind,
-    input: unknown,
-    options: { sourceIds?: string[] } = {},
-  ): Promise<RecordOut> {
+  /** `options` is for our own server-side callers only (see `CreateOptions`): the API's create
+   * body refuses every one of them, so a person can't set them. */
+  async create(caller: Caller, kind: RecordKind, input: unknown, options: CreateOptions = {}): Promise<RecordOut> {
     const sourceIds = options.sourceIds ?? [];
+    const origin = options.origin ?? 'manual';
+    const findingId = options.findingId;
     const body = createSchemas[kind].parse(input) as Record<string, unknown>;
-    if (ROLE_TABLE[kind][caller.role] !== 'edit') throw FORBIDDEN();
+    if (!mayCreate(caller, kind, options.permission ?? 'record')) throw FORBIDDEN();
     const label = (body['label'] as Label | undefined) ?? defaultLabel(kind, body as { dataClassification?: Label });
     if (!isVisible(caller.clearance, label)) throw LABEL_FORBIDDEN(); // D198
     const owner = body['owner'] as string | undefined;
@@ -206,18 +251,27 @@ export class RecordsService {
         createdBy: caller.userId,
         updatedAt: now,
         updatedBy: caller.userId,
-        origin: 'manual',
+        origin,
+        ...(findingId !== undefined ? { findingId } : {}),
       };
       try {
         return await this.outbox.withAuditedWrite(caller.orgId, actorOf(caller), async (tx) => {
+          if (findingId !== undefined) {
+            // A retry after a crash: the record this finding's approval made is already there.
+            const [made] = await rows(tx, findingRecordQuery(kind, findingId));
+            if (made) throw new AlreadyCreated(toOut(kind, made));
+          }
           const number = await takeNumber(tx, kind);
           const [saved] = await rows(tx, createQuery(kind, toNeo({ ...props, number })));
           const out = toOut(kind, saved!);
           const after: Record<string, unknown> = { ...fields, label, owner: out.owner, status: 'active' };
           if (sourceIds.length > 0) after['sourceIds'] = sourceIds;
+          if (origin !== 'manual') after['origin'] = origin;
+          if (findingId !== undefined) after['findingId'] = findingId;
           return { result: out, audit: this.entry('record.created', kind, out, null, after, label) };
         });
       } catch (err) {
+        if (err instanceof AlreadyCreated) return err.record;
         if (isNumberClash(err) && attempt < NUMBER_CLASH_ATTEMPTS) continue;
         throw this.failed(err, 'record create failed', { orgId: caller.orgId, kind, recordId: id });
       }
