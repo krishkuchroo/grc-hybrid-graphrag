@@ -2131,6 +2131,168 @@ export type GetRequirementsIdResponse = {
   }>;
 };
 
+/** POST /api/v1/review/findings/{id}/approve response. */
+export type PostReviewFindingsIdApproveResponse = {
+  id: string;
+  kind: 'link' | 'record' | 'duplicate' | 'mapping';
+  status: 'approved' | 'rejected';
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  decidedBy: string;
+  decidedAt: string;
+  note: unknown;
+  outcome:
+    | {
+        result: 'created' | 'exists';
+        type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+        fromId: string;
+        fromNumber: string;
+        toId: string;
+        toNumber: string;
+        removed?: {
+          graph: 'deleted' | 'not_found';
+        };
+      }
+    | {
+        recordId: string;
+        number: string;
+        removed?: {
+          graph: 'retired' | 'already_retired';
+        };
+      }
+    | {
+        keptId: string;
+        keptNumber: string;
+        retiredId: string;
+        retiredNumber: string;
+      }
+    | {
+        result: 'created' | 'exists';
+        type: 'SATISFIES' | 'MAPS_TO';
+        fromId: string;
+        fromNumber: string;
+        toId: string;
+        toNumber: string;
+        removed?: {
+          graph: 'deleted' | 'not_found';
+        };
+      }
+    | null;
+  rejectedLinkFindingIds: Array<string>;
+};
+
+/** POST /api/v1/review/findings/{id}/approve request body. */
+export type PostReviewFindingsIdApproveBody =
+  | {
+      from?: string;
+      to?: string;
+      note?: string;
+    }
+  | {
+      record: {
+        name: string;
+        owner?: string;
+        label?: 'public' | 'internal' | 'confidential' | 'restricted';
+        impact: number;
+        likelihood: number;
+        financialExposure: number;
+      };
+      note?: string;
+    }
+  | {
+      record: {
+        name: string;
+        owner?: string;
+        label?: 'public' | 'internal' | 'confidential' | 'restricted';
+        code: string;
+        framework: string;
+        controlStatus: 'not_implemented' | 'planned' | 'implemented';
+        lastTestedDate: string;
+      };
+      note?: string;
+    }
+  | {
+      record: {
+        name: string;
+        owner?: string;
+        label?: 'public' | 'internal' | 'confidential' | 'restricted';
+        policyVersion: string;
+        effectiveDate: string;
+      };
+      note?: string;
+    }
+  | {
+      record: {
+        name: string;
+        owner?: string;
+        label?: 'public' | 'internal' | 'confidential' | 'restricted';
+        severity: 'low' | 'medium' | 'high' | 'critical';
+        incidentStatus: 'new' | 'investigating' | 'contained' | 'resolved' | 'closed';
+        occurredAt: string;
+      };
+      note?: string;
+    }
+  | {
+      keep?: string;
+      note?: string;
+    }
+  | {
+      note?: string;
+    };
+
+/** POST /api/v1/review/findings/{id}/reject response. */
+export type PostReviewFindingsIdRejectResponse = {
+  id: string;
+  kind: 'link' | 'record' | 'duplicate' | 'mapping';
+  status: 'approved' | 'rejected';
+  label: 'public' | 'internal' | 'confidential' | 'restricted';
+  decidedBy: string;
+  decidedAt: string;
+  note: unknown;
+  outcome:
+    | {
+        result: 'created' | 'exists';
+        type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+        fromId: string;
+        fromNumber: string;
+        toId: string;
+        toNumber: string;
+        removed?: {
+          graph: 'deleted' | 'not_found';
+        };
+      }
+    | {
+        recordId: string;
+        number: string;
+        removed?: {
+          graph: 'retired' | 'already_retired';
+        };
+      }
+    | {
+        keptId: string;
+        keptNumber: string;
+        retiredId: string;
+        retiredNumber: string;
+      }
+    | {
+        result: 'created' | 'exists';
+        type: 'SATISFIES' | 'MAPS_TO';
+        fromId: string;
+        fromNumber: string;
+        toId: string;
+        toNumber: string;
+        removed?: {
+          graph: 'deleted' | 'not_found';
+        };
+      }
+    | null;
+  rejectedLinkFindingIds: Array<string>;
+};
+
+/** POST /api/v1/review/findings/{id}/reject request body. */
+export type PostReviewFindingsIdRejectBody = {
+  note?: string;
+};
+
 /** GET /api/v1/risks response. */
 export type GetRisksResponse = {
   items: Array<{
@@ -2653,6 +2815,26 @@ export const api = {
   /** One requirement, the controls that satisfy it, and its links to other frameworks in both directions */
   getRequirementsId: (path: { id: string }): Promise<GetRequirementsIdResponse> =>
     request<GetRequirementsIdResponse>('GET', `/api/v1/requirements/${encodeURIComponent(path.id)}`),
+  /** Approve a pending review finding (the Analyst only; 403 for an Admin, every other role and API keys). The body depends on the finding's kind: a link takes `from` and `to` for an end that wasn't a clear match (one of that end's candidates; 400 end_not_chosen or end_not_candidate), and waits for a proposed new record it points to (409 end_not_approved or end_rejected); a proposed record takes `record`, the create body of its kind, labelled no lower than its document (400 label_below_source) and no higher than your clearance; a possible duplicate takes `keep`, the record to keep (by default the older one), and the kept record takes the higher of the two labels; a suggested mapping needs the Framework-mappings approve cell. Every kind takes an optional `note`. The graph change and its audit entries are written in one Neo4j transaction as origin `ai`, never doubled (outcome `exists` when the link is already there), then the finding becomes approved with its outcome and a review.approved entry. 404 when the finding or a record it names is missing or hidden; 409 already_decided when it isn't pending (the loser of two decisions at once), record_not_active when a record is retired or merged away, source_above_ends when the document is more sensitive than the link's ends allow (it can only be rejected); 400 link_not_allowed when the link doesn't fit the ontology */
+  postReviewFindingsIdApprove: (
+    path: { id: string },
+    body: PostReviewFindingsIdApproveBody,
+  ): Promise<PostReviewFindingsIdApproveResponse> =>
+    request<PostReviewFindingsIdApproveResponse>(
+      'POST',
+      `/api/v1/review/findings/${encodeURIComponent(path.id)}/approve`,
+      body,
+    ),
+  /** Reject a pending review finding of any kind (the Analyst only; 403 for an Admin, every other role and API keys): it becomes rejected with you as decider, the time and the optional note, and a review.rejected entry; it is hidden from the default view, kept forever and never raised again. Nothing changes in the graph. Rejecting a proposed new record also rejects every pending link finding pointing to it that you can see, each with its own entry (listed in rejectedLinkFindingIds). 404 when the finding is missing or hidden; 409 already_decided when it isn't pending */
+  postReviewFindingsIdReject: (
+    path: { id: string },
+    body: PostReviewFindingsIdRejectBody,
+  ): Promise<PostReviewFindingsIdRejectResponse> =>
+    request<PostReviewFindingsIdRejectResponse>(
+      'POST',
+      `/api/v1/review/findings/${encodeURIComponent(path.id)}/reject`,
+      body,
+    ),
   /** List risks, paged */
   getRisks: (query?: ListQuery): Promise<GetRisksResponse> =>
     request<GetRisksResponse>('GET', `/api/v1/risks${queryString(query)}`),
