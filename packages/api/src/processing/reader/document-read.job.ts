@@ -6,19 +6,22 @@
 //      puts the job off (`RunLater`, no try used up), leaving the document `stored`;
 //   2. reads the stored file from the org's own bucket;
 //   3. reads its text in the file sandbox (./document-text.ts: its own process, 256 MB for the
-//      whole read, decompressed PDF and DOCX data included, and 30 s);
+//      whole read, decompressed PDF and DOCX data included, and 30 s), at most
+//      MAX_DOCUMENT_TEXT_LENGTH long, so it can be chunked within the worker's memory budget;
 //   4. cuts the text into chunks of at most 500 bge-m3 tokens, each starting 50 tokens before the
-//      previous one ended (./chunker.ts);
+//      previous one ended (./chunker.ts, which holds one window's words at a time, never the
+//      whole text's);
 //   5. in one transaction (D29): saves the chunks (stage `read`, the document's record type and
 //      label), moves the document to `processing`, and queues `processing.document-embed`.
 // Any other kind of document is left alone. A document that already has its chunks gets no second
 // set: the job only makes sure its embed job is queued (D45.5).
 //
 // Failures: a file that can't be read ends the document `failed` with `unreadable`, one with no
-// text with `no_text`, a sandbox limit with `timed_out` or `too_much_memory`; none of these is
-// retried, because the same file fails the same way. A storage or database error is retried (D72),
-// and on the last try the document ends `failed` with `read_failed`. Status changes write no audit
-// entry (as in S3). Log lines hold only IDs, codes, counts and times, never a file name or text.
+// text with `no_text`, a sandbox limit with `timed_out` or `too_much_memory`, and a text longer
+// than MAX_DOCUMENT_TEXT_LENGTH with `too_much_memory` too; none of these is retried, because the
+// same file fails the same way. A storage or database error is retried (D72), and on the last try
+// the document ends `failed` with `read_failed`. Status changes write no audit entry (as in S3).
+// Log lines hold only IDs, codes, counts and times, never a file name or text.
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { and, count, eq, inArray, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
@@ -51,6 +54,20 @@ export const TOKENIZER_WAIT_SECONDS = 300;
 
 /** Chunks saved per insert statement (all of them in the one transaction). */
 export const CHUNK_INSERT_BATCH = 500;
+
+/**
+ * The longest text a document may have, in UTF-16 units (D53): 8 Mi, over a million words. A
+ * longer one ends `failed` with `too_much_memory`, as the sandbox's own limits do, and isn't
+ * retried. The memory budget it is sized to: the 4 reads that run at once (D72) may take about
+ * 100 MB of the worker's heap together, beside bge-m3's tokenizer (about 170 MB) and the rest of
+ * the program, under the 560 MB heap of its 1 GB container, with room left for the other jobs. A
+ * read holds its text (at worst two bytes a unit, 16 MB here), a second copy while it arrives
+ * from the sandbox, and while chunking only one window's words and about 100 bytes a chunk (their
+ * texts are slices of the one string). Measured at that heap limit beside a 170 MB tokenizer
+ * stand-in: 4 such reads at once took 82 MB more heap and 96 MB more resident memory; at 25 Mi
+ * units (the longest text a TXT upload can have) they took 225 MB and up to 540 MB.
+ */
+export const MAX_DOCUMENT_TEXT_LENGTH = 8 * 1024 * 1024;
 
 /** The failure codes the sandboxed read gives for a file, none of them retried. */
 const FILE_FAILURE_CODES = [
@@ -91,10 +108,12 @@ const DOCUMENT_TEXT = {
  * The default reader: ./document-text.ts in the file sandbox's own process, with the sandbox's
  * limits. The memory limit holds for the whole process, not only its heap (D53): PDF and DOCX data
  * decompress into buffers outside it, and a file that would take more ends `too_much_memory`
- * while this program carries on.
+ * while this program carries on. So does a text longer than MAX_DOCUMENT_TEXT_LENGTH, refused
+ * inside the sandbox before it is sent back.
  */
 export function sandboxedTextReader(limits: SandboxLimits = {}): TextReader {
-  return (format, bytes) => runInProcessSandbox<string>({ ...DOCUMENT_TEXT, input: bytes, args: [format] }, limits);
+  return (format, bytes) =>
+    runInProcessSandbox<string>({ ...DOCUMENT_TEXT, input: bytes, args: [format, MAX_DOCUMENT_TEXT_LENGTH] }, limits);
 }
 
 export interface DocumentReaderDeps {
@@ -280,6 +299,11 @@ export async function readDocument(deps: DocumentReaderDeps, data: unknown): Pro
       'a document read broke',
     );
     throw err;
+  }
+  // A text too long to chunk within the memory budget (the sandbox refuses one already; this holds
+  // for any reader).
+  if (typeof text === 'string' && text.length > MAX_DOCUMENT_TEXT_LENGTH) {
+    return fail(deps, log, doc, 'too_much_memory');
   }
   if (typeof text !== 'string' || !/\S/.test(text)) return fail(deps, log, doc, 'no_text');
 
