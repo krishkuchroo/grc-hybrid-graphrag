@@ -19,13 +19,19 @@
 //
 // A file that can't be read throws an error with the code `unreadable` (the sandbox passes it on);
 // an error message never holds anything from the file. A RangeError (a string or buffer that can't
-// grow) is passed on as it is, so the sandbox reports it as `too_much_memory`.
+// grow) is passed on as it is, so the sandbox reports it as `too_much_memory`. A text longer than
+// the reader allows (`maxLength`, the job's MAX_DOCUMENT_TEXT_LENGTH) fails with the code
+// `too_much_memory` too, here inside the sandbox, so the worker never takes in a text it couldn't
+// chunk within its memory budget.
 import mammoth from 'mammoth';
 import { extractText, getDocumentProxy } from 'unpdf';
 import type { ReadableFormat } from './readable-kinds.js';
 
 /** The code a file that can't be read fails with. */
 export const UNREADABLE = 'unreadable';
+
+/** The code a text longer than the reader allows fails with. */
+export const TOO_MUCH_MEMORY = 'too_much_memory';
 
 interface CodedError extends Error {
   code: string;
@@ -35,6 +41,13 @@ function unreadable(): CodedError {
   const err = new Error('The file could not be read (unreadable).') as CodedError;
   err.name = 'DocumentTextError';
   err.code = UNREADABLE;
+  return err;
+}
+
+function tooLong(): CodedError {
+  const err = new Error('The text of the file is longer than a document may have (too_much_memory).') as CodedError;
+  err.name = 'DocumentTextError';
+  err.code = TOO_MUCH_MEMORY;
   return err;
 }
 
@@ -138,10 +151,13 @@ export function cleanText(text: string): string {
 }
 
 /**
- * The text of a document's bytes in its format (see the top of the file). Throws an error with
- * the code `unreadable` for a file that can't be read.
+ * The text of a document's bytes in its format (see the top of the file), at most `maxLength`
+ * UTF-16 units long. Throws an error with the code `unreadable` for a file that can't be read, and
+ * one with the code `too_much_memory` for a text longer than `maxLength`.
  */
-export async function readDocumentText(input: Uint8Array, format: ReadableFormat): Promise<string> {
+export async function readDocumentText(input: Uint8Array, format: ReadableFormat, maxLength: number): Promise<string> {
+  // Checked first, so a bad limit can never mean no limit.
+  if (!Number.isSafeInteger(maxLength) || maxLength < 0) throw new TypeError('readDocumentText: bad maxLength');
   let text: string;
   switch (format) {
     case 'pdf':
@@ -159,5 +175,7 @@ export async function readDocumentText(input: Uint8Array, format: ReadableFormat
     default:
       throw unreadable();
   }
-  return cleanText(text);
+  const clean = cleanText(text);
+  if (clean.length > maxLength) throw tooLong();
+  return clean;
 }
