@@ -479,5 +479,51 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Search and chat (S6, D23, D50 Chat row, D51, D52.1, D73): every role has the Chat `use` cell,
+    // people and API keys alike (S6-Q8). A search or question reaches exactly what the asker could
+    // open themselves: passages under Postgres row security on chunks (the org, the role's record
+    // types, labels at or below the clearance), checked again in the API; graph records only through
+    // the asker's own role x clearance read-only account in the org's own database, with a time
+    // limit, checked again in the API; a link only if both ends are visible; never a removed
+    // document's passages. Hidden things never reach Gemma or the answer. Conversations and messages
+    // are their owner's only (row security on chat_conversations and chat_messages: the org and
+    // app.user_id; 404 for anyone else's). A message above the reader's current clearance shows its
+    // question only. Each question is audited as `chat.asked` in the transaction that saves it;
+    // asking and searching share 10 a minute per person or key (D64).
+    {
+      method: 'POST',
+      path: '/api/v1/search',
+      access: { subject: 'chat', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/chat/conversations',
+      access: { subject: 'chat', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/chat/conversations',
+      access: { subject: 'chat', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/chat/conversations/:id',
+      access: { subject: 'chat', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/chat/conversations/:id/messages',
+      access: { subject: 'chat', action: 'use' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };
