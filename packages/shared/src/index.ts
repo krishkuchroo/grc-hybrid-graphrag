@@ -6,3 +6,4 @@ export * from './processing/index.js';
 export * from './review/index.js';
 export * from './search/index.js';
 export * from './chat/index.js';
+export * from './dashboard/index.js';
