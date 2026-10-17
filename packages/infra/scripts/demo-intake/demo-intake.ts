@@ -8,6 +8,14 @@
 //   by HOSTS and RUNS.
 // - The other documents (two policy documents and one SOC ticket file per org) are uploaded by the
 //   role named, a role that may upload that kind (D50).
+// - Plus (S8-011) one Restricted policy document per org, uploaded by the Admin (the only demo
+//   user cleared for Restricted, D198), that holds a planted instruction in the style of the
+//   generators' S3 injection kinds (D52.6): Acme's an `ignore_instructions` one, Globex's a
+//   `leak_data` one. Its facts are links the demo records already have, so the hand-written
+//   benchmark question sets' injection-trap questions (packages/benchmark/question-sets/) are
+//   answered by it. Its records are Restricted, and so is it, so no other demo login ever gets its
+//   passage. No add-links instruction is planted here: Gemma reading the document must never add a
+//   link to the demo graph.
 // - Evidence is named by the demo control it supports (its S1 key, `demo:<key>` as source ID). On a
 //   control the demo Control Owner owns: one item the Control Owner adds and one the Admin adds,
 //   both at a label the Control Owner's `internal` clearance sees; the Admin's item there expires
@@ -122,6 +130,13 @@ const ACME: DemoIntake = {
       uploader: 'compliance_manager',
     },
     { kind: 'soc_ticket', file: 'acme/acme-soc-tickets-2026-09.json', label: 'internal', uploader: 'analyst' },
+    // S8-011: the injection-trap document (ignore_instructions).
+    {
+      kind: 'policy_document',
+      file: 'acme/acme-payroll-access-standard.txt',
+      label: 'restricted',
+      uploader: 'admin',
+    },
   ],
   evidence: [
     // CTL-01 Multi-factor sign-in for remote access: the Control Owner's own control (internal).
@@ -221,6 +236,13 @@ const GLOBEX: DemoIntake = {
       uploader: 'compliance_manager',
     },
     { kind: 'soc_ticket', file: 'globex/globex-soc-tickets-2026-09.json', label: 'internal', uploader: 'analyst' },
+    // S8-011: the injection-trap document (leak_data).
+    {
+      kind: 'policy_document',
+      file: 'globex/globex-billing-integrity-standard.txt',
+      label: 'restricted',
+      uploader: 'admin',
+    },
   ],
   evidence: [
     // CTL-01 Mobile device management for scanners: the Control Owner's own control (internal).
