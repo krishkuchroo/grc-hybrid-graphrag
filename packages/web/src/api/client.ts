@@ -694,6 +694,2409 @@ export type PostAuthTwoFactorVerifyTotpBody = {
   code: string;
 };
 
+/** POST /api/v1/benchmark/runs response. */
+export type PostBenchmarkRunsResponse =
+  | {
+      id: string;
+      startedAt: string;
+      finishedAt: string | null;
+      lastActivityAt: string;
+      status: 'running' | 'finished' | 'failed';
+      failure: string | null;
+      parts: Array<'retrieval' | 'answers' | 'extraction'>;
+      modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+      dataVersion:
+        | {
+            type: 'generated';
+            generatorVersion: string;
+            seed: number;
+            size: string;
+            orgKey: string;
+            orgSlugs: Array<string>;
+          }
+        | {
+            type: 'hand_written';
+            orgSlugs: Array<string>;
+          };
+      questionCount: number;
+      resultCount: number;
+      headline: {
+        hybrid: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+        vector: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+      };
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      startedBy: {
+        id: string;
+        name: unknown;
+      };
+      hidden: false;
+      settings: {
+        parts: Array<'retrieval' | 'answers' | 'extraction'>;
+        modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+        questionSet: {
+          version: 1;
+          source:
+            | {
+                type: 'generated';
+                generatorVersion: string;
+                seed: number;
+                size: string;
+                orgKey: string;
+                orgSlugs: Array<string>;
+              }
+            | {
+                type: 'hand_written';
+                orgSlugs: Array<string>;
+              };
+        };
+        questionCount: number;
+        unmatchedRecords?: {
+          asset?: number;
+          risk?: number;
+          control?: number;
+          policy?: number;
+          incident?: number;
+          framework?: number;
+          requirement?: number;
+          evidence?: number;
+          audit_finding?: number;
+        };
+        models: {
+          text: string;
+          embedding: string;
+        };
+        promptVersions: Record<string, never>;
+        limits: Record<string, never>;
+        cutOffs: Record<string, never>;
+        injectionChecks: {
+          ignore_instructions: string;
+          leak_data: string;
+          add_links: string;
+        };
+      };
+      summary: {
+        itemCount: number;
+        groups: Array<{
+          part: 'retrieval' | 'answers' | 'extraction';
+          mode: 'hybrid' | 'vector' | 'pipeline';
+          kind:
+            | 'single_hop'
+            | 'multi_hop'
+            | 'framework'
+            | 'no_answer'
+            | 'injection_trap'
+            | 'stated_fact'
+            | 'extra_ai_link'
+            | 'false_positive_plant'
+            | 'injection_plant'
+            | 'analyst_decision'
+            | null;
+          count: number;
+          skipped: number;
+          outcomes: {
+            pass: number;
+            partial: number;
+            fail: number;
+            skipped: number;
+          };
+          scores: {
+            context_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            result_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            reciprocal_rank?: {
+              mean: number | null;
+              n: number;
+            };
+            graph_query_ran?: {
+              mean: number | null;
+              n: number;
+            };
+            answer_correctness?: {
+              mean: number | null;
+              n: number;
+            };
+            citation_accuracy?: {
+              mean: number | null;
+              n: number;
+            };
+            made_up_numbers?: {
+              mean: number | null;
+              n: number;
+            };
+            no_answer_correct?: {
+              mean: number | null;
+              n: number;
+            };
+            injection_followed?: {
+              mean: number | null;
+              n: number;
+            };
+          };
+          times: {
+            embedding_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            vector_search_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_writing_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_running_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            first_words_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            answer_total_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+          };
+          graphFallbacks: {
+            graph_model_unavailable: number;
+            graph_query_invalid: number;
+            graph_query_refused: number;
+            graph_query_timed_out: number;
+            graph_query_failed: number;
+          };
+          targets: Array<{
+            metric:
+              | 'embedding_ms'
+              | 'vector_search_ms'
+              | 'graph_query_writing_ms'
+              | 'graph_query_running_ms'
+              | 'first_words_ms'
+              | 'answer_total_ms';
+            percentile: number;
+            limitMs: number;
+            inclusive: boolean;
+            value: number | null;
+            pass: unknown;
+          }>;
+          ratios: {
+            link_precision: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live_or_waiting: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            auto_live_share: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            false_positives_caught: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            injections_blocked: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            analyst_agreement: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+          } | null;
+        }>;
+      } | null;
+    }
+  | {
+      id: string;
+      startedAt: string;
+      finishedAt: string | null;
+      lastActivityAt: string;
+      status: 'running' | 'finished' | 'failed';
+      failure: string | null;
+      parts: Array<'retrieval' | 'answers' | 'extraction'>;
+      modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+      dataVersion:
+        | {
+            type: 'generated';
+            generatorVersion: string;
+            seed: number;
+            size: string;
+            orgKey: string;
+            orgSlugs: Array<string>;
+          }
+        | {
+            type: 'hand_written';
+            orgSlugs: Array<string>;
+          };
+      questionCount: number;
+      resultCount: number;
+      headline: {
+        hybrid: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+        vector: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+      };
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      startedBy: {
+        id: string;
+        name: unknown;
+      };
+      hidden: true;
+      summary: {
+        itemCount: number;
+        groups: Array<{
+          part: 'retrieval' | 'answers' | 'extraction';
+          mode: 'hybrid' | 'vector' | 'pipeline';
+          kind:
+            | 'single_hop'
+            | 'multi_hop'
+            | 'framework'
+            | 'no_answer'
+            | 'injection_trap'
+            | 'stated_fact'
+            | 'extra_ai_link'
+            | 'false_positive_plant'
+            | 'injection_plant'
+            | 'analyst_decision'
+            | null;
+          count: number;
+          skipped: number;
+          outcomes: {
+            pass: number;
+            partial: number;
+            fail: number;
+            skipped: number;
+          };
+          scores: {
+            context_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            result_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            reciprocal_rank?: {
+              mean: number | null;
+              n: number;
+            };
+            graph_query_ran?: {
+              mean: number | null;
+              n: number;
+            };
+            answer_correctness?: {
+              mean: number | null;
+              n: number;
+            };
+            citation_accuracy?: {
+              mean: number | null;
+              n: number;
+            };
+            made_up_numbers?: {
+              mean: number | null;
+              n: number;
+            };
+            no_answer_correct?: {
+              mean: number | null;
+              n: number;
+            };
+            injection_followed?: {
+              mean: number | null;
+              n: number;
+            };
+          };
+          times: {
+            embedding_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            vector_search_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_writing_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_running_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            first_words_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            answer_total_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+          };
+          graphFallbacks: {
+            graph_model_unavailable: number;
+            graph_query_invalid: number;
+            graph_query_refused: number;
+            graph_query_timed_out: number;
+            graph_query_failed: number;
+          };
+          targets: Array<{
+            metric:
+              | 'embedding_ms'
+              | 'vector_search_ms'
+              | 'graph_query_writing_ms'
+              | 'graph_query_running_ms'
+              | 'first_words_ms'
+              | 'answer_total_ms';
+            percentile: number;
+            limitMs: number;
+            inclusive: boolean;
+            value: number | null;
+            pass: unknown;
+          }>;
+          ratios: {
+            link_precision: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live_or_waiting: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            auto_live_share: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            false_positives_caught: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            injections_blocked: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            analyst_agreement: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+          } | null;
+        }>;
+      } | null;
+    }
+  | {
+      id: string;
+      startedAt: string;
+      finishedAt: string | null;
+      lastActivityAt: string;
+      status: 'running' | 'finished' | 'failed';
+      failure: string | null;
+      parts: Array<'retrieval' | 'answers' | 'extraction'>;
+      modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+      dataVersion:
+        | {
+            type: 'generated';
+            generatorVersion: string;
+            seed: number;
+            size: string;
+            orgKey: string;
+            orgSlugs: Array<string>;
+          }
+        | {
+            type: 'hand_written';
+            orgSlugs: Array<string>;
+          };
+      questionCount: number;
+      resultCount: number;
+      headline: {
+        hybrid: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+        vector: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+      };
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      startedBy: {
+        id: string;
+        name: unknown;
+      };
+      hidden: false;
+      settings: {
+        parts: Array<'retrieval' | 'answers' | 'extraction'>;
+        modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+        questionSet: {
+          version: 1;
+          source:
+            | {
+                type: 'generated';
+                generatorVersion: string;
+                seed: number;
+                size: string;
+                orgKey: string;
+                orgSlugs: Array<string>;
+              }
+            | {
+                type: 'hand_written';
+                orgSlugs: Array<string>;
+              };
+        };
+        questionCount: number;
+        unmatchedRecords?: {
+          asset?: number;
+          risk?: number;
+          control?: number;
+          policy?: number;
+          incident?: number;
+          framework?: number;
+          requirement?: number;
+          evidence?: number;
+          audit_finding?: number;
+        };
+        models: {
+          text: string;
+          embedding: string;
+        };
+        promptVersions: Record<string, never>;
+        limits: Record<string, never>;
+        cutOffs: Record<string, never>;
+        injectionChecks: {
+          ignore_instructions: string;
+          leak_data: string;
+          add_links: string;
+        };
+      };
+      summary: {
+        itemCount: number;
+        groups: Array<{
+          part: 'retrieval' | 'answers' | 'extraction';
+          mode: 'hybrid' | 'vector' | 'pipeline';
+          kind:
+            | 'single_hop'
+            | 'multi_hop'
+            | 'framework'
+            | 'no_answer'
+            | 'injection_trap'
+            | 'stated_fact'
+            | 'extra_ai_link'
+            | 'false_positive_plant'
+            | 'injection_plant'
+            | 'analyst_decision'
+            | null;
+          count: number;
+          skipped: number;
+          outcomes: {
+            pass: number;
+            partial: number;
+            fail: number;
+            skipped: number;
+          };
+          scores: {
+            context_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            result_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            reciprocal_rank?: {
+              mean: number | null;
+              n: number;
+            };
+            graph_query_ran?: {
+              mean: number | null;
+              n: number;
+            };
+            answer_correctness?: {
+              mean: number | null;
+              n: number;
+            };
+            citation_accuracy?: {
+              mean: number | null;
+              n: number;
+            };
+            made_up_numbers?: {
+              mean: number | null;
+              n: number;
+            };
+            no_answer_correct?: {
+              mean: number | null;
+              n: number;
+            };
+            injection_followed?: {
+              mean: number | null;
+              n: number;
+            };
+          };
+          times: {
+            embedding_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            vector_search_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_writing_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_running_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            first_words_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            answer_total_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+          };
+          graphFallbacks: {
+            graph_model_unavailable: number;
+            graph_query_invalid: number;
+            graph_query_refused: number;
+            graph_query_timed_out: number;
+            graph_query_failed: number;
+          };
+          targets: Array<{
+            metric:
+              | 'embedding_ms'
+              | 'vector_search_ms'
+              | 'graph_query_writing_ms'
+              | 'graph_query_running_ms'
+              | 'first_words_ms'
+              | 'answer_total_ms';
+            percentile: number;
+            limitMs: number;
+            inclusive: boolean;
+            value: number | null;
+            pass: unknown;
+          }>;
+          ratios: {
+            link_precision: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live_or_waiting: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            auto_live_share: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            false_positives_caught: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            injections_blocked: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            analyst_agreement: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+          } | null;
+        }>;
+      } | null;
+    }
+  | {
+      id: string;
+      startedAt: string;
+      finishedAt: string | null;
+      lastActivityAt: string;
+      status: 'running' | 'finished' | 'failed';
+      failure: string | null;
+      parts: Array<'retrieval' | 'answers' | 'extraction'>;
+      modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+      dataVersion:
+        | {
+            type: 'generated';
+            generatorVersion: string;
+            seed: number;
+            size: string;
+            orgKey: string;
+            orgSlugs: Array<string>;
+          }
+        | {
+            type: 'hand_written';
+            orgSlugs: Array<string>;
+          };
+      questionCount: number;
+      resultCount: number;
+      headline: {
+        hybrid: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+        vector: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+      };
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      startedBy: {
+        id: string;
+        name: unknown;
+      };
+      hidden: true;
+      summary: {
+        itemCount: number;
+        groups: Array<{
+          part: 'retrieval' | 'answers' | 'extraction';
+          mode: 'hybrid' | 'vector' | 'pipeline';
+          kind:
+            | 'single_hop'
+            | 'multi_hop'
+            | 'framework'
+            | 'no_answer'
+            | 'injection_trap'
+            | 'stated_fact'
+            | 'extra_ai_link'
+            | 'false_positive_plant'
+            | 'injection_plant'
+            | 'analyst_decision'
+            | null;
+          count: number;
+          skipped: number;
+          outcomes: {
+            pass: number;
+            partial: number;
+            fail: number;
+            skipped: number;
+          };
+          scores: {
+            context_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            result_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            reciprocal_rank?: {
+              mean: number | null;
+              n: number;
+            };
+            graph_query_ran?: {
+              mean: number | null;
+              n: number;
+            };
+            answer_correctness?: {
+              mean: number | null;
+              n: number;
+            };
+            citation_accuracy?: {
+              mean: number | null;
+              n: number;
+            };
+            made_up_numbers?: {
+              mean: number | null;
+              n: number;
+            };
+            no_answer_correct?: {
+              mean: number | null;
+              n: number;
+            };
+            injection_followed?: {
+              mean: number | null;
+              n: number;
+            };
+          };
+          times: {
+            embedding_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            vector_search_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_writing_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_running_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            first_words_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            answer_total_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+          };
+          graphFallbacks: {
+            graph_model_unavailable: number;
+            graph_query_invalid: number;
+            graph_query_refused: number;
+            graph_query_timed_out: number;
+            graph_query_failed: number;
+          };
+          targets: Array<{
+            metric:
+              | 'embedding_ms'
+              | 'vector_search_ms'
+              | 'graph_query_writing_ms'
+              | 'graph_query_running_ms'
+              | 'first_words_ms'
+              | 'answer_total_ms';
+            percentile: number;
+            limitMs: number;
+            inclusive: boolean;
+            value: number | null;
+            pass: unknown;
+          }>;
+          ratios: {
+            link_precision: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live_or_waiting: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            auto_live_share: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            false_positives_caught: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            injections_blocked: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            analyst_agreement: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+          } | null;
+        }>;
+      } | null;
+    };
+
+/** POST /api/v1/benchmark/runs request body. */
+export type PostBenchmarkRunsBody = {
+  parts: Array<'retrieval' | 'answers' | 'extraction'>;
+  modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+  questionSet: {
+    version: 1;
+    source:
+      | {
+          type: 'generated';
+          generatorVersion: string;
+          seed: number;
+          size: string;
+          orgKey: string;
+          orgSlugs: Array<string>;
+        }
+      | {
+          type: 'hand_written';
+          orgSlugs: Array<string>;
+        };
+  };
+  questionCount: number;
+  unmatchedRecords?: {
+    asset?: number;
+    risk?: number;
+    control?: number;
+    policy?: number;
+    incident?: number;
+    framework?: number;
+    requirement?: number;
+    evidence?: number;
+    audit_finding?: number;
+  };
+};
+
+/** GET /api/v1/benchmark/runs response. */
+export type GetBenchmarkRunsResponse = {
+  items: Array<{
+    id: string;
+    startedAt: string;
+    finishedAt: string | null;
+    lastActivityAt: string;
+    status: 'running' | 'finished' | 'failed';
+    failure: string | null;
+    parts: Array<'retrieval' | 'answers' | 'extraction'>;
+    modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+    dataVersion:
+      | {
+          type: 'generated';
+          generatorVersion: string;
+          seed: number;
+          size: string;
+          orgKey: string;
+          orgSlugs: Array<string>;
+        }
+      | {
+          type: 'hand_written';
+          orgSlugs: Array<string>;
+        };
+    questionCount: number;
+    resultCount: number;
+    headline: {
+      hybrid: {
+        contextRecall: number | null;
+        answerCorrectness: number | null;
+      };
+      vector: {
+        contextRecall: number | null;
+        answerCorrectness: number | null;
+      };
+    };
+    label: 'public' | 'internal' | 'confidential' | 'restricted';
+    startedBy: {
+      id: string;
+      name: unknown;
+    };
+  }>;
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** GET /api/v1/benchmark/runs/{id} response. */
+export type GetBenchmarkRunsIdResponse =
+  | {
+      id: string;
+      startedAt: string;
+      finishedAt: string | null;
+      lastActivityAt: string;
+      status: 'running' | 'finished' | 'failed';
+      failure: string | null;
+      parts: Array<'retrieval' | 'answers' | 'extraction'>;
+      modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+      dataVersion:
+        | {
+            type: 'generated';
+            generatorVersion: string;
+            seed: number;
+            size: string;
+            orgKey: string;
+            orgSlugs: Array<string>;
+          }
+        | {
+            type: 'hand_written';
+            orgSlugs: Array<string>;
+          };
+      questionCount: number;
+      resultCount: number;
+      headline: {
+        hybrid: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+        vector: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+      };
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      startedBy: {
+        id: string;
+        name: unknown;
+      };
+      hidden: false;
+      settings: {
+        parts: Array<'retrieval' | 'answers' | 'extraction'>;
+        modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+        questionSet: {
+          version: 1;
+          source:
+            | {
+                type: 'generated';
+                generatorVersion: string;
+                seed: number;
+                size: string;
+                orgKey: string;
+                orgSlugs: Array<string>;
+              }
+            | {
+                type: 'hand_written';
+                orgSlugs: Array<string>;
+              };
+        };
+        questionCount: number;
+        unmatchedRecords?: {
+          asset?: number;
+          risk?: number;
+          control?: number;
+          policy?: number;
+          incident?: number;
+          framework?: number;
+          requirement?: number;
+          evidence?: number;
+          audit_finding?: number;
+        };
+        models: {
+          text: string;
+          embedding: string;
+        };
+        promptVersions: Record<string, never>;
+        limits: Record<string, never>;
+        cutOffs: Record<string, never>;
+        injectionChecks: {
+          ignore_instructions: string;
+          leak_data: string;
+          add_links: string;
+        };
+      };
+      summary: {
+        itemCount: number;
+        groups: Array<{
+          part: 'retrieval' | 'answers' | 'extraction';
+          mode: 'hybrid' | 'vector' | 'pipeline';
+          kind:
+            | 'single_hop'
+            | 'multi_hop'
+            | 'framework'
+            | 'no_answer'
+            | 'injection_trap'
+            | 'stated_fact'
+            | 'extra_ai_link'
+            | 'false_positive_plant'
+            | 'injection_plant'
+            | 'analyst_decision'
+            | null;
+          count: number;
+          skipped: number;
+          outcomes: {
+            pass: number;
+            partial: number;
+            fail: number;
+            skipped: number;
+          };
+          scores: {
+            context_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            result_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            reciprocal_rank?: {
+              mean: number | null;
+              n: number;
+            };
+            graph_query_ran?: {
+              mean: number | null;
+              n: number;
+            };
+            answer_correctness?: {
+              mean: number | null;
+              n: number;
+            };
+            citation_accuracy?: {
+              mean: number | null;
+              n: number;
+            };
+            made_up_numbers?: {
+              mean: number | null;
+              n: number;
+            };
+            no_answer_correct?: {
+              mean: number | null;
+              n: number;
+            };
+            injection_followed?: {
+              mean: number | null;
+              n: number;
+            };
+          };
+          times: {
+            embedding_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            vector_search_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_writing_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_running_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            first_words_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            answer_total_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+          };
+          graphFallbacks: {
+            graph_model_unavailable: number;
+            graph_query_invalid: number;
+            graph_query_refused: number;
+            graph_query_timed_out: number;
+            graph_query_failed: number;
+          };
+          targets: Array<{
+            metric:
+              | 'embedding_ms'
+              | 'vector_search_ms'
+              | 'graph_query_writing_ms'
+              | 'graph_query_running_ms'
+              | 'first_words_ms'
+              | 'answer_total_ms';
+            percentile: number;
+            limitMs: number;
+            inclusive: boolean;
+            value: number | null;
+            pass: unknown;
+          }>;
+          ratios: {
+            link_precision: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live_or_waiting: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            auto_live_share: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            false_positives_caught: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            injections_blocked: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            analyst_agreement: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+          } | null;
+        }>;
+      } | null;
+    }
+  | {
+      id: string;
+      startedAt: string;
+      finishedAt: string | null;
+      lastActivityAt: string;
+      status: 'running' | 'finished' | 'failed';
+      failure: string | null;
+      parts: Array<'retrieval' | 'answers' | 'extraction'>;
+      modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+      dataVersion:
+        | {
+            type: 'generated';
+            generatorVersion: string;
+            seed: number;
+            size: string;
+            orgKey: string;
+            orgSlugs: Array<string>;
+          }
+        | {
+            type: 'hand_written';
+            orgSlugs: Array<string>;
+          };
+      questionCount: number;
+      resultCount: number;
+      headline: {
+        hybrid: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+        vector: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+      };
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      startedBy: {
+        id: string;
+        name: unknown;
+      };
+      hidden: true;
+      summary: {
+        itemCount: number;
+        groups: Array<{
+          part: 'retrieval' | 'answers' | 'extraction';
+          mode: 'hybrid' | 'vector' | 'pipeline';
+          kind:
+            | 'single_hop'
+            | 'multi_hop'
+            | 'framework'
+            | 'no_answer'
+            | 'injection_trap'
+            | 'stated_fact'
+            | 'extra_ai_link'
+            | 'false_positive_plant'
+            | 'injection_plant'
+            | 'analyst_decision'
+            | null;
+          count: number;
+          skipped: number;
+          outcomes: {
+            pass: number;
+            partial: number;
+            fail: number;
+            skipped: number;
+          };
+          scores: {
+            context_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            result_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            reciprocal_rank?: {
+              mean: number | null;
+              n: number;
+            };
+            graph_query_ran?: {
+              mean: number | null;
+              n: number;
+            };
+            answer_correctness?: {
+              mean: number | null;
+              n: number;
+            };
+            citation_accuracy?: {
+              mean: number | null;
+              n: number;
+            };
+            made_up_numbers?: {
+              mean: number | null;
+              n: number;
+            };
+            no_answer_correct?: {
+              mean: number | null;
+              n: number;
+            };
+            injection_followed?: {
+              mean: number | null;
+              n: number;
+            };
+          };
+          times: {
+            embedding_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            vector_search_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_writing_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_running_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            first_words_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            answer_total_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+          };
+          graphFallbacks: {
+            graph_model_unavailable: number;
+            graph_query_invalid: number;
+            graph_query_refused: number;
+            graph_query_timed_out: number;
+            graph_query_failed: number;
+          };
+          targets: Array<{
+            metric:
+              | 'embedding_ms'
+              | 'vector_search_ms'
+              | 'graph_query_writing_ms'
+              | 'graph_query_running_ms'
+              | 'first_words_ms'
+              | 'answer_total_ms';
+            percentile: number;
+            limitMs: number;
+            inclusive: boolean;
+            value: number | null;
+            pass: unknown;
+          }>;
+          ratios: {
+            link_precision: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live_or_waiting: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            auto_live_share: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            false_positives_caught: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            injections_blocked: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            analyst_agreement: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+          } | null;
+        }>;
+      } | null;
+    };
+
+/** POST /api/v1/benchmark/runs/{id}/finish response. */
+export type PostBenchmarkRunsIdFinishResponse =
+  | {
+      id: string;
+      startedAt: string;
+      finishedAt: string | null;
+      lastActivityAt: string;
+      status: 'running' | 'finished' | 'failed';
+      failure: string | null;
+      parts: Array<'retrieval' | 'answers' | 'extraction'>;
+      modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+      dataVersion:
+        | {
+            type: 'generated';
+            generatorVersion: string;
+            seed: number;
+            size: string;
+            orgKey: string;
+            orgSlugs: Array<string>;
+          }
+        | {
+            type: 'hand_written';
+            orgSlugs: Array<string>;
+          };
+      questionCount: number;
+      resultCount: number;
+      headline: {
+        hybrid: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+        vector: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+      };
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      startedBy: {
+        id: string;
+        name: unknown;
+      };
+      hidden: false;
+      settings: {
+        parts: Array<'retrieval' | 'answers' | 'extraction'>;
+        modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+        questionSet: {
+          version: 1;
+          source:
+            | {
+                type: 'generated';
+                generatorVersion: string;
+                seed: number;
+                size: string;
+                orgKey: string;
+                orgSlugs: Array<string>;
+              }
+            | {
+                type: 'hand_written';
+                orgSlugs: Array<string>;
+              };
+        };
+        questionCount: number;
+        unmatchedRecords?: {
+          asset?: number;
+          risk?: number;
+          control?: number;
+          policy?: number;
+          incident?: number;
+          framework?: number;
+          requirement?: number;
+          evidence?: number;
+          audit_finding?: number;
+        };
+        models: {
+          text: string;
+          embedding: string;
+        };
+        promptVersions: Record<string, never>;
+        limits: Record<string, never>;
+        cutOffs: Record<string, never>;
+        injectionChecks: {
+          ignore_instructions: string;
+          leak_data: string;
+          add_links: string;
+        };
+      };
+      summary: {
+        itemCount: number;
+        groups: Array<{
+          part: 'retrieval' | 'answers' | 'extraction';
+          mode: 'hybrid' | 'vector' | 'pipeline';
+          kind:
+            | 'single_hop'
+            | 'multi_hop'
+            | 'framework'
+            | 'no_answer'
+            | 'injection_trap'
+            | 'stated_fact'
+            | 'extra_ai_link'
+            | 'false_positive_plant'
+            | 'injection_plant'
+            | 'analyst_decision'
+            | null;
+          count: number;
+          skipped: number;
+          outcomes: {
+            pass: number;
+            partial: number;
+            fail: number;
+            skipped: number;
+          };
+          scores: {
+            context_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            result_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            reciprocal_rank?: {
+              mean: number | null;
+              n: number;
+            };
+            graph_query_ran?: {
+              mean: number | null;
+              n: number;
+            };
+            answer_correctness?: {
+              mean: number | null;
+              n: number;
+            };
+            citation_accuracy?: {
+              mean: number | null;
+              n: number;
+            };
+            made_up_numbers?: {
+              mean: number | null;
+              n: number;
+            };
+            no_answer_correct?: {
+              mean: number | null;
+              n: number;
+            };
+            injection_followed?: {
+              mean: number | null;
+              n: number;
+            };
+          };
+          times: {
+            embedding_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            vector_search_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_writing_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_running_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            first_words_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            answer_total_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+          };
+          graphFallbacks: {
+            graph_model_unavailable: number;
+            graph_query_invalid: number;
+            graph_query_refused: number;
+            graph_query_timed_out: number;
+            graph_query_failed: number;
+          };
+          targets: Array<{
+            metric:
+              | 'embedding_ms'
+              | 'vector_search_ms'
+              | 'graph_query_writing_ms'
+              | 'graph_query_running_ms'
+              | 'first_words_ms'
+              | 'answer_total_ms';
+            percentile: number;
+            limitMs: number;
+            inclusive: boolean;
+            value: number | null;
+            pass: unknown;
+          }>;
+          ratios: {
+            link_precision: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live_or_waiting: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            auto_live_share: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            false_positives_caught: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            injections_blocked: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            analyst_agreement: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+          } | null;
+        }>;
+      } | null;
+    }
+  | {
+      id: string;
+      startedAt: string;
+      finishedAt: string | null;
+      lastActivityAt: string;
+      status: 'running' | 'finished' | 'failed';
+      failure: string | null;
+      parts: Array<'retrieval' | 'answers' | 'extraction'>;
+      modes: Array<'hybrid' | 'vector' | 'pipeline'>;
+      dataVersion:
+        | {
+            type: 'generated';
+            generatorVersion: string;
+            seed: number;
+            size: string;
+            orgKey: string;
+            orgSlugs: Array<string>;
+          }
+        | {
+            type: 'hand_written';
+            orgSlugs: Array<string>;
+          };
+      questionCount: number;
+      resultCount: number;
+      headline: {
+        hybrid: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+        vector: {
+          contextRecall: number | null;
+          answerCorrectness: number | null;
+        };
+      };
+      label: 'public' | 'internal' | 'confidential' | 'restricted';
+      startedBy: {
+        id: string;
+        name: unknown;
+      };
+      hidden: true;
+      summary: {
+        itemCount: number;
+        groups: Array<{
+          part: 'retrieval' | 'answers' | 'extraction';
+          mode: 'hybrid' | 'vector' | 'pipeline';
+          kind:
+            | 'single_hop'
+            | 'multi_hop'
+            | 'framework'
+            | 'no_answer'
+            | 'injection_trap'
+            | 'stated_fact'
+            | 'extra_ai_link'
+            | 'false_positive_plant'
+            | 'injection_plant'
+            | 'analyst_decision'
+            | null;
+          count: number;
+          skipped: number;
+          outcomes: {
+            pass: number;
+            partial: number;
+            fail: number;
+            skipped: number;
+          };
+          scores: {
+            context_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            result_recall?: {
+              mean: number | null;
+              n: number;
+            };
+            reciprocal_rank?: {
+              mean: number | null;
+              n: number;
+            };
+            graph_query_ran?: {
+              mean: number | null;
+              n: number;
+            };
+            answer_correctness?: {
+              mean: number | null;
+              n: number;
+            };
+            citation_accuracy?: {
+              mean: number | null;
+              n: number;
+            };
+            made_up_numbers?: {
+              mean: number | null;
+              n: number;
+            };
+            no_answer_correct?: {
+              mean: number | null;
+              n: number;
+            };
+            injection_followed?: {
+              mean: number | null;
+              n: number;
+            };
+          };
+          times: {
+            embedding_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            vector_search_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_writing_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            graph_query_running_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            first_words_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+            answer_total_ms?: {
+              p50: number | null;
+              p95: number | null;
+              n: number;
+            };
+          };
+          graphFallbacks: {
+            graph_model_unavailable: number;
+            graph_query_invalid: number;
+            graph_query_refused: number;
+            graph_query_timed_out: number;
+            graph_query_failed: number;
+          };
+          targets: Array<{
+            metric:
+              | 'embedding_ms'
+              | 'vector_search_ms'
+              | 'graph_query_writing_ms'
+              | 'graph_query_running_ms'
+              | 'first_words_ms'
+              | 'answer_total_ms';
+            percentile: number;
+            limitMs: number;
+            inclusive: boolean;
+            value: number | null;
+            pass: unknown;
+          }>;
+          ratios: {
+            link_precision: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            link_recall_live_or_waiting: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            auto_live_share: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            false_positives_caught: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            injections_blocked: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+            analyst_agreement: {
+              numerator: number;
+              denominator: number;
+              value: number | null;
+            };
+          } | null;
+        }>;
+      } | null;
+    };
+
+/** POST /api/v1/benchmark/runs/{id}/finish request body. */
+export type PostBenchmarkRunsIdFinishBody = {
+  outcome: 'finished' | 'failed';
+  failure?: string;
+};
+
+/** POST /api/v1/benchmark/runs/{id}/results response. */
+export type PostBenchmarkRunsIdResultsResponse = {
+  stored: number;
+  repeats: number;
+};
+
+/** POST /api/v1/benchmark/runs/{id}/results request body. */
+export type PostBenchmarkRunsIdResultsBody = {
+  items: Array<
+    | {
+        itemKey: string;
+        outcome: 'pass' | 'partial' | 'fail' | 'skipped';
+        metrics: {
+          context_recall?: number | null;
+          result_recall?: number | null;
+          reciprocal_rank?: number | null;
+          graph_query_ran?: number | null;
+          answer_correctness?: number | null;
+          citation_accuracy?: number | null;
+          made_up_numbers?: number | null;
+          no_answer_correct?: number | null;
+          injection_followed?: number | null;
+          embedding_ms?: number | null;
+          vector_search_ms?: number | null;
+          graph_query_writing_ms?: number | null;
+          graph_query_running_ms?: number | null;
+          first_words_ms?: number | null;
+          answer_total_ms?: number | null;
+        };
+        mode: 'hybrid' | 'vector';
+        kind: 'single_hop' | 'multi_hop' | 'framework' | 'no_answer' | 'injection_trap';
+        part: 'retrieval';
+        details: {
+          reason: string | null;
+          referenceId: string | null;
+          question: string;
+          expected: Array<{
+            number: string | null;
+            name: string;
+            kind:
+              | 'asset'
+              | 'risk'
+              | 'control'
+              | 'policy'
+              | 'incident'
+              | 'framework'
+              | 'requirement'
+              | 'evidence'
+              | 'audit_finding';
+          }>;
+          found: Array<{
+            number: string;
+            name: string;
+            kind:
+              | 'asset'
+              | 'risk'
+              | 'control'
+              | 'policy'
+              | 'incident'
+              | 'framework'
+              | 'requirement'
+              | 'evidence'
+              | 'audit_finding';
+            rank: number;
+            inContext: boolean;
+          }>;
+          firstMatchRank: number | null;
+          graph: {
+            ran: boolean;
+            query: unknown;
+            fallback:
+              | 'graph_model_unavailable'
+              | 'graph_query_invalid'
+              | 'graph_query_refused'
+              | 'graph_query_timed_out'
+              | 'graph_query_failed'
+              | null;
+          } | null;
+          timings: {
+            embeddingMs: number | null;
+            vectorSearchMs: number | null;
+            queryWritingMs: number | null;
+            queryRunningMs: number | null;
+            fusionMs: number | null;
+            waitedMs: number | null;
+            firstWordsMs: number | null;
+            totalMs: number | null;
+          };
+          answer: null;
+          injection: {
+            kind: 'ignore_instructions' | 'leak_data' | 'add_links';
+            fileName: string;
+            followed: unknown;
+          } | null;
+        };
+      }
+    | {
+        itemKey: string;
+        outcome: 'pass' | 'partial' | 'fail' | 'skipped';
+        metrics: {
+          context_recall?: number | null;
+          result_recall?: number | null;
+          reciprocal_rank?: number | null;
+          graph_query_ran?: number | null;
+          answer_correctness?: number | null;
+          citation_accuracy?: number | null;
+          made_up_numbers?: number | null;
+          no_answer_correct?: number | null;
+          injection_followed?: number | null;
+          embedding_ms?: number | null;
+          vector_search_ms?: number | null;
+          graph_query_writing_ms?: number | null;
+          graph_query_running_ms?: number | null;
+          first_words_ms?: number | null;
+          answer_total_ms?: number | null;
+        };
+        mode: 'hybrid' | 'vector';
+        kind: 'single_hop' | 'multi_hop' | 'framework' | 'no_answer' | 'injection_trap';
+        part: 'answers';
+        details: {
+          reason: string | null;
+          referenceId: string | null;
+          question: string;
+          expected: Array<{
+            number: string | null;
+            name: string;
+            kind:
+              | 'asset'
+              | 'risk'
+              | 'control'
+              | 'policy'
+              | 'incident'
+              | 'framework'
+              | 'requirement'
+              | 'evidence'
+              | 'audit_finding';
+          }>;
+          found: Array<{
+            number: string;
+            name: string;
+            kind:
+              | 'asset'
+              | 'risk'
+              | 'control'
+              | 'policy'
+              | 'incident'
+              | 'framework'
+              | 'requirement'
+              | 'evidence'
+              | 'audit_finding';
+            rank: number;
+            inContext: boolean;
+          }>;
+          firstMatchRank: number | null;
+          graph: {
+            ran: boolean;
+            query: unknown;
+            fallback:
+              | 'graph_model_unavailable'
+              | 'graph_query_invalid'
+              | 'graph_query_refused'
+              | 'graph_query_timed_out'
+              | 'graph_query_failed'
+              | null;
+          } | null;
+          timings: {
+            embeddingMs: number | null;
+            vectorSearchMs: number | null;
+            queryWritingMs: number | null;
+            queryRunningMs: number | null;
+            fusionMs: number | null;
+            waitedMs: number | null;
+            firstWordsMs: number | null;
+            totalMs: number | null;
+          };
+          answer: {
+            text: string;
+            status: 'answered' | 'stopped' | 'failed';
+            citations: Array<
+              | {
+                  number: number;
+                  type: 'record';
+                  record: {
+                    number: string;
+                    name: string;
+                    kind:
+                      | 'asset'
+                      | 'risk'
+                      | 'control'
+                      | 'policy'
+                      | 'incident'
+                      | 'framework'
+                      | 'requirement'
+                      | 'evidence'
+                      | 'audit_finding';
+                  };
+                  matches: boolean;
+                }
+              | {
+                  number: number;
+                  type: 'passage';
+                  documentId: string;
+                  documentName: string;
+                  position: number;
+                  matches: boolean;
+                }
+              | {
+                  number: number;
+                  type: 'hidden';
+                }
+            >;
+          } | null;
+          injection: {
+            kind: 'ignore_instructions' | 'leak_data' | 'add_links';
+            fileName: string;
+            followed: unknown;
+          } | null;
+        };
+      }
+    | {
+        itemKey: string;
+        outcome: 'pass' | 'partial' | 'fail' | 'skipped';
+        metrics: {
+          context_recall?: number | null;
+          result_recall?: number | null;
+          reciprocal_rank?: number | null;
+          graph_query_ran?: number | null;
+          answer_correctness?: number | null;
+          citation_accuracy?: number | null;
+          made_up_numbers?: number | null;
+          no_answer_correct?: number | null;
+          injection_followed?: number | null;
+          embedding_ms?: number | null;
+          vector_search_ms?: number | null;
+          graph_query_writing_ms?: number | null;
+          graph_query_running_ms?: number | null;
+          first_words_ms?: number | null;
+          answer_total_ms?: number | null;
+        };
+        part: 'extraction';
+        mode: 'pipeline';
+        kind: 'stated_fact' | 'extra_ai_link' | 'false_positive_plant' | 'injection_plant' | 'analyst_decision';
+        details: {
+          reason: string | null;
+          linkType:
+            | 'HOSTS'
+            | 'RUNS'
+            | 'EXPOSED_TO'
+            | 'MITIGATED_BY'
+            | 'GOVERNED_BY'
+            | 'IMPACTS'
+            | 'EXPOSES'
+            | 'SATISFIES'
+            | 'MAPS_TO'
+            | 'SUPPORTS'
+            | 'CONCERNS';
+          from: {
+            number: string | null;
+            name: string;
+          };
+          to: {
+            number: string | null;
+            name: string;
+          };
+          state: 'live_auto' | 'live_approved' | 'waiting' | 'rejected' | 'removed' | 'absent';
+          plant:
+            | {
+                type: 'false_positive';
+                fileName: string;
+              }
+            | {
+                type: 'injection';
+                fileName: string;
+                injectionKind: 'ignore_instructions' | 'leak_data' | 'add_links';
+              }
+            | null;
+        };
+      }
+  >;
+};
+
+/** GET /api/v1/benchmark/runs/{id}/results response. */
+export type GetBenchmarkRunsIdResultsResponse = {
+  items: Array<
+    | {
+        itemKey: string;
+        outcome: 'pass' | 'partial' | 'fail' | 'skipped';
+        metrics: {
+          context_recall?: number | null;
+          result_recall?: number | null;
+          reciprocal_rank?: number | null;
+          graph_query_ran?: number | null;
+          answer_correctness?: number | null;
+          citation_accuracy?: number | null;
+          made_up_numbers?: number | null;
+          no_answer_correct?: number | null;
+          injection_followed?: number | null;
+          embedding_ms?: number | null;
+          vector_search_ms?: number | null;
+          graph_query_writing_ms?: number | null;
+          graph_query_running_ms?: number | null;
+          first_words_ms?: number | null;
+          answer_total_ms?: number | null;
+        };
+        mode: 'hybrid' | 'vector';
+        kind: 'single_hop' | 'multi_hop' | 'framework' | 'no_answer' | 'injection_trap';
+        part: 'retrieval';
+        details: {
+          reason: string | null;
+          referenceId: string | null;
+          question: string;
+          expected: Array<{
+            number: string | null;
+            name: string;
+            kind:
+              | 'asset'
+              | 'risk'
+              | 'control'
+              | 'policy'
+              | 'incident'
+              | 'framework'
+              | 'requirement'
+              | 'evidence'
+              | 'audit_finding';
+          }>;
+          found: Array<{
+            number: string;
+            name: string;
+            kind:
+              | 'asset'
+              | 'risk'
+              | 'control'
+              | 'policy'
+              | 'incident'
+              | 'framework'
+              | 'requirement'
+              | 'evidence'
+              | 'audit_finding';
+            rank: number;
+            inContext: boolean;
+          }>;
+          firstMatchRank: number | null;
+          graph: {
+            ran: boolean;
+            query: unknown;
+            fallback:
+              | 'graph_model_unavailable'
+              | 'graph_query_invalid'
+              | 'graph_query_refused'
+              | 'graph_query_timed_out'
+              | 'graph_query_failed'
+              | null;
+          } | null;
+          timings: {
+            embeddingMs: number | null;
+            vectorSearchMs: number | null;
+            queryWritingMs: number | null;
+            queryRunningMs: number | null;
+            fusionMs: number | null;
+            waitedMs: number | null;
+            firstWordsMs: number | null;
+            totalMs: number | null;
+          };
+          answer: null;
+          injection: {
+            kind: 'ignore_instructions' | 'leak_data' | 'add_links';
+            fileName: string;
+            followed: unknown;
+          } | null;
+        };
+        createdAt: string;
+      }
+    | {
+        itemKey: string;
+        outcome: 'pass' | 'partial' | 'fail' | 'skipped';
+        metrics: {
+          context_recall?: number | null;
+          result_recall?: number | null;
+          reciprocal_rank?: number | null;
+          graph_query_ran?: number | null;
+          answer_correctness?: number | null;
+          citation_accuracy?: number | null;
+          made_up_numbers?: number | null;
+          no_answer_correct?: number | null;
+          injection_followed?: number | null;
+          embedding_ms?: number | null;
+          vector_search_ms?: number | null;
+          graph_query_writing_ms?: number | null;
+          graph_query_running_ms?: number | null;
+          first_words_ms?: number | null;
+          answer_total_ms?: number | null;
+        };
+        mode: 'hybrid' | 'vector';
+        kind: 'single_hop' | 'multi_hop' | 'framework' | 'no_answer' | 'injection_trap';
+        part: 'answers';
+        details: {
+          reason: string | null;
+          referenceId: string | null;
+          question: string;
+          expected: Array<{
+            number: string | null;
+            name: string;
+            kind:
+              | 'asset'
+              | 'risk'
+              | 'control'
+              | 'policy'
+              | 'incident'
+              | 'framework'
+              | 'requirement'
+              | 'evidence'
+              | 'audit_finding';
+          }>;
+          found: Array<{
+            number: string;
+            name: string;
+            kind:
+              | 'asset'
+              | 'risk'
+              | 'control'
+              | 'policy'
+              | 'incident'
+              | 'framework'
+              | 'requirement'
+              | 'evidence'
+              | 'audit_finding';
+            rank: number;
+            inContext: boolean;
+          }>;
+          firstMatchRank: number | null;
+          graph: {
+            ran: boolean;
+            query: unknown;
+            fallback:
+              | 'graph_model_unavailable'
+              | 'graph_query_invalid'
+              | 'graph_query_refused'
+              | 'graph_query_timed_out'
+              | 'graph_query_failed'
+              | null;
+          } | null;
+          timings: {
+            embeddingMs: number | null;
+            vectorSearchMs: number | null;
+            queryWritingMs: number | null;
+            queryRunningMs: number | null;
+            fusionMs: number | null;
+            waitedMs: number | null;
+            firstWordsMs: number | null;
+            totalMs: number | null;
+          };
+          answer: {
+            text: string;
+            status: 'answered' | 'stopped' | 'failed';
+            citations: Array<
+              | {
+                  number: number;
+                  type: 'record';
+                  record: {
+                    number: string;
+                    name: string;
+                    kind:
+                      | 'asset'
+                      | 'risk'
+                      | 'control'
+                      | 'policy'
+                      | 'incident'
+                      | 'framework'
+                      | 'requirement'
+                      | 'evidence'
+                      | 'audit_finding';
+                  };
+                  matches: boolean;
+                }
+              | {
+                  number: number;
+                  type: 'passage';
+                  documentId: string;
+                  documentName: string;
+                  position: number;
+                  matches: boolean;
+                }
+              | {
+                  number: number;
+                  type: 'hidden';
+                }
+            >;
+          } | null;
+          injection: {
+            kind: 'ignore_instructions' | 'leak_data' | 'add_links';
+            fileName: string;
+            followed: unknown;
+          } | null;
+        };
+        createdAt: string;
+      }
+    | {
+        itemKey: string;
+        outcome: 'pass' | 'partial' | 'fail' | 'skipped';
+        metrics: {
+          context_recall?: number | null;
+          result_recall?: number | null;
+          reciprocal_rank?: number | null;
+          graph_query_ran?: number | null;
+          answer_correctness?: number | null;
+          citation_accuracy?: number | null;
+          made_up_numbers?: number | null;
+          no_answer_correct?: number | null;
+          injection_followed?: number | null;
+          embedding_ms?: number | null;
+          vector_search_ms?: number | null;
+          graph_query_writing_ms?: number | null;
+          graph_query_running_ms?: number | null;
+          first_words_ms?: number | null;
+          answer_total_ms?: number | null;
+        };
+        part: 'extraction';
+        mode: 'pipeline';
+        kind: 'stated_fact' | 'extra_ai_link' | 'false_positive_plant' | 'injection_plant' | 'analyst_decision';
+        details: {
+          reason: string | null;
+          linkType:
+            | 'HOSTS'
+            | 'RUNS'
+            | 'EXPOSED_TO'
+            | 'MITIGATED_BY'
+            | 'GOVERNED_BY'
+            | 'IMPACTS'
+            | 'EXPOSES'
+            | 'SATISFIES'
+            | 'MAPS_TO'
+            | 'SUPPORTS'
+            | 'CONCERNS';
+          from: {
+            number: string | null;
+            name: string;
+          };
+          to: {
+            number: string | null;
+            name: string;
+          };
+          state: 'live_auto' | 'live_approved' | 'waiting' | 'rejected' | 'removed' | 'absent';
+          plant:
+            | {
+                type: 'false_positive';
+                fileName: string;
+              }
+            | {
+                type: 'injection';
+                fileName: string;
+                injectionKind: 'ignore_instructions' | 'leak_data' | 'add_links';
+              }
+            | null;
+        };
+        createdAt: string;
+      }
+  >;
+  page: number;
+  pageSize: number;
+  total: number;
+  hidden: boolean;
+};
+
 /** GET /api/v1/chat/conversations response. */
 export type GetChatConversationsResponse = {
   items: Array<{
@@ -3768,6 +6171,41 @@ export const api = {
   /** Check a 6-digit authenticator code (finishes sign-in or MFA set-up) */
   postAuthTwoFactorVerifyTotp: (body: PostAuthTwoFactorVerifyTotpBody): Promise<PostAuthTwoFactorVerifyTotpResponse> =>
     request<PostAuthTwoFactorVerifyTotpResponse>('POST', '/api/v1/auth/two-factor/verify-totp', body),
+  /** Start a benchmark run in the caller's org (Admins only): the parts, modes, question set and question count. The run is saved running, labelled with the caller's clearance, with its settings: the body plus the text and embedding models, the prompt versions, the search limits, the matching cut-offs and the injection checks the API runs with. Audited as benchmark.run_started. 201 with the run */
+  postBenchmarkRuns: (body: PostBenchmarkRunsBody): Promise<PostBenchmarkRunsResponse> =>
+    request<PostBenchmarkRunsResponse>('POST', '/api/v1/benchmark/runs', body),
+  /** The org's benchmark runs (Admins only), paged, newest first, each with its status, parts, modes, data version, question and result counts and headline numbers per mode. Filters: status, part */
+  getBenchmarkRuns: (query?: ListQuery): Promise<GetBenchmarkRunsResponse> =>
+    request<GetBenchmarkRunsResponse>('GET', `/api/v1/benchmark/runs${queryString(query)}`),
+  /** One benchmark run with its settings and summary (Admins only). A reader whose clearance is below the run's label gets its row and summary with hidden: true instead of the settings. 404 for a missing one or another org's */
+  getBenchmarkRunsId: (path: { id: string }): Promise<GetBenchmarkRunsIdResponse> =>
+    request<GetBenchmarkRunsIdResponse>('GET', `/api/v1/benchmark/runs/${encodeURIComponent(path.id)}`),
+  /** End a running run (Admins only): finished, or failed with its code. The API computes the summary from the run's stored results and saves it with the status and the finished time; audited as benchmark.run_finished with counts and headline numbers only. 409 run_not_running for a run that has ended; 404 for a missing one or another org's */
+  postBenchmarkRunsIdFinish: (
+    path: { id: string },
+    body: PostBenchmarkRunsIdFinishBody,
+  ): Promise<PostBenchmarkRunsIdFinishResponse> =>
+    request<PostBenchmarkRunsIdFinishResponse>(
+      'POST',
+      `/api/v1/benchmark/runs/${encodeURIComponent(path.id)}/finish`,
+      body,
+    ),
+  /** Add 1 to 25 result items to a running run (Admins only), each in one of the run's parts and modes. Answers longer than 4,000 characters are cut. An item with the same item key and mode as one already stored is ignored; the answer says how many were stored and how many were repeats. The run's last activity moves on. 409 run_not_running for a finished or failed run; 404 for a missing one or another org's */
+  postBenchmarkRunsIdResults: (
+    path: { id: string },
+    body: PostBenchmarkRunsIdResultsBody,
+  ): Promise<PostBenchmarkRunsIdResultsResponse> =>
+    request<PostBenchmarkRunsIdResultsResponse>(
+      'POST',
+      `/api/v1/benchmark/runs/${encodeURIComponent(path.id)}/results`,
+      body,
+    ),
+  /** A benchmark run's results (Admins only), paged, in question order then mode. Filters: part, mode, kind, outcome. A reader whose clearance is below the run's label gets hidden: true and no items. 404 for a missing run or another org's */
+  getBenchmarkRunsIdResults: (path: { id: string }, query?: ListQuery): Promise<GetBenchmarkRunsIdResultsResponse> =>
+    request<GetBenchmarkRunsIdResultsResponse>(
+      'GET',
+      `/api/v1/benchmark/runs/${encodeURIComponent(path.id)}/results${queryString(query)}`,
+    ),
   /** The caller's own conversations, paged, latest activity first, each with its message count */
   getChatConversations: (query?: ListQuery): Promise<GetChatConversationsResponse> =>
     request<GetChatConversationsResponse>('GET', `/api/v1/chat/conversations${queryString(query)}`),
