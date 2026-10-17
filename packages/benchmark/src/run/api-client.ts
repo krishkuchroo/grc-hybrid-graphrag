@@ -1,9 +1,12 @@
-// The benchmark command's client (S8-005; D46, D47, D54, D57, D64, D163, D164): a small client over
-// `fetch` that talks to the platform's public API with the run's one API key, as any machine would,
-// and knows nothing of the API's internals. It reads the record lists, the frameworks and their
-// requirements, and the document counts; searches (`POST /api/v1/search`); starts conversations
-// and asks questions, reading the answer's event stream (`queued`, `step`, `sources`, `token`) to
-// `done` or `error`; and starts, fills and finishes benchmark runs.
+// The benchmark command's client (S8-005, S8-006; D46, D47, D54, D57, D64, D163, D164): a small
+// client over `fetch` that talks to the platform's public API with the run's one API key, as any
+// machine would, and knows nothing of the API's internals. It reads the record lists, the
+// frameworks and their requirements, and the document counts; searches (`POST /api/v1/search`);
+// starts conversations and asks questions, reading the answer's event stream (`queued`, `step`,
+// `sources`, `token`) to `done` or `error`; and starts, fills and finishes benchmark runs. For the
+// extraction part (S8-006) it also reads, read-only, each record's links
+// (`GET /api/v1/<plural>/:id/links`) and the review queue's link findings of every status with
+// their decisions' outcomes (`GET /api/v1/review/findings`, `GET /api/v1/review/findings/:id`).
 // - The key goes only in the `Authorization: Bearer …` header, and is held in a private field, so
 //   it never shows in an error, a log line or a spread of the client.
 // - A 429 is waited out for its `Retry-After` (at most 2 minutes a time) and the same call is sent
@@ -16,9 +19,16 @@
 //   throws `BenchStoppedError`.
 import { API_PREFIX, ApiRequestError, retryAfterMs, type FetchLike } from '@grc/generators';
 import {
+  EXTRACTION_LINK_TYPES,
+  LINK_END_STATES,
+  LINK_OUTCOME_RESULTS,
+  RECORD_PATHS,
+  REVIEW_FINDING_STATUSES,
+  REVIEW_MAX_PAGE_SIZE,
   benchmarkResultsAddedSchema,
   benchmarkRunDetailSchema,
   chatStreamEventSchema,
+  isRecordKind,
   searchAnswerSchema,
   type AddBenchmarkResultsBody,
   type BenchmarkResultsAdded,
@@ -26,6 +36,11 @@ import {
   type ChatMessage,
   type DocumentStatus,
   type FinishBenchmarkRunBody,
+  type LinkEndState,
+  type LinkOutcomeResult,
+  type LinkType,
+  type RecordKind,
+  type ReviewFindingStatus,
   type SearchAnswer,
   type SearchMode,
   type StartBenchmarkRunBody,
@@ -65,6 +80,57 @@ export interface ListedRecord {
 export interface CallOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
+}
+
+/** A record as its kind's list gives it, with its status and origin (the extraction part). */
+export interface OrgRecordRow {
+  kind: RecordKind;
+  id: string;
+  number: string;
+  name: string;
+  sourceIds: string[];
+  /** `active` or `retired`. */
+  status: string;
+  /** `manual`, `import` or `ai`; empty when the list gave none. */
+  origin: string;
+}
+
+/** One of a record's links, as `GET /api/v1/<plural>/:id/links` gives it: its type, whether the
+ * record is its start (`out`) or its end (`in`), the other end, and where it came from. */
+export interface RecordLinkRow {
+  type: string;
+  direction: 'out' | 'in';
+  other: { id: string; kind: RecordKind; number: string; name: string; status: string };
+  /** `manual`, `import` or `ai`; empty when the link has none. */
+  origin: string;
+}
+
+/** One end of a link finding, as the review queue's list gives it: its kind and name as Gemma
+ * wrote them, its state, and the matched record's ID for a `matched` end. */
+export interface LinkFindingEnd {
+  kind: RecordKind;
+  name: string;
+  state: LinkEndState;
+  recordId: string | null;
+}
+
+/** A link finding, as the review queue's list gives it. */
+export interface LinkFindingRow {
+  id: string;
+  status: ReviewFindingStatus;
+  type: LinkType;
+  from: LinkFindingEnd;
+  to: LinkFindingEnd;
+}
+
+/** What a link finding's decision wrote: the link between the two records settled on, made then
+ * (`created`) or already there (`exists`), and whether it has been removed since. */
+export interface LinkFindingOutcome {
+  result: LinkOutcomeResult;
+  type: LinkType;
+  fromId: string;
+  toId: string;
+  removed: boolean;
 }
 
 /** What the benchmark run reads and writes through the API. */
@@ -128,6 +194,59 @@ const pageSchema = z.object({
 });
 
 const frameworksSchema = z.object({ items: z.array(z.unknown()) });
+
+const orgRecordRowSchema = z.object({
+  id: z.string().min(1),
+  number: z.string().min(1),
+  name: z.string(),
+  sourceIds: z.array(z.string()).optional(),
+  status: z.string(),
+  origin: z.string().nullable().optional(),
+});
+
+const recordLinksSchema = z.object({ items: z.array(z.unknown()) });
+
+const recordLinkRowSchema = z.object({
+  type: z.string(),
+  direction: z.enum(['out', 'in']),
+  other: z.object({
+    id: z.string().min(1),
+    kind: z.string(),
+    number: z.string(),
+    name: z.string(),
+    status: z.string(),
+  }),
+  origin: z.string().nullable().optional(),
+});
+
+const linkFindingEndSchema = z.object({
+  kind: z.string(),
+  name: z.string(),
+  state: z.enum(LINK_END_STATES),
+  record: z.object({ recordId: z.string().min(1) }).optional(),
+});
+
+const linkFindingRowSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('link'),
+  status: z.enum(REVIEW_FINDING_STATUSES),
+  summary: z.object({ type: z.enum(EXTRACTION_LINK_TYPES), from: linkFindingEndSchema, to: linkFindingEndSchema }),
+});
+
+const linkFindingDetailSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('link'),
+  outcome: z
+    .object({
+      result: z.enum(LINK_OUTCOME_RESULTS),
+      type: z.enum(EXTRACTION_LINK_TYPES),
+      fromId: z.string().min(1),
+      toId: z.string().min(1),
+      removed: z.unknown().optional(),
+    })
+    .nullable()
+    .optional(),
+});
 const conversationSchema = z.object({ id: z.uuid() });
 
 const SAFE_CODE = /^[a-z0-9_]{1,64}$/;
@@ -219,15 +338,69 @@ export class BenchApiClient implements BenchApi {
   /** Every row of a paged list (`GET /api/v1/<path>`), page by page. */
   async listRecords(path: string, query: Record<string, string> = {}, options?: CallOptions): Promise<ListedRecord[]> {
     const fullPath = `${API_PREFIX}${path}`;
-    const out: ListedRecord[] = [];
-    for (let page = 1; ; page++) {
-      const params = new URLSearchParams({ ...query, page: String(page), pageSize: String(LIST_PAGE_SIZE) });
-      const answer = pageSchema.safeParse(await this.json('GET', fullPath, `?${params.toString()}`, null, options));
-      if (!answer.success) throw this.unexpected('GET', fullPath);
-      for (const item of answer.data.items) out.push(this.listed('GET', fullPath, item));
-      const pages = Math.ceil(answer.data.total / LIST_PAGE_SIZE);
-      if (answer.data.items.length === 0 || page >= pages) return out;
-    }
+    return this.paged(fullPath, query, options, LIST_PAGE_SIZE, (item) => [this.listed('GET', fullPath, item)]);
+  }
+
+  /** Every record of a kind, retired ones too, with its status and origin (`GET /api/v1/<plural>`). */
+  async recordRows(kind: RecordKind, options?: CallOptions): Promise<OrgRecordRow[]> {
+    const path = `${API_PREFIX}/${RECORD_PATHS[kind]}`;
+    return this.paged(path, { status: 'all' }, options, LIST_PAGE_SIZE, (item) => {
+      const row = orgRecordRowSchema.safeParse(item);
+      if (!row.success) throw this.unexpected('GET', path);
+      const { id, number, name, sourceIds, status, origin } = row.data;
+      return [{ kind, id, number, name, sourceIds: sourceIds ?? [], status, origin: origin ?? '' }];
+    });
+  }
+
+  /** A record's links whose other end is one of the five record kinds
+   * (`GET /api/v1/<plural>/:id/links`). */
+  async recordLinks(kind: RecordKind, id: string, options?: CallOptions): Promise<RecordLinkRow[]> {
+    const path = `${API_PREFIX}/${RECORD_PATHS[kind]}/${encodeURIComponent(id)}/links`;
+    const answer = recordLinksSchema.safeParse(await this.json('GET', path, '', null, options));
+    if (!answer.success) throw this.unexpected('GET', path);
+    return answer.data.items.flatMap((item): RecordLinkRow[] => {
+      const row = recordLinkRowSchema.safeParse(item);
+      if (!row.success) throw this.unexpected('GET', path);
+      const { type, direction, other, origin } = row.data;
+      // A link to another kind of node (a framework, evidence …) is not one the extraction makes.
+      if (!isRecordKind(other.kind)) return [];
+      return [{ type, direction, other: { ...other, kind: other.kind }, origin: origin ?? '' }];
+    });
+  }
+
+  /** Every link finding in the review queue, of every status, oldest first
+   * (`GET /api/v1/review/findings`). */
+  async linkFindings(options?: CallOptions): Promise<LinkFindingRow[]> {
+    const path = `${API_PREFIX}/review/findings`;
+    const query = { kind: 'link', status: REVIEW_FINDING_STATUSES.join(','), sort: 'oldest' };
+    const endOf = (end: z.infer<typeof linkFindingEndSchema>): LinkFindingEnd => {
+      if (!isRecordKind(end.kind)) throw this.unexpected('GET', path);
+      const recordId = end.state === 'matched' ? (end.record?.recordId ?? null) : null;
+      return { kind: end.kind, name: end.name, state: end.state, recordId };
+    };
+    return this.paged(path, query, options, REVIEW_MAX_PAGE_SIZE, (item) => {
+      const row = linkFindingRowSchema.safeParse(item);
+      if (!row.success) throw this.unexpected('GET', path);
+      const { id, status, summary } = row.data;
+      return [{ id, status, type: summary.type, from: endOf(summary.from), to: endOf(summary.to) }];
+    });
+  }
+
+  /** What a link finding's decision wrote, or null when it has no outcome
+   * (`GET /api/v1/review/findings/:id`). */
+  async linkFindingOutcome(id: string, options?: CallOptions): Promise<LinkFindingOutcome | null> {
+    const path = `${API_PREFIX}/review/findings/${encodeURIComponent(id)}`;
+    const answer = linkFindingDetailSchema.safeParse(await this.json('GET', path, '', null, options));
+    if (!answer.success || answer.data.id !== id) throw this.unexpected('GET', path);
+    const outcome = answer.data.outcome ?? null;
+    if (outcome === null) return null;
+    return {
+      result: outcome.result,
+      type: outcome.type,
+      fromId: outcome.fromId,
+      toId: outcome.toId,
+      removed: outcome.removed !== undefined && outcome.removed !== null,
+    };
   }
 
   /** The org's active frameworks (`GET /api/v1/frameworks`), each with its ID, number and name. */
@@ -304,6 +477,25 @@ export class BenchApiClient implements BenchApi {
     const answer = benchmarkRunDetailSchema.safeParse(await this.json('POST', path, '', { json: body }, options));
     if (!answer.success) throw this.unexpected('POST', path);
     return answer.data;
+  }
+
+  /** Every item of a paged list (D47's paging), page by page, each made into rows by `rows`. */
+  private async paged<T>(
+    path: string,
+    query: Record<string, string>,
+    options: CallOptions | undefined,
+    pageSize: number,
+    rows: (item: unknown) => T[],
+  ): Promise<T[]> {
+    const out: T[] = [];
+    for (let page = 1; ; page++) {
+      const params = new URLSearchParams({ ...query, page: String(page), pageSize: String(pageSize) });
+      const answer = pageSchema.safeParse(await this.json('GET', path, `?${params.toString()}`, null, options));
+      if (!answer.success) throw this.unexpected('GET', path);
+      for (const item of answer.data.items) out.push(...rows(item));
+      const pages = Math.ceil(answer.data.total / pageSize);
+      if (answer.data.items.length === 0 || page >= pages) return out;
+    }
   }
 
   private listed(method: string, path: string, item: unknown): ListedRecord {

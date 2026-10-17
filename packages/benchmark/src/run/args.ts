@@ -1,11 +1,13 @@
-// The arguments of `pnpm bench:run` (S8-005; D1, D46, D60):
-//   --org <slug> --set <file> [--part retrieval|answers|all] [--modes hybrid,vector] [--limit N]
-//   [--wait [minutes]] [--base-url URL]
+// The arguments of `pnpm bench:run` (S8-005, S8-006; D1, D42, D46, D60):
+//   --org <slug> --set <file> [--part retrieval|answers|all|extraction] [--modes hybrid,vector]
+//   [--limit N] [--wait [minutes]] [--base-url URL]
 // Defaults: part `retrieval`, both modes in S6's order, every question, no wait (`--wait` alone
-// waits up to 240 minutes), base URL `https://grc.localhost`. Refused: unknown arguments, a flag
-// given twice, a missing or bad org slug or set path, an unknown part or mode, a mode given twice,
-// a limit or wait that isn't a whole number in range, and a base URL that isn't `https://` (or
-// `http://` to 127.0.0.1 or localhost), holds a user name or password, or has a query or fragment.
+// waits up to 240 minutes), base URL `https://grc.localhost`. `--part extraction` runs alone (`all`
+// is the two question parts): it asks no questions, so it takes no `--modes` and no `--limit`.
+// Refused: unknown arguments, a flag given twice, a missing or bad org slug or set path, an unknown
+// part or mode, a mode given twice, `--modes` or `--limit` with `--part extraction`, a limit or
+// wait that isn't a whole number in range, and a base URL that isn't `https://` (or `http://` to
+// 127.0.0.1 or localhost), holds a user name or password, or has a query or fragment.
 // Pure: the problems name the flag and the rule, never a value from a file.
 import {
   BENCHMARK_QUESTION_PARTS,
@@ -16,7 +18,7 @@ import {
   type SearchMode,
 } from '@grc/shared';
 
-export const BENCH_RUN_PARTS = ['retrieval', 'answers', 'all'] as const;
+export const BENCH_RUN_PARTS = ['retrieval', 'answers', 'all', 'extraction'] as const;
 export type BenchRunPartOption = (typeof BENCH_RUN_PARTS)[number];
 
 export const DEFAULT_BENCH_BASE_URL = 'https://grc.localhost';
@@ -27,7 +29,7 @@ export const DEFAULT_WAIT_MINUTES = 240;
 export const MAX_WAIT_MINUTES = 480;
 
 export const BENCH_RUN_USAGE =
-  'usage: pnpm bench:run --org <org slug> --set <question set file> [--part retrieval|answers|all] ' +
+  'usage: pnpm bench:run --org <org slug> --set <question set file> [--part retrieval|answers|all|extraction] ' +
   '[--modes hybrid,vector] [--limit <whole number>] ' +
   `[--wait [minutes, default ${DEFAULT_WAIT_MINUTES}, at most ${MAX_WAIT_MINUTES}]] [--base-url <default ${DEFAULT_BENCH_BASE_URL}>]`;
 
@@ -36,9 +38,9 @@ export interface BenchRunArgs {
   /** The question set's path, as given. */
   set: string;
   part: BenchRunPartOption;
-  /** The question parts the part option asks for, in the fixed order. */
+  /** The question parts the part option asks for, in the fixed order; none for `extraction`. */
   parts: BenchmarkQuestionPart[];
-  /** The modes, in the order given, each once. */
+  /** The modes, in the order given, each once; none for `extraction` (its items are `pipeline`). */
   modes: SearchMode[];
   /** Only the first N questions of the set; null for all of them. */
   limit: number | null;
@@ -87,6 +89,7 @@ export function cleanBenchBaseUrl(text: string): string {
 }
 
 function partsOf(part: BenchRunPartOption): BenchmarkQuestionPart[] {
+  if (part === 'extraction') return [];
   return part === 'all' ? [...BENCHMARK_QUESTION_PARTS] : [part];
 }
 
@@ -129,12 +132,20 @@ export function parseBenchRunArgs(argv: readonly string[]): BenchRunArgsResult {
 
   const partText = (values['--part'] ?? DEFAULT_BENCH_PART).trim();
   const part = (BENCH_RUN_PARTS as readonly string[]).includes(partText) ? (partText as BenchRunPartOption) : null;
-  if (part === null) problems.push('--part must be retrieval, answers or all');
+  if (part === null) problems.push('--part must be retrieval, answers, all or extraction');
+  const extraction = part === 'extraction';
+  if (extraction && values['--modes'] !== undefined) {
+    problems.push('--modes is for the question parts: --part extraction asks no questions');
+  }
+  if (extraction && values['--limit'] !== undefined) {
+    problems.push('--limit is for the question parts: --part extraction asks no questions');
+  }
 
+  // The question modes; none for extraction, whose items are `pipeline` (--modes is refused above).
   const modes: SearchMode[] = [];
   if (values['--modes'] === undefined) {
-    modes.push(...SEARCH_MODES);
-  } else {
+    if (!extraction) modes.push(...SEARCH_MODES);
+  } else if (!extraction) {
     const names = values['--modes'].split(',').map((m) => m.trim());
     if (names.length === 0 || names.some((m) => m === '')) {
       problems.push(`--modes must list ${SEARCH_MODES.join(' and/or ')}, separated by commas`);
@@ -154,7 +165,7 @@ export function parseBenchRunArgs(argv: readonly string[]): BenchRunArgsResult {
   }
 
   let limit: number | null = null;
-  if (values['--limit'] !== undefined) {
+  if (values['--limit'] !== undefined && !extraction) {
     limit = wholeNumber(values['--limit'].trim());
     if (limit === null || limit < 1) problems.push('--limit must be a whole number from 1');
   }

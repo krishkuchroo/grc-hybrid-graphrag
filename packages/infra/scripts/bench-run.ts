@@ -1,12 +1,19 @@
-// `pnpm bench:run --org <slug> --set <file> [--part retrieval|answers|all] [--modes hybrid,vector]
-// [--limit N] [--wait [minutes]] [--base-url URL]` (S8-005; D1, D42, D45.8, D46, D47, D48, D54, D57,
-// D60, D64, D81, D163, D164, D170, D230): runs a question set against an org through the real API in
-// hybrid and vector mode, scores every answer by fixed rules and stores the run, so "hybrid beats
-// plain vector search" is measured, not asserted.
+// `pnpm bench:run --org <slug> --set <file> [--part retrieval|answers|all|extraction]
+// [--modes hybrid,vector] [--limit N] [--wait [minutes]] [--base-url URL]` (S8-005, S8-006; D1, D24,
+// D38, D42, D45.8, D46, D47, D48, D52.6, D54, D57, D60, D64, D81, D163, D164, D170, D230): runs a
+// question set against an org through the real API in hybrid and vector mode, scores every answer
+// by fixed rules and stores the run, so "hybrid beats plain vector search" is measured, not
+// asserted. `--part extraction`, alone, instead measures a full-pipeline org's extraction against
+// the answer key (packages/benchmark/src/extraction/): the org's records, links and link findings,
+// read through the API, scored as stated facts, extra AI links, planted false positives, add-link
+// injections and Analyst decisions, and stored as one run whose summary holds the seven ratios.
 // - Refused before anything is made: unknown arguments, a set `loadQuestionSet` refuses (the field
 //   that's wrong is named), a set that doesn't name the org's slug, an org that doesn't exist, an
 //   org with no Admin who holds Restricted, and a base URL that isn't `https://` (or `http://` to
-//   127.0.0.1 or localhost).
+//   127.0.0.1 or localhost). With `--part extraction` also: a hand-written set, an org that isn't the
+//   set's full-pipeline org (`gen-…`; a fast-loaded org went through no extraction), and an
+//   `answer-key.json` beside the set that is missing, not valid, or from another generator version,
+//   seed, size or org than the set.
 // - The key: one Admin-role API key at clearance Restricted for the org (D230), made by the org's
 //   Admin, who holds Restricted, through ApiKeysService (so it is audited), expiring after 12 hours
 //   at most. The command reaches the org with this key only, through `--base-url`, and revokes it
@@ -18,9 +25,10 @@
 //   the run `failed`, revoke the key and exit 1.
 // - Output: per mode and per question kind, side by side, the counts and scores; the 95th-percentile
 //   times against D48 with PASS or FAIL; the graph fallbacks by reason; the run ID and its page on
-//   the Benchmark screen. Scores, counts, times and IDs only: never a question, an answer, a name or
-//   the key (D57, D164). The whole run, texts included, goes to `data/benchmark/<run ID>.json`, a
-//   folder git keeps out (D81).
+//   the Benchmark screen. For extraction: what was read, the stated facts per state, the items per
+//   kind, and the seven ratios with their numerators and denominators. Scores, counts, times and IDs
+//   only: never a question, an answer, a name or the key (D57, D164). The whole run, texts
+//   included, goes to `data/benchmark/<run ID>.json`, a folder git keeps out (D81).
 // The root script runs node with `--use-system-ca`, so the Mac's trust in Caddy's local
 // certificate applies (D60). An error prints its type and code, or, for an API refusal, the address,
 // status, code and reference ID. Settings: see org-script-env.ts (D170). Every run is a new run;
@@ -69,6 +77,37 @@ try {
 }
 if (!shared.questionSetFitsOrg(set.source, args.org)) {
   refuse([`the question set is not for ${args.org}: it names ${set.source.orgSlugs.join(', ')}`]);
+}
+
+// The extraction part: a generated set on its own full-pipeline org, and the answer key beside it,
+// rendered again into what the org's documents state and plant.
+type Expected = ReturnType<Benchmark['expectedOrg']>;
+type GeneratedSource = Extract<typeof set.source, { type: 'generated' }>;
+let extraction: { source: GeneratedSource; expected: Expected } | null = null;
+if (args.part === 'extraction') {
+  const check = bench.checkExtractionSet(set.source, args.org);
+  if (!check.ok) refuse([check.problem]);
+  let key: Awaited<ReturnType<Benchmark['loadAnswerKeyBeside']>>;
+  try {
+    key = await bench.loadAnswerKeyBeside(resolve(process.cwd(), args.set));
+  } catch (err) {
+    if (err instanceof bench.AnswerKeyFileError) {
+      if (err.code !== 'invalid') refuse([err.message]);
+      const shown = err.problems
+        .slice(0, 10)
+        .map((p) => `${bench.ANSWER_KEY_FILE} is not valid: ${p.field}: ${p.message}`);
+      const more = err.problems.length - shown.length;
+      refuse(more > 0 ? [...shown, `… and ${more} more problem(s)`] : shown);
+    }
+    refuse([`${bench.ANSWER_KEY_FILE} could not be read: ${describeError(err)}`]);
+  }
+  const keyProblems = bench.answerKeyProblems(key, check.source, args.org);
+  if (keyProblems.length > 0) refuse(keyProblems);
+  try {
+    extraction = { source: check.source, expected: bench.expectedOrg(key, check.source.orgKey) };
+  } catch (err) {
+    refuse([`the answer key's sources could not be rendered again: ${describeError(err)}`]);
+  }
 }
 
 const missing = missingSettings();
@@ -183,11 +222,6 @@ try {
       source.type === 'generated'
         ? `generated (generator version ${source.generatorVersion}, seed ${source.seed}, size ${source.size}, ${source.orgKey})`
         : 'hand-written';
-    const runCount = args.limit === null ? set.questions.length : Math.min(args.limit, set.questions.length);
-    console.log(
-      `bench:run: ${args.org} (${orgId}), question set ${sourceText}, ${runCount} of ${set.questions.length} question(s), ` +
-        `parts ${args.parts.join(', ')}, modes ${args.modes.join(', ')}, into ${args.baseUrl}`,
-    );
 
     const api = new bench.BenchApiClient({
       baseUrl: args.baseUrl,
@@ -196,47 +230,81 @@ try {
       onRateLimited: (ms) =>
         console.log(`  rate limit (D64): waiting ${Math.ceil(ms / 1000)} s, then the same call again`),
     });
-    const result = await bench.runBenchmark({
-      api,
-      set,
-      parts: args.parts,
-      modes: args.modes,
-      limit: args.limit,
-      waitMinutes: args.waitMinutes,
-      signal: stop.signal,
-      sleep: (ms) => bench.abortableSleep(ms, stop.signal),
-      log: (line) => console.log(line),
-    });
 
-    // The whole run, texts included, into the git-ignored folder (D81).
-    let reportPath: string | null = null;
-    if (result.runId !== null) {
-      const relative = `${REPORT_DIR}/${result.runId}.json`;
+    /** The whole run, texts included, into the git-ignored folder (D81); its path, or null. */
+    const writeReport = (runId: string | null, text: () => string): string | null => {
+      if (runId === null) return null;
+      const relative = `${REPORT_DIR}/${runId}.json`;
       try {
         const dir = new URL(`../../../${REPORT_DIR}/`, import.meta.url);
         mkdirSync(dir, { recursive: true });
-        writeFileSync(
-          new URL(`${result.runId}.json`, dir),
-          bench.formatBenchReport(bench.benchReport(result, args, set, { slug: args.org, id: orgId })),
-        );
-        reportPath = relative;
+        writeFileSync(new URL(`${runId}.json`, dir), text());
+        return relative;
       } catch (err) {
         console.error(`bench:run: the report ${relative} could not be written: ${describeError(err)}`);
         process.exitCode = 1;
+        return null;
       }
+    };
+
+    let end: 'finished' | 'failed' | 'not_started';
+    let lines: string[];
+    if (extraction !== null) {
+      const { expected, source: generated } = extraction;
+      console.log(
+        `bench:run: ${args.org} (${orgId}), extraction against the answer key of ${sourceText}: ` +
+          `${expected.statedFacts.length} stated fact(s), ${expected.falsePositives.length} planted false positive(s), ` +
+          `${expected.injections.length} add-link injection(s), into ${args.baseUrl}`,
+      );
+      const result = await bench.runExtraction({
+        api,
+        set,
+        expected,
+        waitMinutes: args.waitMinutes,
+        signal: stop.signal,
+        sleep: (ms) => bench.abortableSleep(ms, stop.signal),
+        log: (line) => console.log(line),
+      });
+      const reportPath = writeReport(result.runId, () =>
+        bench.formatExtractionReport(
+          bench.extractionReport(result, args, set, generated, expected, { slug: args.org, id: orgId }),
+        ),
+      );
+      end = result.end;
+      lines = bench.extractionRunOutput(result, { org: args.org, baseUrl: args.baseUrl, reportPath });
+    } else {
+      const runCount = args.limit === null ? set.questions.length : Math.min(args.limit, set.questions.length);
+      console.log(
+        `bench:run: ${args.org} (${orgId}), question set ${sourceText}, ${runCount} of ${set.questions.length} question(s), ` +
+          `parts ${args.parts.join(', ')}, modes ${args.modes.join(', ')}, into ${args.baseUrl}`,
+      );
+      const result = await bench.runBenchmark({
+        api,
+        set,
+        parts: args.parts,
+        modes: args.modes,
+        limit: args.limit,
+        waitMinutes: args.waitMinutes,
+        signal: stop.signal,
+        sleep: (ms) => bench.abortableSleep(ms, stop.signal),
+        log: (line) => console.log(line),
+      });
+      const reportPath = writeReport(result.runId, () =>
+        bench.formatBenchReport(bench.benchReport(result, args, set, { slug: args.org, id: orgId })),
+      );
+      end = result.end;
+      lines = bench.benchRunOutput(result, {
+        org: args.org,
+        parts: args.parts,
+        modes: args.modes,
+        baseUrl: args.baseUrl,
+        reportPath,
+      });
     }
 
     console.log('');
-    for (const line of bench.benchRunOutput(result, {
-      org: args.org,
-      parts: args.parts,
-      modes: args.modes,
-      baseUrl: args.baseUrl,
-      reportPath,
-    })) {
-      console.log(line);
-    }
-    if (result.end !== 'finished' && !stopping) process.exitCode = 1;
+    for (const line of lines) console.log(line);
+    if (end !== 'finished' && !stopping) process.exitCode = 1;
   }
 } catch (err) {
   // An API refusal's line names its address, status, code and reference ID; anything else (a

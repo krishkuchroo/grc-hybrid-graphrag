@@ -24,8 +24,11 @@ export interface DocumentCounts {
   processing: number;
 }
 
+/** The one read the wait needs: the question run's and the extraction run's clients both have it. */
+export type DocumentCountApi = Pick<BenchApi, 'documentCount'>;
+
 /** The org's documents still waiting or being processed. */
-export async function unprocessedDocuments(api: BenchApi): Promise<DocumentCounts> {
+export async function unprocessedDocuments(api: DocumentCountApi): Promise<DocumentCounts> {
   const counts: DocumentCounts = { waiting: 0, processing: 0 };
   for (const kind of PROCESSED_DOCUMENT_KINDS) {
     counts.waiting += await api.documentCount(kind, 'stored');
@@ -45,7 +48,7 @@ export interface WaitOptions {
 export type WaitOutcome = { done: true; counts: DocumentCounts } | { done: false; counts: DocumentCounts };
 
 /** Waits until the org has no document left to process, or the minutes are up. */
-export async function waitForDocuments(api: BenchApi, options: WaitOptions): Promise<WaitOutcome> {
+export async function waitForDocuments(api: DocumentCountApi, options: WaitOptions): Promise<WaitOutcome> {
   const now = options.now ?? (() => Date.now());
   const started = now();
   const deadline = started + options.minutes * 60_000;
