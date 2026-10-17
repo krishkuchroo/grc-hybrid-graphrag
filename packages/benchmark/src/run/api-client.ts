@@ -1,0 +1,518 @@
+// The benchmark command's client (S8-005; D46, D47, D54, D57, D64, D163, D164): a small client over
+// `fetch` that talks to the platform's public API with the run's one API key, as any machine would,
+// and knows nothing of the API's internals. It reads the record lists, the frameworks and their
+// requirements, and the document counts; searches (`POST /api/v1/search`); starts conversations
+// and asks questions, reading the answer's event stream (`queued`, `step`, `sources`, `token`) to
+// `done` or `error`; and starts, fills and finishes benchmark runs.
+// - The key goes only in the `Authorization: Bearer …` header, and is held in a private field, so
+//   it never shows in an error, a log line or a spread of the client.
+// - A 429 is waited out for its `Retry-After` (at most 2 minutes a time) and the same call is sent
+//   again, as often as it takes (D64: the 11th question or search in a minute waits; it never fails
+//   the run). Each wait is announced through `onRateLimited` with its length only.
+// - An error answer becomes an `ApiRequestError` with the method, the path (never a query string,
+//   which could hold a name), the status, the API's error code and its reference ID (D47). The API's
+//   message is left out, so nothing from the data reaches the output (D163, D164).
+// - Every call can be stopped (`signal`, the command's Ctrl-C) and has a time limit; a stopped call
+//   throws `BenchStoppedError`.
+import { API_PREFIX, ApiRequestError, retryAfterMs, type FetchLike } from '@grc/generators';
+import {
+  benchmarkResultsAddedSchema,
+  benchmarkRunDetailSchema,
+  chatStreamEventSchema,
+  searchAnswerSchema,
+  type AddBenchmarkResultsBody,
+  type BenchmarkResultsAdded,
+  type BenchmarkRunDetail,
+  type ChatMessage,
+  type DocumentStatus,
+  type FinishBenchmarkRunBody,
+  type SearchAnswer,
+  type SearchMode,
+  type StartBenchmarkRunBody,
+  type UploadKind,
+} from '@grc/shared';
+import { z } from 'zod';
+
+/** A call's time limit: a hybrid search or an answer can wait in Gemma's queue for a while. */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15 * 60_000;
+/** An answer's stream may go this long without a new event before the question fails. */
+export const DEFAULT_STREAM_IDLE_MS = 15 * 60_000;
+/** The most rows a list page gives (D47's paging). */
+export const LIST_PAGE_SIZE = 100;
+
+/** The command was stopped (Ctrl-C) while a call was running or waiting. */
+export class BenchStoppedError extends Error {
+  constructor() {
+    super('stopped');
+    this.name = 'BenchStoppedError';
+  }
+}
+
+/** How an asked question ended: the saved message (`done`), or the stream's `error` event. */
+export type AskOutcome =
+  { type: 'done'; message: ChatMessage } | { type: 'error'; code: string; referenceId: string | null };
+
+/** A record as a list gives it: the fields the benchmark reads. */
+export interface ListedRecord {
+  id: string;
+  number: string;
+  name: string;
+  sourceIds: string[];
+}
+
+/** One call's options: a signal that replaces the client's own (for the last calls after a stop),
+ * and a time limit. */
+export interface CallOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+/** What the benchmark run reads and writes through the API. */
+export interface BenchApi {
+  listRecords(path: string, query?: Record<string, string>, options?: CallOptions): Promise<ListedRecord[]>;
+  frameworkIds(options?: CallOptions): Promise<ListedRecord[]>;
+  documentCount(kind: UploadKind, status: DocumentStatus, options?: CallOptions): Promise<number>;
+  search(query: string, mode: SearchMode, options?: CallOptions): Promise<SearchAnswer>;
+  startConversation(options?: CallOptions): Promise<string>;
+  ask(conversationId: string, question: string, mode: SearchMode, options?: CallOptions): Promise<AskOutcome>;
+  startRun(body: StartBenchmarkRunBody, options?: CallOptions): Promise<BenchmarkRunDetail>;
+  addResults(runId: string, body: AddBenchmarkResultsBody, options?: CallOptions): Promise<BenchmarkResultsAdded>;
+  finishRun(runId: string, body: FinishBenchmarkRunBody, options?: CallOptions): Promise<BenchmarkRunDetail>;
+}
+
+export interface BenchApiClientOptions {
+  /** The platform's address, for example `https://grc.localhost` (D60), already checked. */
+  baseUrl: string;
+  /** The run's API key (D54). Sent only in the Authorization header. */
+  apiKey: string;
+  /** Stops every call (the command's Ctrl-C). */
+  signal?: AbortSignal;
+  fetch?: FetchLike;
+  /** Waits out a 429; ends early (rejecting) when the signal is aborted. Defaults to a timer. */
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+  /** Told how long each 429 wait is, in milliseconds. */
+  onRateLimited?: (waitMs: number) => void;
+  requestTimeoutMs?: number;
+  streamIdleMs?: number;
+}
+
+/** A timer that ends early when the signal is aborted. */
+export function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new BenchStoppedError());
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new BenchStoppedError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+const listedRecordSchema = z.object({
+  id: z.string().min(1),
+  number: z.string().min(1),
+  name: z.string(),
+  sourceIds: z.array(z.string()).optional(),
+});
+
+const pageSchema = z.object({
+  items: z.array(z.unknown()),
+  total: z.int().min(0),
+});
+
+const frameworksSchema = z.object({ items: z.array(z.unknown()) });
+const conversationSchema = z.object({ id: z.uuid() });
+
+const SAFE_CODE = /^[a-z0-9_]{1,64}$/;
+const SAFE_REFERENCE = /^[A-Za-z0-9-]{1,64}$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** The network error's own code (ECONNREFUSED, a TLS code …), never its message. */
+function networkCode(err: unknown): string | null {
+  const codeOf = (e: unknown): string | null => {
+    const code = isRecord(e) ? e['code'] : undefined;
+    return typeof code === 'string' && /^[A-Za-z0-9_]{1,64}$/.test(code) ? code : null;
+  };
+  return codeOf(err) ?? codeOf(isRecord(err) ? err['cause'] : undefined);
+}
+
+async function discard(res: Response): Promise<void> {
+  try {
+    await res.arrayBuffer();
+  } catch {
+    // Nothing to keep from a body that can't be read.
+  }
+}
+
+/** The API's one error format (D47) as an ApiRequestError: its code and reference ID only. */
+async function errorOf(method: string, path: string, res: Response): Promise<ApiRequestError> {
+  let code = `http_${res.status}`;
+  let referenceId: string | null = null;
+  try {
+    const body = JSON.parse(await res.text()) as unknown;
+    const error = isRecord(body) ? body['error'] : undefined;
+    if (isRecord(error)) {
+      if (typeof error['code'] === 'string' && SAFE_CODE.test(error['code'])) code = error['code'];
+      if (typeof error['referenceId'] === 'string' && SAFE_REFERENCE.test(error['referenceId'])) {
+        referenceId = error['referenceId'];
+      }
+    }
+  } catch {
+    // Not the error format: the status alone says what happened.
+  }
+  return new ApiRequestError(method, path, res.status, code, referenceId);
+}
+
+/** The parts of one `text/event-stream` frame: its `event` name and its `data` text. */
+interface Frame {
+  event: string | null;
+  data: string;
+}
+
+function parseFrame(text: string): Frame | null {
+  let event: string | null = null;
+  const data: string[] = [];
+  for (const line of text.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) data.push(line.slice(line.startsWith('data: ') ? 6 : 5));
+  }
+  return data.length === 0 && event === null ? null : { event, data: data.join('\n') };
+}
+
+type Body = { json: unknown } | null;
+
+export class BenchApiClient implements BenchApi {
+  private readonly baseUrl: string;
+  private readonly fetch: FetchLike;
+  private readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>;
+  private readonly stopSignal: AbortSignal | undefined;
+  private readonly onRateLimited: ((waitMs: number) => void) | undefined;
+  private readonly requestTimeoutMs: number;
+  private readonly streamIdleMs: number;
+  // A private field, so the key never shows in a spread, JSON.stringify or console.log of the client.
+  readonly #apiKey: string;
+
+  constructor(options: BenchApiClientOptions) {
+    if (typeof options.apiKey !== 'string' || options.apiKey.trim() === '') {
+      throw new Error('BenchApiClient: an API key is needed');
+    }
+    this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+    this.#apiKey = options.apiKey.trim();
+    this.fetch = options.fetch ?? ((url, init) => fetch(url, init));
+    this.sleep = options.sleep ?? abortableSleep;
+    this.stopSignal = options.signal;
+    this.onRateLimited = options.onRateLimited;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.streamIdleMs = options.streamIdleMs ?? DEFAULT_STREAM_IDLE_MS;
+  }
+
+  /** Every row of a paged list (`GET /api/v1/<path>`), page by page. */
+  async listRecords(path: string, query: Record<string, string> = {}, options?: CallOptions): Promise<ListedRecord[]> {
+    const fullPath = `${API_PREFIX}${path}`;
+    const out: ListedRecord[] = [];
+    for (let page = 1; ; page++) {
+      const params = new URLSearchParams({ ...query, page: String(page), pageSize: String(LIST_PAGE_SIZE) });
+      const answer = pageSchema.safeParse(await this.json('GET', fullPath, `?${params.toString()}`, null, options));
+      if (!answer.success) throw this.unexpected('GET', fullPath);
+      for (const item of answer.data.items) out.push(this.listed('GET', fullPath, item));
+      const pages = Math.ceil(answer.data.total / LIST_PAGE_SIZE);
+      if (answer.data.items.length === 0 || page >= pages) return out;
+    }
+  }
+
+  /** The org's active frameworks (`GET /api/v1/frameworks`), each with its ID, number and name. */
+  async frameworkIds(options?: CallOptions): Promise<ListedRecord[]> {
+    const path = `${API_PREFIX}/frameworks`;
+    const answer = frameworksSchema.safeParse(await this.json('GET', path, '', null, options));
+    if (!answer.success) throw this.unexpected('GET', path);
+    return answer.data.items.map((item) => this.listed('GET', path, item));
+  }
+
+  /** How many of the org's documents of a kind have a status (`GET /api/v1/documents`). */
+  async documentCount(kind: UploadKind, status: DocumentStatus, options?: CallOptions): Promise<number> {
+    const path = `${API_PREFIX}/documents`;
+    const params = new URLSearchParams({ kind, status, page: '1', pageSize: '1' });
+    const answer = pageSchema.safeParse(await this.json('GET', path, `?${params.toString()}`, null, options));
+    if (!answer.success) throw this.unexpected('GET', path);
+    return answer.data.total;
+  }
+
+  /** One search (`POST /api/v1/search`) in the mode given. */
+  async search(query: string, mode: SearchMode, options?: CallOptions): Promise<SearchAnswer> {
+    const path = `${API_PREFIX}/search`;
+    const answer = searchAnswerSchema.safeParse(await this.json('POST', path, '', { json: { query, mode } }, options));
+    if (!answer.success) throw this.unexpected('POST', path);
+    return answer.data;
+  }
+
+  /** A new, empty conversation (`POST /api/v1/chat/conversations`); its ID. */
+  async startConversation(options?: CallOptions): Promise<string> {
+    const path = `${API_PREFIX}/chat/conversations`;
+    const answer = conversationSchema.safeParse(await this.json('POST', path, '', { json: {} }, options));
+    if (!answer.success) throw this.unexpected('POST', path);
+    return answer.data.id;
+  }
+
+  /** Asks a question in the mode given and reads the answer's stream to `done` or `error`. */
+  async ask(conversationId: string, question: string, mode: SearchMode, options?: CallOptions): Promise<AskOutcome> {
+    const path = `${API_PREFIX}/chat/conversations/${encodeURIComponent(conversationId)}/messages`;
+    const { res, signal, done } = await this.send('POST', path, '', { json: { question, mode } }, options, {
+      accept: 'text/event-stream',
+      keepOpen: true,
+    });
+    try {
+      if (!(res.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream')) {
+        await discard(res);
+        throw this.unexpected('POST', path);
+      }
+      return await this.readStream('POST', path, res, signal);
+    } finally {
+      done();
+    }
+  }
+
+  async startRun(body: StartBenchmarkRunBody, options?: CallOptions): Promise<BenchmarkRunDetail> {
+    const path = `${API_PREFIX}/benchmark/runs`;
+    const answer = benchmarkRunDetailSchema.safeParse(await this.json('POST', path, '', { json: body }, options));
+    if (!answer.success) throw this.unexpected('POST', path);
+    return answer.data;
+  }
+
+  async addResults(
+    runId: string,
+    body: AddBenchmarkResultsBody,
+    options?: CallOptions,
+  ): Promise<BenchmarkResultsAdded> {
+    const path = `${API_PREFIX}/benchmark/runs/${encodeURIComponent(runId)}/results`;
+    const answer = benchmarkResultsAddedSchema.safeParse(await this.json('POST', path, '', { json: body }, options));
+    if (!answer.success) throw this.unexpected('POST', path);
+    return answer.data;
+  }
+
+  async finishRun(runId: string, body: FinishBenchmarkRunBody, options?: CallOptions): Promise<BenchmarkRunDetail> {
+    const path = `${API_PREFIX}/benchmark/runs/${encodeURIComponent(runId)}/finish`;
+    const answer = benchmarkRunDetailSchema.safeParse(await this.json('POST', path, '', { json: body }, options));
+    if (!answer.success) throw this.unexpected('POST', path);
+    return answer.data;
+  }
+
+  private listed(method: string, path: string, item: unknown): ListedRecord {
+    const parsed = listedRecordSchema.safeParse(item);
+    if (!parsed.success) throw this.unexpected(method, path);
+    const { id, number, name, sourceIds } = parsed.data;
+    return { id, number, name, sourceIds: sourceIds ?? [] };
+  }
+
+  private unexpected(method: string, path: string): ApiRequestError {
+    return new ApiRequestError(method, path, 200, 'unexpected_answer', null);
+  }
+
+  /** Sends one call and reads its JSON answer (null for an empty one). */
+  private async json(
+    method: 'GET' | 'POST',
+    path: string,
+    query: string,
+    body: Body,
+    options: CallOptions | undefined,
+  ): Promise<unknown> {
+    const { res, done, timedOut } = await this.send(method, path, query, body, options, {
+      accept: 'application/json',
+      keepOpen: false,
+    });
+    try {
+      let text: string;
+      try {
+        text = await res.text();
+      } catch (err) {
+        throw this.failure(method, path, err, options, timedOut());
+      }
+      if (text === '') return null;
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        throw this.unexpected(method, path);
+      }
+    } finally {
+      done();
+    }
+  }
+
+  /** The signal a call runs under: the call's own (or the client's stop signal) and its time limit. */
+  private callSignal(options: CallOptions | undefined): {
+    signal: AbortSignal;
+    stop: AbortSignal | undefined;
+    timeout: AbortController;
+    done: () => void;
+  } {
+    const stop = options?.signal ?? this.stopSignal;
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), options?.timeoutMs ?? this.requestTimeoutMs);
+    const signal = stop ? AbortSignal.any([stop, timeout.signal]) : timeout.signal;
+    return { signal, stop, timeout, done: () => clearTimeout(timer) };
+  }
+
+  /** What a failed fetch or read becomes: stopped, timed out, or a network error with its code. */
+  private failure(
+    method: string,
+    path: string,
+    err: unknown,
+    options: CallOptions | undefined,
+    timedOut = false,
+  ): Error {
+    const stop = options?.signal ?? this.stopSignal;
+    if (stop?.aborted && options?.signal === undefined) return new BenchStoppedError();
+    if (timedOut || (stop?.aborted ?? false)) return new ApiRequestError(method, path, 0, 'timed_out', null);
+    if (err instanceof ApiRequestError || err instanceof BenchStoppedError) return err;
+    return new ApiRequestError(method, path, 0, 'network_error', null, networkCode(err));
+  }
+
+  /**
+   * Sends one call (again after each 429) and gives back a 2xx answer, unread. `keepOpen` leaves the
+   * time limit off once the answer has started (a stream has its own idle limit); `done` clears the
+   * limit's timer.
+   */
+  private async send(
+    method: 'GET' | 'POST',
+    path: string,
+    query: string,
+    body: Body,
+    options: CallOptions | undefined,
+    how: { accept: string; keepOpen: boolean },
+  ): Promise<{ res: Response; signal: AbortSignal; done: () => void; timedOut: () => boolean }> {
+    for (;;) {
+      const call = this.callSignal(options);
+      const headers: Record<string, string> = {
+        authorization: `Bearer ${this.#apiKey}`,
+        accept: how.accept,
+      };
+      const init: RequestInit = { method, headers, signal: call.signal };
+      if (body !== null) {
+        headers['content-type'] = 'application/json';
+        init.body = JSON.stringify(body.json);
+      }
+
+      let res: Response;
+      try {
+        res = await this.fetch(`${this.baseUrl}${path}${query}`, init);
+      } catch (err) {
+        const timedOut = call.timeout.signal.aborted;
+        call.done();
+        throw this.failure(method, path, err, options, timedOut);
+      }
+
+      if (res.status === 429) {
+        call.done();
+        await discard(res);
+        const waitMs = retryAfterMs(res.headers.get('retry-after'));
+        this.onRateLimited?.(waitMs);
+        try {
+          await this.sleep(waitMs, options?.signal ?? this.stopSignal ?? new AbortController().signal);
+        } catch (err) {
+          throw this.failure(method, path, err, options);
+        }
+        continue;
+      }
+      if (res.status < 200 || res.status > 299) {
+        const error = await errorOf(method, path, res);
+        call.done();
+        throw error;
+      }
+      if (how.keepOpen) {
+        // The stream has its own idle limit from here on; the stop signal still applies.
+        call.done();
+        const stop = options?.signal ?? this.stopSignal;
+        return { res, signal: stop ?? new AbortController().signal, done: () => undefined, timedOut: () => false };
+      }
+      return { res, signal: call.signal, done: call.done, timedOut: () => call.timeout.signal.aborted };
+    }
+  }
+
+  /** Reads an answer's event stream to its `done` or `error` event. */
+  private async readStream(method: string, path: string, res: Response, stop: AbortSignal): Promise<AskOutcome> {
+    if (res.body === null) throw new ApiRequestError(method, path, res.status, 'stream_ended', null);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const onStop = (): void => {
+      void reader.cancel().catch(() => undefined);
+    };
+    stop.addEventListener('abort', onStop, { once: true });
+    let timedOut = false;
+    try {
+      for (;;) {
+        idle = setTimeout(() => {
+          timedOut = true;
+          void reader.cancel().catch(() => undefined);
+        }, this.streamIdleMs);
+        let chunk: Awaited<ReturnType<typeof reader.read>>;
+        try {
+          chunk = await reader.read();
+        } catch {
+          if (stop.aborted) throw new BenchStoppedError();
+          throw new ApiRequestError(method, path, res.status, timedOut ? 'stream_timed_out' : 'stream_broken', null);
+        } finally {
+          clearTimeout(idle);
+        }
+        if (stop.aborted) throw new BenchStoppedError();
+        if (timedOut) throw new ApiRequestError(method, path, res.status, 'stream_timed_out', null);
+        if (chunk.done) {
+          buffer += decoder.decode();
+        } else {
+          buffer += decoder.decode(chunk.value, { stream: true });
+        }
+        buffer = buffer.replace(/\r\n?/g, '\n');
+        for (let end = buffer.indexOf('\n\n'); end !== -1; end = buffer.indexOf('\n\n')) {
+          const frame = parseFrame(buffer.slice(0, end));
+          buffer = buffer.slice(end + 2);
+          const outcome = frame === null ? null : this.outcomeOf(method, path, frame);
+          if (outcome !== null) return outcome;
+        }
+        if (chunk.done) {
+          const frame = buffer.trim() === '' ? null : parseFrame(buffer);
+          const outcome = frame === null ? null : this.outcomeOf(method, path, frame);
+          if (outcome !== null) return outcome;
+          throw new ApiRequestError(method, path, res.status, 'stream_ended', null);
+        }
+      }
+    } finally {
+      stop.removeEventListener('abort', onStop);
+      void reader.cancel().catch(() => undefined);
+    }
+  }
+
+  /** The frame's outcome when it is `done` or `error`; null for the events before them. A `done` or
+   * `error` frame that doesn't fit its schema is an unexpected answer. */
+  private outcomeOf(method: string, path: string, frame: Frame): AskOutcome | null {
+    let value: unknown;
+    try {
+      value = JSON.parse(frame.data);
+    } catch {
+      value = undefined;
+    }
+    const name = isRecord(value) && typeof value['event'] === 'string' ? value['event'] : frame.event;
+    if (name !== 'done' && name !== 'error') return null;
+    const parsed = chatStreamEventSchema.safeParse(value);
+    if (!parsed.success) throw this.unexpected(method, path);
+    const event = parsed.data;
+    if (event.event === 'done') return { type: 'done', message: event.message };
+    if (event.event === 'error') {
+      return {
+        type: 'error',
+        code: SAFE_CODE.test(event.code) ? event.code : 'chat_error',
+        referenceId: SAFE_REFERENCE.test(event.referenceId) ? event.referenceId : null,
+      };
+    }
+    return null;
+  }
+}

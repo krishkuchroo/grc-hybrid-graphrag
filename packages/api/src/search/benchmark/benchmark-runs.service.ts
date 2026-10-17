@@ -13,7 +13,7 @@
 // - Add results: 1 to 25 items, only to a `running` run (409 `run_not_running` otherwise), each in
 //   one of the run's parts and modes (400 `validation_failed` otherwise). Answers are cut to 4,000
 //   characters (`storedBenchmarkItem`). An item that repeats one already stored (the table's unique
-//   key: run, item key and mode), in an earlier batch or earlier in the same one, is ignored and
+//   key: run, item key, part and mode), in an earlier batch or earlier in the same one, is ignored and
 //   counted as a repeat. The run's last-activity time moves on. Not audited.
 // - Finish: the summary is `summariseBenchmark` over the run's stored results, saved with the status
 //   (`finished`, or `failed` with its code) and the finished time; `benchmark.run_finished` is

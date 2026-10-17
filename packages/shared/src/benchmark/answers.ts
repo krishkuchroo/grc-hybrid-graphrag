@@ -116,7 +116,7 @@ export const benchmarkResultsPageSchema = z.object({
 });
 
 /** `POST /api/v1/benchmark/runs/:id/results`: the items stored, and those that repeated an item
- * already stored (the same item key and mode), which were ignored. */
+ * already stored (the same item key, part and mode), which were ignored. */
 export const benchmarkResultsAddedSchema = z.object({
   stored: count,
   repeats: count,

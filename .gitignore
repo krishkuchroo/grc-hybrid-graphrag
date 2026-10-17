@@ -15,6 +15,8 @@ logs/
 backups/
 data/generated/
 data/uploads/
+# `pnpm bench:run`'s full reports, with question and answer texts (S8-005)
+data/benchmark/
 models/
 *.gguf
 *.safetensors

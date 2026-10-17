@@ -8,7 +8,8 @@
 --   Only its status, summary, failure code, finished time and last-activity time may change.
 -- - benchmark_results: one per result item (S8-001's item shape in @grc/shared): its run, item key,
 --   part, mode, kind, outcome, metric values and details, and when it was stored. Unique on run +
---   item key + mode, so a repeated item adds nothing. Results are never changed. `id` counts up in
+--   item key + part + mode (a question's retrieval and answers items share its key and mode), so a
+--   repeated item adds nothing. Results are never changed. `id` counts up in
 --   the order results are stored, so they can be read back in the order they were sent.
 -- Row security is forced on both, for the restricted app account (D57): the org wall, and every
 -- read, insert and update only where the row's org is the context org (`app.org_id`, never another
@@ -62,7 +63,7 @@ CREATE TABLE "benchmark_results" (
   "details" jsonb NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT "benchmark_results_run_fk" FOREIGN KEY ("org_id", "run_id") REFERENCES "benchmark_runs"("org_id", "id"),
-  CONSTRAINT "benchmark_results_run_item_mode_unique" UNIQUE ("run_id", "item_key", "mode"),
+  CONSTRAINT "benchmark_results_run_item_part_mode_unique" UNIQUE ("run_id", "item_key", "part", "mode"),
   CONSTRAINT "benchmark_results_item_key_check" CHECK (char_length("item_key") BETWEEN 1 AND 200 AND "item_key" ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'),
   CONSTRAINT "benchmark_results_part_mode_check" CHECK (("part" IN ('retrieval', 'answers') AND "mode" IN ('hybrid', 'vector')) OR ("part" = 'extraction' AND "mode" = 'pipeline')),
   CONSTRAINT "benchmark_results_kind_check" CHECK (("part" IN ('retrieval', 'answers') AND "kind" IN ('single_hop', 'multi_hop', 'framework', 'no_answer', 'injection_trap')) OR ("part" = 'extraction' AND "kind" IN ('stated_fact', 'extra_ai_link', 'false_positive_plant', 'injection_plant', 'analyst_decision'))),
