@@ -12,8 +12,10 @@
 //   and the uploaded documents, with the table's filters in the search params. /intake/imports/$id
 //   is an asset list's import (S3-012): its column mapping, run, progress and results. /review is
 //   the Analyst review queue (S5-005), its tab, status, document, record, sort and page in the search
-//   params, and /review/$id one finding with the Analyst's decisions. The other screens show their
-//   empty state until their slice.
+//   params, and /review/$id one finding with the Analyst's decisions. /benchmark is the Benchmark
+//   screen's runs (S8-010), its status, part and page filters in the search params, and
+//   /benchmark/$id one run with its results' part, mode, kind, outcome and page in the search params.
+//   The other screens show their empty state until their slice.
 // Security is checked by the API (D7); these redirects only decide which screen to show.
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
@@ -45,6 +47,9 @@ import { validateIntakeSearch } from '@/features/intake/useDocuments';
 import { FindingPage as ReviewFindingPage } from '@/features/review/FindingPage';
 import { ReviewPage } from '@/features/review/ReviewPage';
 import { validateReviewSearch } from '@/features/review/useReview';
+import { BenchmarkList } from '@/features/benchmark/BenchmarkList';
+import { RunPage as BenchmarkRunPage } from '@/features/benchmark/RunPage';
+import { validateBenchmarkListSearch, validateBenchmarkRunSearch } from '@/features/benchmark/useBenchmark';
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -318,6 +323,38 @@ export function createAppRouter(queryClient: QueryClient) {
     },
   });
 
+  const benchmarkRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/benchmark',
+    validateSearch: validateBenchmarkListSearch,
+    component: function BenchmarkRoute() {
+      const search = benchmarkRoute.useSearch();
+      const navigate = benchmarkRoute.useNavigate();
+      return (
+        <BenchmarkList search={search} onSearchChange={(next) => void navigate({ search: next, replace: true })} />
+      );
+    },
+  });
+
+  const benchmarkRunRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/benchmark/$id',
+    validateSearch: validateBenchmarkRunSearch,
+    component: function BenchmarkRunRoute() {
+      const { id } = benchmarkRunRoute.useParams();
+      const search = benchmarkRunRoute.useSearch();
+      const navigate = benchmarkRunRoute.useNavigate();
+      return (
+        <BenchmarkRunPage
+          key={id}
+          id={id}
+          search={search}
+          onSearchChange={(next) => void navigate({ search: next, replace: true })}
+        />
+      );
+    },
+  });
+
   const BUILT_SCREENS = new Set([
     '/risks',
     '/controls',
@@ -327,6 +364,7 @@ export function createAppRouter(queryClient: QueryClient) {
     '/frameworks',
     '/review',
     '/intake',
+    '/benchmark',
   ]);
   const screenRoutes = SCREENS.filter((screen) => !BUILT_SCREENS.has(screen.path)).map((screen) =>
     createRoute({
@@ -365,6 +403,8 @@ export function createAppRouter(queryClient: QueryClient) {
       importRoute,
       reviewRoute,
       reviewFindingRoute,
+      benchmarkRoute,
+      benchmarkRunRoute,
       ...screenRoutes,
     ]),
   ]);

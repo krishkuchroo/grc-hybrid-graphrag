@@ -2,13 +2,14 @@
 // their role and sign-out, and a dark left navigation to the screens (D27). For the roles that see
 // the Analyst review queue (Admin and Analyst), its menu item shows how many findings wait (GET
 // /api/v1/review/counts), asked again every minute and after each decision (S5-005). "Ask" in the
-// header opens the chat side panel (screen 9, S6-007) over any screen.
+// header opens the chat side panel (screen 9, S6-007) over any screen. A screen only some roles
+// can use (Benchmark: Admins, S8-010) is left out of everyone else's menu.
 import { canViewReviewQueue } from '@grc/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate } from '@tanstack/react-router';
 import { Building2, LogOut } from 'lucide-react';
 import { api } from '@/api/client';
-import { HOME, SCREEN_GROUPS, type Screen } from '@/app/screens';
+import { HOME, isScreenShown, SCREEN_GROUPS, type Screen } from '@/app/screens';
 import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/ui/button';
 import { formatRole, initials, ME_KEY } from '@/features/auth/session';
@@ -101,21 +102,25 @@ export function AppShell() {
               <NavLink screen={HOME} />
             </li>
           </ul>
-          {SCREEN_GROUPS.map((group) => (
-            <div key={group.label} className="grid gap-1">
-              <h2 className="text-chrome-muted/80 px-3 text-xs font-semibold">{group.label}</h2>
-              <ul className="grid gap-0.5">
-                {group.screens.map((screen) => (
-                  <li key={screen.path}>
-                    <NavLink
-                      screen={screen}
-                      waiting={screen.path === '/review' ? reviewCounts.data?.total : undefined}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {SCREEN_GROUPS.map((group) => {
+            const screens = group.screens.filter((screen) => isScreenShown(screen, me.role));
+            if (screens.length === 0) return null;
+            return (
+              <div key={group.label} className="grid gap-1">
+                <h2 className="text-chrome-muted/80 px-3 text-xs font-semibold">{group.label}</h2>
+                <ul className="grid gap-0.5">
+                  {screens.map((screen) => (
+                    <li key={screen.path}>
+                      <NavLink
+                        screen={screen}
+                        waiting={screen.path === '/review' ? reviewCounts.data?.total : undefined}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
         <main className="min-h-0 overflow-y-auto">
           <Outlet />

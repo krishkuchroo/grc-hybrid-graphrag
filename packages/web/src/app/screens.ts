@@ -1,5 +1,7 @@
 // The screens of the workspace (D27), in the order the left navigation shows them. Home has its own
-// page; the others open as their slices are built (S1–S8) and show an empty state until then.
+// page; the others open as their slices are built (S1–S8) and show an empty state until then. A
+// screen only some roles can use (Benchmark: Admins) says so, and the menu shows it to them only.
+import { can } from '@grc/shared';
 import {
   ClipboardList,
   FileText,
@@ -24,6 +26,9 @@ export interface Screen {
   summary: string;
   /** What the empty screen says until records exist. */
   empty: string;
+  /** Who sees the screen in the menu, when not everyone does. The API decides what they may open
+   * (D7); this only keeps a screen they can't use out of their menu. */
+  visibleTo?: (role: string) => boolean;
 }
 
 export interface ScreenGroup {
@@ -135,9 +140,16 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
         icon: FlaskConical,
         summary: 'Hybrid search against vector-only search, run by run.',
         empty: 'No benchmark runs yet.',
+        // The org's Admins only: the role table's `admin` cell (D50, S8-Q1).
+        visibleTo: (role) => can(role, 'admin', 'view'),
       },
     ],
   },
 ];
 
 export const SCREENS: Screen[] = SCREEN_GROUPS.flatMap((g) => g.screens);
+
+/** Whether the menu shows the screen to this role. */
+export function isScreenShown(screen: Screen, role: string): boolean {
+  return screen.visibleTo === undefined || screen.visibleTo(role);
+}
