@@ -26,7 +26,12 @@ export {
   type BenchApi,
   type BenchApiClientOptions,
   type CallOptions,
+  type LinkFindingEnd,
+  type LinkFindingOutcome,
+  type LinkFindingRow,
   type ListedRecord,
+  type OrgRecordRow,
+  type RecordLinkRow,
 } from './api-client.js';
 export { itemCode, itemReference, sendableItem, unscoredItem } from './items.js';
 export {
@@ -43,6 +48,7 @@ export {
   UNPROCESSED_STATUSES,
   unprocessedDocuments,
   waitForDocuments,
+  type DocumentCountApi,
   type DocumentCounts,
   type WaitOptions,
   type WaitOutcome,
