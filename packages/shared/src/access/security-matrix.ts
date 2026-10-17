@@ -532,5 +532,58 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: true,
     },
+    // Benchmark runs (S8-001, S8-002; D1, D45.8, D50, D51, D73, S8-Q1): only the org's Admins,
+    // people and Admin-role API keys, through the role table's `admin` cell: `edit` to start a run,
+    // add its results and finish it, `view` to read runs and results; every other role gets 403. A
+    // run belongs to the org it ran against and is read and written only in that org (row security
+    // on benchmark_runs and benchmark_results: the context org and the `admin` role, never an org
+    // seen through a grant or a parent link; 404 for another org's run), checked by the API and
+    // again by Postgres. A run is labelled with its starter's clearance; a reader below it sees the
+    // run's row and summary numbers but not its questions, answers or settings (`hidden: true`).
+    // Starting and finishing are audited as `benchmark.run_started` and `benchmark.run_finished` in
+    // the transaction that saves the run, with counts and headline scores only; adding results isn't
+    // audited.
+    {
+      method: 'POST',
+      path: '/api/v1/benchmark/runs',
+      access: { subject: 'admin', action: 'edit' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/benchmark/runs/:id/results',
+      access: { subject: 'admin', action: 'edit' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/benchmark/runs/:id/finish',
+      access: { subject: 'admin', action: 'edit' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/benchmark/runs',
+      access: { subject: 'admin', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/benchmark/runs/:id',
+      access: { subject: 'admin', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/benchmark/runs/:id/results',
+      access: { subject: 'admin', action: 'view' },
+      orgWalled: true,
+      labels: true,
+    },
   ],
 };

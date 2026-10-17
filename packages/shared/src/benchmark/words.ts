@@ -147,5 +147,7 @@ export function benchmarkInjectionKindText(kind: string): string {
 
 /** A metric's label; anything unknown is shown as it is. */
 export function benchmarkMetricLabel(name: string): string {
-  return Object.hasOwn(BENCHMARK_METRIC_BY_NAME, name) ? BENCHMARK_METRIC_BY_NAME[name as BenchmarkMetricName].label : name;
+  return Object.hasOwn(BENCHMARK_METRIC_BY_NAME, name)
+    ? BENCHMARK_METRIC_BY_NAME[name as BenchmarkMetricName].label
+    : name;
 }

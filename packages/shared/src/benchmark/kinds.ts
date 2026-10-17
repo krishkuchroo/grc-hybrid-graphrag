@@ -14,7 +14,13 @@ import { z } from 'zod';
 import { SEARCH_LIMITS } from '../search/limits.js';
 import { SEARCH_MODES } from '../search/modes.js';
 
-export const BENCHMARK_QUESTION_KINDS = ['single_hop', 'multi_hop', 'framework', 'no_answer', 'injection_trap'] as const;
+export const BENCHMARK_QUESTION_KINDS = [
+  'single_hop',
+  'multi_hop',
+  'framework',
+  'no_answer',
+  'injection_trap',
+] as const;
 export type BenchmarkQuestionKind = (typeof BENCHMARK_QUESTION_KINDS)[number];
 
 export function isBenchmarkQuestionKind(v: unknown): v is BenchmarkQuestionKind {
@@ -106,7 +112,14 @@ export type BenchmarkSkipReason = (typeof BENCHMARK_SKIP_REASONS)[number];
 /** Where a link an extraction item is about stands in the org: live on its own (`live_auto`), live
  * after the Analyst approved it (`live_approved`), waiting for the Analyst, rejected, removed after
  * going live, or not there at all (`absent`). */
-export const EXTRACTION_LINK_STATES = ['live_auto', 'live_approved', 'waiting', 'rejected', 'removed', 'absent'] as const;
+export const EXTRACTION_LINK_STATES = [
+  'live_auto',
+  'live_approved',
+  'waiting',
+  'rejected',
+  'removed',
+  'absent',
+] as const;
 export type ExtractionLinkState = (typeof EXTRACTION_LINK_STATES)[number];
 
 export function isExtractionLinkState(v: unknown): v is ExtractionLinkState {

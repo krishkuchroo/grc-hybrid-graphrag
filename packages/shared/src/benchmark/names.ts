@@ -7,12 +7,7 @@
 // - Error messages never hold a question, an answer or a record's name.
 import { z } from 'zod';
 import { LABELS } from '../access/labels.js';
-import {
-  BENCHMARK_MODES,
-  BENCHMARK_PARTS,
-  BENCHMARK_RUN_STATUSES,
-  benchmarkCodeSchema,
-} from './kinds.js';
+import { BENCHMARK_MODES, BENCHMARK_PARTS, BENCHMARK_RUN_STATUSES, benchmarkCodeSchema } from './kinds.js';
 import { QUESTION_SET_SOURCE_TYPES } from './question-set.js';
 import { benchmarkHeadlineSchema } from './summary.js';
 

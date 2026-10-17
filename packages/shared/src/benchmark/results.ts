@@ -260,7 +260,11 @@ function checkItem(item: CheckedItem, ctx: z.core.$RefinementCtx): void {
     ctx.addIssue({ code: 'custom', path: ['details', 'reason'], message: 'a skipped item needs its reason' });
   }
   if ((item.outcome === 'pass' || item.outcome === 'partial') && item.details.reason !== null) {
-    ctx.addIssue({ code: 'custom', path: ['details', 'reason'], message: 'only a skipped or failed item has a reason' });
+    ctx.addIssue({
+      code: 'custom',
+      path: ['details', 'reason'],
+      message: 'only a skipped or failed item has a reason',
+    });
   }
 }
 

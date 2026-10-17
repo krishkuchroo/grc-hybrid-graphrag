@@ -327,7 +327,8 @@ export function benchmarkHeadline(summary: BenchmarkSummary | null | undefined):
 /**
  * How many of a run's questions are done, for "Running: N of M questions": each question gives one
  * item per question part and mode the run asked for, so N is the whole number of such rounds the
- * stored results make, at most M. Extraction-only runs have no questions (0).
+ * stored results make, at most M. `resultCount` counts the run's retrieval and answers results only
+ * (extraction items aren't questions). Extraction-only runs have no questions (0).
  */
 export function benchmarkQuestionsDone(
   resultCount: number,
