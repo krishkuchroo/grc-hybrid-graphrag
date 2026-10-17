@@ -1139,6 +1139,97 @@ export type PostControlsIdRetireBody = {
   version: number;
 };
 
+/** GET /api/v1/dashboard response. */
+export type GetDashboardResponse = {
+  countedAt: string;
+  risks?: {
+    total: number;
+    byBand: {
+      low: number;
+      medium: number;
+      high: number;
+      critical: number;
+    };
+    heatMap: Array<{
+      impact: number;
+      likelihood: number;
+      count: number;
+    }>;
+    untreated: number;
+    top: Array<{
+      id: string;
+      number: string;
+      name: string;
+      impact: number;
+      likelihood: number;
+      rating: number;
+      band: 'low' | 'medium' | 'high' | 'critical';
+    }>;
+  };
+  controls?: {
+    total: number;
+    byStatus: {
+      not_implemented: number;
+      planned: number;
+      implemented: number;
+    };
+    implementedShare: number | null;
+  };
+  incidents?: {
+    open: number;
+    openBySeverity: {
+      low: number;
+      medium: number;
+      high: number;
+      critical: number;
+    };
+    newestOpen: Array<{
+      id: string;
+      number: string;
+      name: string;
+      severity: 'low' | 'medium' | 'high' | 'critical';
+      incidentStatus: 'new' | 'investigating' | 'contained';
+      occurredAt: string;
+    }>;
+  };
+  assets?: {
+    total: number;
+    byCriticality: {
+      low: number;
+      medium: number;
+      high: number;
+      critical: number;
+    };
+  };
+  policies?: {
+    total: number;
+  };
+  auditFindings?: {
+    open: number;
+    openBySeverity: {
+      low: number;
+      medium: number;
+      high: number;
+      critical: number;
+    };
+    overdue: number;
+  };
+  evidence?: {
+    expiringSoon: number;
+    expired: number;
+  };
+  documents?: {
+    total: number;
+    byStatus: {
+      stored: number;
+      processing: number;
+      processed: number;
+      failed: number;
+      removed: number;
+    };
+  };
+};
+
 /** GET /api/v1/documents response. */
 export type GetDocumentsResponse = {
   items: Array<{
@@ -3735,6 +3826,8 @@ export const api = {
   /** Retire a control; it is kept, never deleted */
   postControlsIdRetire: (path: { id: string }, body: PostControlsIdRetireBody): Promise<PostControlsIdRetireResponse> =>
     request<PostControlsIdRetireResponse>('POST', `/api/v1/controls/${encodeURIComponent(path.id)}/retire`, body),
+  /** The Home dashboard's counts of the active records the caller may see: risks (per band, heat map, untreated, top 5), controls, open incidents (newest 5), assets, policies, open and overdue audit findings, expiring and expired evidence, and documents per status; a section only when the role views its record type */
+  getDashboard: (): Promise<GetDashboardResponse> => request<GetDashboardResponse>('GET', '/api/v1/dashboard'),
   /** List the stored documents the caller can see, paged, with kind, status, source, label and file-name search; sorted by -createdAt (default), createdAt or fileName */
   getDocuments: (query?: ListQuery): Promise<GetDocumentsResponse> =>
     request<GetDocumentsResponse>('GET', `/api/v1/documents${queryString(query)}`),
