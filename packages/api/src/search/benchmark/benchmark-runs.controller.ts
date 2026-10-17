@@ -135,7 +135,7 @@ documentRoute({
   method: 'post',
   path: '/benchmark/runs/{id}/results',
   summary:
-    "Add 1 to 25 result items to a running run (Admins only), each in one of the run's parts and modes. Answers longer than 4,000 characters are cut. An item with the same item key and mode as one already stored is ignored; the answer says how many were stored and how many were repeats. The run's last activity moves on. 409 run_not_running for a finished or failed run; 404 for a missing one or another org's",
+    "Add 1 to 25 result items to a running run (Admins only), each in one of the run's parts and modes. Answers longer than 4,000 characters are cut. An item with the same item key, part and mode as one already stored is ignored; the answer says how many were stored and how many were repeats. The run's last activity moves on. 409 run_not_running for a finished or failed run; 404 for a missing one or another org's",
   body: addBenchmarkResultsBodySchema,
   response: benchmarkResultsAddedSchema,
 });

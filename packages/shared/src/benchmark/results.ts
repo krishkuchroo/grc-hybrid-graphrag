@@ -1,6 +1,6 @@
 // A benchmark result item (S8-001; S8 shared notes, "Question kinds and scores"): one question in one
 // part and mode, or one extraction item, with its outcome, its metric values and its details.
-// - `itemKey`: the question's ID, or the extraction item's key. Unique per run and mode.
+// - `itemKey`: the question's ID, or the extraction item's key. Unique per run, part and mode.
 // - `part`, `mode` and `kind`: a question's items are `retrieval` or `answers` in `hybrid` or
 //   `vector`, with the question's kind; extraction items are `extraction` in `pipeline`, with an
 //   extraction item kind.

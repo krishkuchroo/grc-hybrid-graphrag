@@ -173,7 +173,8 @@ export const benchmarkResults = pgTable(
       columns: [t.orgId, t.runId],
       foreignColumns: [benchmarkRuns.orgId, benchmarkRuns.id],
     }),
-    unique('benchmark_results_run_item_mode_unique').on(t.runId, t.itemKey, t.mode),
+    // A question's retrieval and answers items share its key and mode, so the part is in the key.
+    unique('benchmark_results_run_item_part_mode_unique').on(t.runId, t.itemKey, t.part, t.mode),
     index('benchmark_results_org_run_idx').on(t.orgId, t.runId, t.id),
     check(
       'benchmark_results_item_key_check',
