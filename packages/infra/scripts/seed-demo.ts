@@ -18,8 +18,10 @@
 //     `demo-cmdb`), read, and imported through ImportRunService with the demo mapping, which is
 //     saved for the source. The seed runs the read and the import itself, here, and waits for
 //     them; their jobs never reach pg-boss, so the worker never runs them a second time;
-//   - two policy documents and one SOC ticket file, each uploaded as the role named; their
-//     `processing.document-read` jobs go to pg-boss as the API sends them, for the worker (S4);
+//   - two policy documents and one SOC ticket file, each uploaded as the role named, and (S8-011)
+//     one Restricted policy document with a planted instruction, uploaded as the Admin, for the
+//     benchmark's injection-trap questions; their `processing.document-read` jobs go to pg-boss
+//     as the API sends them, for the worker (S4);
 //   - evidence through EvidenceService, as the Control Owner or the Admin, and audit findings
 //     through FindingsService, as the Auditor, each created with its CONCERNS link.
 //   A file already stored in the org (found by its content hash) is not uploaded again, an import
@@ -51,8 +53,9 @@
 // - Then (S6-008) the S6 demo's search and chat (docs/demo/s6.md): its questions are answered from
 //   the records, links and mappings above and from the passages of the demo documents. The review
 //   step reads only the documents its findings come from, so this step reads the others (the
-//   Confidential policy documents) into chunks the same way, in case their S3 read job never ran
-//   (`seedSearchChunks`). A document that has chunks already, or is processed, failed or removed,
+//   Confidential policy documents, and S8-011's Restricted one) into chunks the same way, in case
+//   their S3 read job never ran (`seedSearchChunks`). The S8 demo's benchmark question sets
+//   (packages/benchmark/question-sets/, docs/demo/s8.md) are answered from the same data. A document that has chunks already, or is processed, failed or removed,
 //   is left alone, so a re-run adds nothing. Nothing calls Gemma or bge-m3 (D82): once Ollama is up,
 //   the worker embeds the chunks (and Gemma reads them), and the questions find their passages. It
 //   needs the processing migration and bge-m3's tokenizer file, as the review step does.
@@ -1849,9 +1852,10 @@ async function documentChunkState(
 
 /**
  * Makes sure every demo document (the policy documents and the SOC ticket file uploaded by the S3
- * step) has its chunks, so each demo question of docs/demo/s6.md finds its passages once the worker
- * has embedded them. The review step already read the documents its findings come from; this reads
- * the others (the Confidential policy documents) the same way, with S4's reader (`readDocument`:
+ * step, and S8-011's Restricted one) has its chunks, so each demo question of docs/demo/s6.md and
+ * each question of the hand-written benchmark sets finds its passages once the worker has embedded
+ * them. The review step already read the documents its findings come from; this reads the others
+ * (the Confidential and Restricted policy documents) the same way, with S4's reader (`readDocument`:
  * the stored file read in the file sandbox, the same chunker, the document moved to `processing` and
  * its embed job queued for the worker). No Gemma and no bge-m3 call: the worker embeds the chunks
  * when it runs (D82). Only a `stored` or `processing` document with no chunk at all is read; one
