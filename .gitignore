@@ -17,6 +17,10 @@ data/generated/
 data/uploads/
 # `pnpm bench:run`'s full reports, with question and answer texts (S8-005)
 data/benchmark/
+# Company X's built files (D234): only the README and the build script are committed
+docs/datasets/company-x/*
+!docs/datasets/company-x/README.md
+!docs/datasets/company-x/scripts/
 models/
 *.gguf
 *.safetensors
