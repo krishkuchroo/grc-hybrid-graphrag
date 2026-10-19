@@ -13,14 +13,21 @@ import { pathToFileURL } from 'node:url';
 import { extractionAnswerSchema, normaliseName, type ExtractionAnswer } from '@grc/shared';
 import { pino } from 'pino';
 import { isAiFailure } from '../../ai/ai-failure.js';
-import { aiSettingsFromEnv } from '../../ai/ai-settings.js';
-import { OllamaTextModel } from '../../ai/ollama-text-model.js';
+import { aiSettingsFromEnv, macSideAddress } from '../../ai/ai-settings.js';
+import { createTextModel } from '../../ai/text-model-factory.js';
 import { readDotEnv } from '../../config/app-settings.js';
 import { countSectionMarkers } from './neutralise.js';
 import { askForExtraction, EXTRACTION_PROMPT_VERSION, extractionData } from './prompt.js';
 import { TRY_SAMPLES, type SampleLink } from './try-samples.js';
 
-const AI_SETTING_NAMES = ['OLLAMA_BASE_URL', 'AI_TEXT_MODEL', 'AI_EMBEDDING_MODEL'] as const;
+const AI_SETTING_NAMES = [
+  'OLLAMA_BASE_URL',
+  'AI_TEXT_MODEL',
+  'AI_EMBEDDING_MODEL',
+  'AI_TEXT_PROVIDER',
+  'AI_TEXT_BASE_URL',
+  'AI_TEXT_API_KEY',
+] as const;
 
 /** At least 8 in 10 of the stated links found with the right direction (pass criterion 1). */
 export const MIN_FOUND_SHARE = 0.8;
@@ -38,7 +45,10 @@ function failureCode(err: unknown): string {
   return err instanceof Error ? err.name : 'error';
 }
 
-/** The AI settings only: environment first, then .env files, then the defaults. */
+/**
+ * The AI settings only: environment first, then .env files, then the defaults. AI_TEXT_BASE_URL is
+ * written as the containers see it; this command runs on the Mac, so its host is swapped.
+ */
 function settingsEnv(): NodeJS.ProcessEnv {
   const dotEnv = readDotEnv(process.cwd());
   const env: NodeJS.ProcessEnv = {};
@@ -46,6 +56,7 @@ function settingsEnv(): NodeJS.ProcessEnv {
     const value = [process.env[name], dotEnv[name]].find((v) => typeof v === 'string' && v !== '');
     if (value !== undefined) env[name] = value;
   }
+  if (env.AI_TEXT_BASE_URL !== undefined) env.AI_TEXT_BASE_URL = macSideAddress(env.AI_TEXT_BASE_URL);
   return env;
 }
 
@@ -84,7 +95,7 @@ function foundLinks(answer: ExtractionAnswer): FoundLink[] {
 
 export async function runTry(write: (line: string) => void = (line) => console.log(line)): Promise<boolean> {
   const settings = aiSettingsFromEnv(settingsEnv());
-  const textModel = new OllamaTextModel({ settings, log: pino({ level: 'silent' }) });
+  const textModel = createTextModel(settings, { log: pino({ level: 'silent' }) });
   let ok = true;
   let stated = 0;
   let foundRight = 0;
