@@ -1,7 +1,10 @@
 // Every benchmark metric with its definition (S8-001; S8 shared notes, "Question kinds and scores",
 // "Fixed rules, no AI judge"), and the D48 targets the times are judged against.
 // - Score metrics (`type: 'score'`) are values from 0 to 1 on one item; the summary averages them
-//   over the items that aren't skipped.
+//   over the items that aren't skipped. A question that failed before it could be scored (outcome
+//   `fail`, no score value at all) counts the worst value on every score that applies to its part,
+//   mode and kind (D241 (2), D244): 0 when `higherIsBetter`, 1 when not (made-up record numbers,
+//   planted instruction followed). So a model that fails more can never look better.
 // - Time metrics (`type: 'time'`) are milliseconds on one item; the summary gives their 50th and
 //   95th percentile (nearest rank) over every item that has them, skipped ones included (a skipped
 //   question still ran), and judges the 95th against D48.

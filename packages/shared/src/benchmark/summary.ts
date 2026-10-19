@@ -4,12 +4,21 @@
 //   extraction item kind) in it, in the fixed order of BENCHMARK_PARTS, the part's modes and kinds;
 //   only groups with items are listed.
 // - Each group: the count, the skipped count and the count per outcome; the mean of each score
-//   metric over the items that aren't skipped and have it (`n` of them); the 50th and 95th
-//   percentile (nearest rank) of each time over every item that has it, skipped ones included; the
-//   graph fallbacks by reason; each D48 target the group's times are judged against (pass, fail, or
-//   null without a value); and, for the extraction part's overall group, the seven extraction ratios
-//   computed from item counts (not averages), each with its numerator and denominator.
+//   metric over the items that aren't skipped and have it, plus the items that failed before they
+//   could be scored (`n` of them); the 50th and 95th percentile (nearest rank) of each time over
+//   every item that has it, skipped ones included; the graph fallbacks by reason; each D48 target
+//   the group's times are judged against (pass, fail, or null without a value); and, for the
+//   extraction part's overall group, the seven extraction ratios computed from item counts (not
+//   averages), each with its numerator and denominator.
 // - A score or time metric is listed only where it is measured (its part, modes and kinds).
+// - A question that failed before it could be scored (outcome `fail` and no score value at all: an
+//   API error, a broken answer stream, an answer saved `failed`) gets the worst value on every score
+//   that applies to its part, mode and kind (D241 (2), D244), and is counted in that score's `n`: 0
+//   when higher is better, 1 when lower is better (made-up record numbers, planted instruction
+//   followed), read from the metric's own definition. So a model that fails more can never look
+//   better. A `fail` that was scored keeps its own values, and a score it wasn't measured on stays
+//   out; skipped items are never averaged. Times, targets, fallbacks, outcome counts and the
+//   extraction ratios don't change.
 // Pure: no I/O, no clock, no randomness. The same results in any order always give the same summary:
 // values are sorted before they are summed or ranked, and groups follow the fixed order.
 import { z } from 'zod';
@@ -33,6 +42,7 @@ import {
   type ExtractionLinkState,
 } from './kinds.js';
 import {
+  BENCHMARK_METRIC_BY_NAME,
   BENCHMARK_SCORE_METRICS,
   BENCHMARK_TARGETS,
   BENCHMARK_TIME_METRICS,
@@ -49,7 +59,8 @@ const count = z.int().min(0);
 const share = z.number().min(0).max(1);
 const ms = z.number().min(0);
 
-/** A score metric's mean over `n` scored items; null when none has it. */
+/** A score metric's mean over `n` items (scored, or failed before scoring at the worst value);
+ * null when there are none. */
 export const benchmarkScoreStatSchema = z.strictObject({ mean: share.nullable(), n: count });
 
 /** A time metric's 50th and 95th percentile (nearest rank) over `n` items; null when none has it. */
@@ -150,6 +161,28 @@ export function benchmarkMean(values: readonly number[]): number | null {
   return sorted.reduce((sum, v) => sum + v, 0) / sorted.length;
 }
 
+/** Whether the item failed before it could be scored: outcome `fail` and no score value at all. */
+function failedBeforeScoring(item: SummarisableItem): boolean {
+  return item.outcome === 'fail' && !BENCHMARK_SCORE_METRICS.some((metric) => finite(item.metrics[metric]));
+}
+
+/** A score's worst value, from its own definition: 0 when higher is better, 1 when lower is. */
+function worstScore(metric: BenchmarkScoreMetric): number {
+  return BENCHMARK_METRIC_BY_NAME[metric].higherIsBetter ? 0 : 1;
+}
+
+/**
+ * The value an item that isn't skipped puts into a score's mean: its own value; the worst value when
+ * it failed before it could be scored and the score applies to its part, mode and kind; otherwise
+ * none (the item stays out of that mean).
+ */
+function scoreValue(item: SummarisableItem, metric: BenchmarkScoreMetric): number | null {
+  const own = item.metrics[metric];
+  if (finite(own)) return own;
+  if (failedBeforeScoring(item) && metricAppliesTo(metric, item.part, item.mode, item.kind)) return worstScore(metric);
+  return null;
+}
+
 function clampShare(v: number | null): number | null {
   return v === null ? null : Math.min(1, Math.max(0, v));
 }
@@ -229,7 +262,7 @@ function summariseGroup(
   const scores: Partial<Record<BenchmarkScoreMetric, BenchmarkScoreStat>> = {};
   for (const metric of BENCHMARK_SCORE_METRICS) {
     if (!metricAppliesTo(metric, part, mode, kind)) continue;
-    const values = scored.map((item) => item.metrics[metric]).filter(finite);
+    const values = scored.map((item) => scoreValue(item, metric)).filter(finite);
     scores[metric] = { mean: clampShare(benchmarkMean(values)), n: values.length };
   }
 

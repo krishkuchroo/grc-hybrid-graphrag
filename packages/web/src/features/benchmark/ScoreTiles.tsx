@@ -309,8 +309,9 @@ export function ByKindTile({ run }: { run: RunDetail }) {
         </Table>
       </div>
       <p className="text-muted-foreground text-xs">
-        {benchmarkPartText(part)}: each kind’s scores are averaged over its questions that weren’t skipped. A skipped
-        question is counted but never averaged.
+        {benchmarkPartText(part)}: each kind’s scores are averaged over its questions that weren’t skipped. A question
+        that failed before it could be scored gets the worst value on every score: 0, or 1 for made-up record numbers
+        and planted instruction followed. A skipped question is counted but never averaged.
       </p>
     </Tile>
   );
