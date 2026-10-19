@@ -11,6 +11,9 @@
 //      so a re-run's uploads are `duplicate: true` too.
 // One org at a time, one request at a time, so the order is always the same (D45.8). It returns
 // counts and the IDs the API answered with, never anything from the data.
+// `mappings` (FT-001, a dataset folder's `import-mappings.json`): when given, each source's column
+// mapping is the one with that `source`, and a source with none is an error naming the source;
+// when not given, `mappingOf` gives the generator's own (`CMDB_SOURCES`).
 import type { ImportMapping } from '@grc/shared';
 import { CMDB_SOURCES, fileBytesOf, type OrgSources, type RenderedSources, type SourceFile } from '../sources/index.js';
 import type { AnswerKey } from '../world/index.js';
@@ -35,9 +38,12 @@ export interface FullPipelineTarget {
 }
 
 export interface RunFullPipelineInput {
-  key: AnswerKey;
-  sources: RenderedSources;
+  /** The batch IDs' generator version and seed (`batchIdOf`). */
+  key: Pick<AnswerKey, 'generatorVersion' | 'seed'>;
+  sources: Pick<RenderedSources, 'orgs'>;
   targets: readonly FullPipelineTarget[];
+  /** Each asset list source's column mapping; the generator's own (`mappingOf`) when not given. */
+  mappings?: readonly ImportMapping[];
   /** Makes a target's client; an `ApiClient` over `fetch` when not given. */
   client?: (target: FullPipelineTarget) => ConnectorClient;
   /** The `fetch` the default client uses. */
@@ -153,10 +159,18 @@ export function planPushBatches(key: Pick<AnswerKey, 'generatorVersion' | 'seed'
   return batches;
 }
 
+/** The given mapping a source's asset lists are pushed with; an error naming the source when none is. */
+function mappingFor(source: string, mappings: readonly ImportMapping[]): ImportMapping {
+  const found = mappings.find((m) => m.source === source);
+  if (!found) throw new Error(`no column mapping is given for the asset list source ${source}`);
+  return found;
+}
+
 async function runOrg(
   client: ConnectorClient,
   key: Pick<AnswerKey, 'generatorVersion' | 'seed'>,
   org: OrgSources,
+  mappings: readonly ImportMapping[] | undefined,
 ): Promise<OrgPipelineResult> {
   const result: OrgPipelineResult = {
     orgKey: org.orgKey,
@@ -168,9 +182,12 @@ async function runOrg(
     documentIds: [],
   };
   const batches = planPushBatches(key, org);
+  // Given mappings are all found first, so a source with none stops the org before anything is sent.
+  const sources = assetSourcesOf(org);
+  const given = mappings === undefined ? null : sources.map((source) => mappingFor(source, mappings));
 
-  for (const source of assetSourcesOf(org)) {
-    const saved = await client.saveMapping(mappingOf(source));
+  for (const [i, source] of sources.entries()) {
+    const saved = await client.saveMapping(given === null ? mappingOf(source) : given[i]!);
     if (saved.changed) result.mappings.saved += 1;
     else result.mappings.unchanged += 1;
   }
@@ -220,7 +237,7 @@ export async function runFullPipeline(input: RunFullPipelineInput): Promise<Full
 
   const orgs: OrgPipelineResult[] = [];
   for (const target of targets) {
-    const done = await runOrg(makeClient(target), key, byKey.get(target.orgKey)!);
+    const done = await runOrg(makeClient(target), key, byKey.get(target.orgKey)!, input.mappings);
     orgs.push(done);
     input.onOrgDone?.(done);
   }

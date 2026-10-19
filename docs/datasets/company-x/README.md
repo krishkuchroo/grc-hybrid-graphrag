@@ -92,18 +92,50 @@ node --experimental-transform-types --disable-warning=ExperimentalWarning \
 
 ## Running it against the app
 
-What works today:
+Two commands load the folder and score what the app made of it. They work for any folder in this format:
+the org's slug and name come from `manifest.json`, and the whole folder is checked before anything is made
+(each problem names the file and the field, the command exits with 2, and nothing is made).
 
-1. **Asset lists:** in Data intake, upload `x-cmdb-export.csv` (source `Company X CMDB`), then `x-vuln-scanner.csv` (source `Company X Vulnerability Scanner`). Match the columns as `import-mappings.json` says. Score the result against `normalisation.json` (stored values) and `duplicates.json` (did the scanner's spellings become duplicates, or get flagged as possible duplicates?).
-2. **Documents:** upload each file in `sources/documents/` with the kind `documents.json` gives. This needs Ollama: bge-m3 for search and Gemma for extraction. The Analyst then works the review queue. Score the links that went live against `facts.json`.
-3. **Framework mappings:** on each control's page, add the 800-53 requirement `framework-mappings.json` names.
-4. **Questions:** `pnpm bench:run --org company-x --set docs/datasets/company-x/questions-company-x.json --part all` runs every question in hybrid and vector-only mode and stores the run on the Benchmark screen.
+### Loading: `pnpm dataset:load`
+
+```
+pnpm dataset:load --folder docs/datasets/company-x --mode full|fast --step base|documents \
+  [--org <existing org slug>] [--base-url https://grc.localhost]
+```
+
+- **Two orgs (D235):**
+  - `--mode full` loads org `company-x` (named as in `manifest.json`) through the real intake. This measures ingestion.
+  - `--mode fast` loads org `company-x-fast` ("Company X (fast load)") straight from the answer key: a perfect graph, for measuring chat answers.
+  - Each org's Admin is `admin@<slug>.example`.
+- **`--step base`** (first):
+  - full: makes the org; then, with a 1-hour Admin key at Restricted that is revoked however the run ends, pushes the two asset lists with the column mappings in `import-mappings.json` (the CMDB first, so its assets are the older ones a merge keeps), creates every risk, control, policy and incident of the answer key through the record API (no links between them: finding those is the documents' job), and adds the framework mappings.
+  - fast: makes the org, writes every record and link of the answer key, adds the framework mappings, and checks the org's audit chain.
+  - Duplicate checks start only once bge-m3 has embedded the record names, so they need Ollama running.
+- **`--step documents`** (later, on its own): uploads the 52 documents with the kinds `documents.json` gives. In full mode the worker reads, embeds and extracts them, and the Analyst works the review queue; in fast mode they are only read and embedded. It is refused, with nothing sent, until the org exists and the models answer: bge-m3 on Ollama, and in full mode also the text model on the provider `AI_TEXT_PROVIDER` picks (Ollama's model list, or `GET <AI_TEXT_BASE_URL>/models` with the key).
+- **`--org <slug>`** loads into an org that already exists instead, in either mode and either step, and never makes one. It is refused when no org has that slug, or when the org has no Admin who holds Restricted. A record whose exact name its kind already has is skipped.
+- **Re-runs add nothing:** the mappings come back unchanged, the asset-list batches and the uploads as repeats, the records skipped by name, the framework mappings as already there.
+
+### Scoring: `pnpm dataset:score`
+
+```
+pnpm dataset:score --org company-x|company-x-fast --folder docs/datasets/company-x [--base-url https://grc.localhost]
+```
+
+It reads the org through the API with a 1-hour Admin key (revoked at the end; nothing in the org changes) and scores:
+
+- **Links** against `facts.json`: each fact found (a live link, of any origin), waiting (a pending finding) or missed, per link type and per origin (public, derived, synthetic), and the extra live links no fact has.
+- **Duplicates** against `duplicates.json`: each scanner row merged into the right asset, flagged as a possible duplicate (by the finding's status), merged into the wrong one, missed, or not imported.
+- **Normalisation** against `normalisation.json`: each stored value matches, differs, or wasn't imported.
+
+On `company-x-fast` no asset lists went in, so duplicates and normalisation show "not applicable". The output holds counts and ratios only; the full report, with names and sentences, goes to `data/benchmark/dataset-<slug>-<UTC time>.json` (kept out of the repository, D81).
+
+### Questions
+
+`pnpm bench:run --org company-x --set docs/datasets/company-x/questions-company-x.json --part all` (or `--org company-x-fast`) runs every question in hybrid and vector-only mode and stores the run on the Benchmark screen. The question set names both orgs.
 
 What's missing:
 
 - **An org to load into.** `pnpm org:create` makes the org, but its Admin can't sign in until self-service sign-up (D233) or S7 is built. Loading into a demo org instead mixes the demo records into every answer.
-- **A loader.** Steps 1–3 are about 90 uploads and clicks by hand. `pnpm gen:data`'s full-pipeline mode already pushes asset lists and uploads documents through the API with a short-lived key. Pointing it at this folder would load Company X in one command.
-- **Scoring for ingestion.** `bench:run --part extraction` accepts only generated question sets on `gen-…` orgs. Scoring extraction, duplicates and normalisation against this folder's keys needs its own small checker.
 
 ## Licences and attribution
 

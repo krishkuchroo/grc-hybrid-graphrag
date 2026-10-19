@@ -5,3 +5,4 @@ export * from './questions/index.js';
 export * from './score/index.js';
 export * from './run/index.js';
 export * from './extraction/index.js';
+export * from './dataset/index.js';
