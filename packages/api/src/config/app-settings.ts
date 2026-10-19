@@ -24,6 +24,11 @@ export const APP_SETTINGS: readonly AppSetting[] = [
   // The model names, so the model stays swappable (D8); gemma4:12b and bge-m3 when unset.
   { name: 'AI_TEXT_MODEL', required: false },
   { name: 'AI_EMBEDDING_MODEL', required: false },
+  // The text model's server (D236): `ollama` when unset. The address and the secret key are needed
+  // only with `openai-compatible`, and aiSettingsFromEnv enforces that; no Mac default (D57).
+  { name: 'AI_TEXT_PROVIDER', required: false },
+  { name: 'AI_TEXT_BASE_URL', required: false },
+  { name: 'AI_TEXT_API_KEY', required: false },
   { name: 'BETTER_AUTH_URL', required: false, macDefault: 'https://grc.localhost' },
   { name: 'HOST', required: false },
   { name: 'PORT', required: false },

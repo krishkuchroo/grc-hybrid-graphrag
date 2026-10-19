@@ -104,6 +104,13 @@ services:
       NEO4J_WRITER_PASSWORD: ${NEO4J_WRITER_PASSWORD}
       NEO4J_QUERY_SECRET: ${NEO4J_QUERY_SECRET}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # The text model's server (D236, D242): empty values mean Ollama with gemma4:12b. With
+      # AI_TEXT_PROVIDER openai-compatible, the user's Unsloth Studio model at AI_TEXT_BASE_URL.
+      # The key comes from .env only (D57). Embeddings always stay on Ollama.
+      AI_TEXT_PROVIDER: ${AI_TEXT_PROVIDER:-}
+      AI_TEXT_MODEL: ${AI_TEXT_MODEL:-}
+      AI_TEXT_BASE_URL: ${AI_TEXT_BASE_URL:-}
+      AI_TEXT_API_KEY: ${AI_TEXT_API_KEY:-}
       S3_ENDPOINT: http://grc-seaweedfs:8333
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}

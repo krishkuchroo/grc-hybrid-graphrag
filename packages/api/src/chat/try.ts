@@ -14,14 +14,21 @@ import { pathToFileURL } from 'node:url';
 import { SEARCH_LIMITS } from '@grc/shared';
 import { pino } from 'pino';
 import { isAiFailure } from '../ai/ai-failure.js';
-import { aiSettingsFromEnv } from '../ai/ai-settings.js';
-import { OllamaTextModel } from '../ai/ollama-text-model.js';
+import { aiSettingsFromEnv, macSideAddress } from '../ai/ai-settings.js';
+import { createTextModel } from '../ai/text-model-factory.js';
 import { readDotEnv } from '../config/app-settings.js';
 import { ANSWER_PROMPT_VERSION, answerRequest } from './answer-prompt.js';
 import { citedNumbers } from './citations.js';
 import { PLANTED_WORD, TRY_CONTEXT, TRY_QUESTIONS, TRY_SOURCES } from './try-samples.js';
 
-const AI_SETTING_NAMES = ['OLLAMA_BASE_URL', 'AI_TEXT_MODEL', 'AI_EMBEDDING_MODEL'] as const;
+const AI_SETTING_NAMES = [
+  'OLLAMA_BASE_URL',
+  'AI_TEXT_MODEL',
+  'AI_EMBEDDING_MODEL',
+  'AI_TEXT_PROVIDER',
+  'AI_TEXT_BASE_URL',
+  'AI_TEXT_API_KEY',
+] as const;
 
 /** D48: the first words within 25 s, the full answer within 60 s. */
 export const FIRST_WORDS_LIMIT_MS = 25_000;
@@ -39,7 +46,10 @@ function failureCode(err: unknown): string {
   return err instanceof Error ? err.name : 'error';
 }
 
-/** The AI settings only: environment first, then .env files, then the defaults. */
+/**
+ * The AI settings only: environment first, then .env files, then the defaults. AI_TEXT_BASE_URL is
+ * written as the containers see it; this command runs on the Mac, so its host is swapped.
+ */
 function settingsEnv(): NodeJS.ProcessEnv {
   const dotEnv = readDotEnv(process.cwd());
   const env: NodeJS.ProcessEnv = {};
@@ -47,6 +57,7 @@ function settingsEnv(): NodeJS.ProcessEnv {
     const value = [process.env[name], dotEnv[name]].find((v) => typeof v === 'string' && v !== '');
     if (value !== undefined) env[name] = value;
   }
+  if (env.AI_TEXT_BASE_URL !== undefined) env.AI_TEXT_BASE_URL = macSideAddress(env.AI_TEXT_BASE_URL);
   return env;
 }
 
@@ -56,7 +67,7 @@ function list(numbers: readonly number[]): string {
 
 export async function runTry(write: (line: string) => void = (line) => console.log(line)): Promise<boolean> {
   const settings = aiSettingsFromEnv(settingsEnv());
-  const textModel = new OllamaTextModel({ settings, log: pino({ level: 'silent' }) });
+  const textModel = createTextModel(settings, { log: pino({ level: 'silent' }) });
   let ok = true;
 
   write(`text model: ${textModel.modelName}, prompt: ${ANSWER_PROMPT_VERSION}`);

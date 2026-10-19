@@ -14,8 +14,8 @@
 import { pathToFileURL } from 'node:url';
 import type { Label, Role } from '@grc/shared';
 import { pino } from 'pino';
-import { aiSettingsFromEnv } from '../../ai/ai-settings.js';
-import { OllamaTextModel } from '../../ai/ollama-text-model.js';
+import { aiSettingsFromEnv, macSideAddress } from '../../ai/ai-settings.js';
+import { createTextModel } from '../../ai/text-model-factory.js';
 import { readDotEnv } from '../../config/app-settings.js';
 import { GraphService } from '../../graph/graph.service.js';
 import { readGraphRows } from './graph-results.js';
@@ -35,6 +35,9 @@ const SETTING_NAMES = [
   'OLLAMA_BASE_URL',
   'AI_TEXT_MODEL',
   'AI_EMBEDDING_MODEL',
+  'AI_TEXT_PROVIDER',
+  'AI_TEXT_BASE_URL',
+  'AI_TEXT_API_KEY',
   'NEO4J_URI',
   'NEO4J_QUERY_SECRET',
 ] as const;
@@ -43,7 +46,11 @@ function seconds(ms: number): string {
   return (ms / 1000).toFixed(1);
 }
 
-/** The settings this command reads: environment first, then .env files. Never printed. */
+/**
+ * The settings this command reads: environment first, then .env files. Never printed.
+ * AI_TEXT_BASE_URL is written as the containers see it; this command runs on the Mac, so its host
+ * is swapped.
+ */
 function settingsEnv(): NodeJS.ProcessEnv {
   const dotEnv = readDotEnv(process.cwd());
   const env: NodeJS.ProcessEnv = {};
@@ -51,6 +58,7 @@ function settingsEnv(): NodeJS.ProcessEnv {
     const value = [process.env[name], dotEnv[name]].find((v) => typeof v === 'string' && v !== '');
     if (value !== undefined) env[name] = value;
   }
+  if (env.AI_TEXT_BASE_URL !== undefined) env.AI_TEXT_BASE_URL = macSideAddress(env.AI_TEXT_BASE_URL);
   return env;
 }
 
@@ -69,7 +77,7 @@ export async function runTry(
 ): Promise<boolean> {
   const orgId = orgArgument(args);
   const env = settingsEnv();
-  const model = new OllamaTextModel({ settings: aiSettingsFromEnv(env), log: pino({ level: 'silent' }) });
+  const model = createTextModel(aiSettingsFromEnv(env), { log: pino({ level: 'silent' }) });
   let graph: GraphService | null = null;
   if (orgId !== null) {
     const querySecret = env.NEO4J_QUERY_SECRET;

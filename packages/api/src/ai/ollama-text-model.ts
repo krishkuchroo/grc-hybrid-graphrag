@@ -51,7 +51,7 @@ export const TEXT_MODEL_CONTEXT_TOKENS = 8192;
 export const TEXT_MODEL_TIMEOUT_MS = 300_000;
 
 /** The program's one Gemma slot, shared by every text model client in this program. */
-const PROGRAM_GATE = new SerialGate();
+export const PROGRAM_GATE = new SerialGate();
 
 export interface OllamaTextModelOptions {
   settings: Pick<AiSettings, 'ollamaBaseUrl' | 'textModel'>;
@@ -64,13 +64,13 @@ export interface OllamaTextModelOptions {
   gate?: SerialGate;
 }
 
-function positiveWhole(value: number | undefined, what: string): number | undefined {
+export function positiveWhole(value: number | undefined, what: string): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isInteger(value) || value < 1) throw new AiInputError(`${what} must be a whole number from 1`);
   return value;
 }
 
-function checkRequest<T>(request: TextRequest<T>): void {
+export function checkRequest<T>(request: TextRequest<T>): void {
   if (typeof request.instructions !== 'string' || request.instructions.trim() === '') {
     throw new AiInputError('The instructions are empty.');
   }
@@ -79,13 +79,13 @@ function checkRequest<T>(request: TextRequest<T>): void {
   positiveWhole(request.maxOutputTokens, 'maxOutputTokens');
 }
 
-function checkSignal(signal: unknown): void {
+export function checkSignal(signal: unknown): void {
   if (signal !== undefined && !(signal instanceof AbortSignal)) {
     throw new AiInputError('The signal must be an AbortSignal.');
   }
 }
 
-function checkStreamRequest(request: TextStreamRequest): void {
+export function checkStreamRequest(request: TextStreamRequest): void {
   if (typeof request !== 'object' || request === null) throw new AiInputError('The request is missing.');
   if (typeof request.instructions !== 'string' || request.instructions.trim() === '') {
     throw new AiInputError('The instructions are empty.');
@@ -100,7 +100,7 @@ function checkStreamRequest(request: TextStreamRequest): void {
 }
 
 /** The shape sent to Ollama (answerShape, else schema), checked against the request's schema. */
-function checkedSchema<T>(request: TextRequest<T>): Schema<T> {
+export function checkedSchema<T>(request: TextRequest<T>): Schema<T> {
   const shape = zodSchema(request.answerShape ?? request.schema);
   return jsonSchema<T>(() => shape.jsonSchema, {
     validate: async (value) => {
@@ -127,7 +127,7 @@ function ollamaProviderOptions(maxOutputTokens: number | undefined) {
   };
 }
 
-function since(start: number): number {
+export function since(start: number): number {
   return Math.round(performance.now() - start);
 }
 
@@ -136,14 +136,14 @@ function since(start: number): number {
  * misbehaving (`unavailable`), not a refused answer; and Ollama reports a failure mid-answer as a
  * bare error line, which is the same.
  */
-function streamFailure(err: unknown, ctx: { model: string; elapsedMs: number }): AiFailure | AiCallError {
+export function streamFailure(err: unknown, ctx: { model: string; elapsedMs: number }): AiFailure | AiCallError {
   if (typeof err === 'string') return new AiFailure('unavailable', ctx);
   const failure = toAiError(err, { ...ctx, timedOut: false });
   if (failure instanceof AiFailure && failure.code === 'invalid_output') return new AiFailure('unavailable', ctx);
   return failure;
 }
 
-function errorTypeOf(err: unknown): string {
+export function errorTypeOf(err: unknown): string {
   if (err instanceof Error) return err.name;
   return typeof err;
 }

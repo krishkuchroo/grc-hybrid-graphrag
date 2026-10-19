@@ -5,12 +5,16 @@
 // - DATABASE_URL_APP and DATABASE_URL_MIGRATE get a connection URL with a fresh random password.
 // - NEO4J_DESKTOP_PASSWORD is the user's own Neo4j Desktop password: left empty, and named in
 //   the output so the user knows to fill it in.
+// - AI_TEXT_API_KEY is the user's own key for their text-model server (D236): left empty, because
+//   a random value would be a wrong key.
 // - Secrets are never printed, and `.env` ends at mode 600.
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const USER_SUPPLIED = 'NEO4J_DESKTOP_PASSWORD';
+const DESKTOP_SETTING = 'NEO4J_DESKTOP_PASSWORD';
+/** Secrets the user fills in: never given a random value. */
+const USER_SUPPLIED: ReadonlySet<string> = new Set([DESKTOP_SETTING, 'AI_TEXT_API_KEY']);
 const SECRET_NAME = /PASSWORD|SECRET|TOKEN|KEY/;
 const LINE = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/;
 
@@ -38,7 +42,7 @@ const DATABASE_URLS: Record<string, string> = {
 };
 
 function isSecret(name: string): boolean {
-  return (SECRET_NAME.test(name) && name !== USER_SUPPLIED) || name in DATABASE_URLS;
+  return (SECRET_NAME.test(name) && !USER_SUPPLIED.has(name)) || name in DATABASE_URLS;
 }
 
 function newSecretFor(name: string): string {
@@ -83,9 +87,9 @@ console.log(
     : 'setup:secrets: .env is up to date; no values changed.',
 );
 
-const desktopIndex = seen.get(USER_SUPPLIED);
+const desktopIndex = seen.get(DESKTOP_SETTING);
 if (desktopIndex !== undefined && isEmpty(LINE.exec(lines[desktopIndex]!)![2]!)) {
   console.log(
-    `setup:secrets: ${USER_SUPPLIED} is empty. Fill it in yourself with the Neo4j Desktop \`neo4j\` account's password.`,
+    `setup:secrets: ${DESKTOP_SETTING} is empty. Fill it in yourself with the Neo4j Desktop \`neo4j\` account's password.`,
   );
 }
