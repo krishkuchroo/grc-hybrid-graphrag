@@ -135,6 +135,11 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | S8-009 | S8 | builder-frontend | done | Home dashboard (screen 1): headline cards, the risk heat map, shadcn charts for risks by band, controls by status, incidents by severity and assets by criticality, framework coverage bars, waiting for review (Admins and Analysts), data intake status, top risks and newest open incidents with links; each tile only for what the role sees, with empty, loading and error states; "Your access" kept. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S8-009.md | |
 | S8-010 | S8 | builder-frontend | done | Benchmark screen (13) at `/benchmark` and `/benchmark/$id`, Admins only (menu item hidden for others, no-access state): runs list with status and headline scores; a run's page with its settings, hybrid-vs-vector charts per metric and per question kind, times against the D48 targets, graph-query success and fallback reasons, extraction scores, and the per-question results (filters; detail with the question, expected and found records, the answer, its citations and the graph query); progress for a running run; results hidden above the reader's clearance; the empty state shows the commands. Fast mode (D222): lint + type checks; no new tests | logs/tasks/S8-010.md | |
 | S8-011 | S8 | builder-data | done | S8 demo: hand-written question sets for both demo orgs (every question kind, framework questions included) checked against `seed:demo`'s data (topped up only where needed, re-runnable); `docs/demo/s8.md` click-through (the dashboard as different roles, a benchmark run on Acme read on the Benchmark screen, a run on generated data, the extraction part). Fast mode (D222): lint + type checks; no new tests | | logs/tasks/S8-011.md |
+| FT-001 | FT | builder-data | done | Company X loader and scorer (D234, D235, D237, D238 (b)): `pnpm dataset:load --folder <dir> --mode full\|fast --step base\|documents [--org <existing slug>]` loads any folder in its format into `<slug>` through the real intake (1-hour Admin key at Restricted, saved import mappings, asset-list pushes, then every risk, control, policy and incident through the record API, then the framework mappings) or into `<slug>-fast` straight from the answer key (runFastLoad + framework mappings); `--org` loads into an org that already exists instead, refused if it doesn't exist or has no Admin at Restricted; documents only in their own later step, refused unless Ollama answers with bge-m3 and, in full mode, the text model answers on the provider `AI_TEXT_PROVIDER` picks (Ollama's model list, or `GET <AI_TEXT_BASE_URL>/models` with the key, D236); the whole folder checked before anything is made; re-runs add nothing. `pnpm dataset:score --org <slug> --folder <dir>` scores links (found/waiting/missed/extra by type and origin), duplicates (merged/flagged/wrong/missed) and normalisation, D164 output, full report in `data/benchmark/`. `runFullPipeline` takes the folder's mappings; gen:data unchanged; the question set names both slugs. Builder runs no model, no documents step, nothing against the live stack. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Starts after AI-001 is merged: the documents-step check reads the `AI_TEXT_*` settings through AI-001's `aiSettingsFromEnv`. Not alongside FT-002: both add root `package.json` scripts. Q-FT-1 answered (1) on 2026-10-18 (D237). | logs/tasks/FT-001.md; builder-data 5c64c09, merged into main (fast mode, D222). Builder's departures: new `packages/infra/scripts/dataset-common.ts` (model check, org lookup, keys); the scorer judges merged vs wrong_merge by the record's match without the scanner row's own alias (the brief's literal order would count an unmerged or wrongly merged scanner row as merged); the folder check doesn't require `questions-company-x.json` (neither command reads it). Scratch check: a fast org scored 471/471 facts, 0 extra. |
+| AI-001 | AI | builder-backend | done | Text model chosen by a setting (D8, D34, D236): `AI_TEXT_PROVIDER` = `ollama` (the default, unchanged) or `openai-compatible` (the user's Unsloth Studio model through its local OpenAI-compatible API, with `AI_TEXT_BASE_URL`, the secret `AI_TEXT_API_KEY` and `AI_TEXT_MODEL`). A new `OpenAiCompatibleTextModel` behind TEXT_MODEL keeps the whole text-model contract: one model slot per program shared with Ollama's, turns, streaming, schema-checked answers sent as a `response_format` JSON schema, temperature 0 and seed 42. Requests go only to its own address, with no redirects; failures map as Ollama's do, and a refused key (HTTP 401 or 403) is `unavailable` too, which `check.ts` reports plainly (D242); a stream with no text is a failure, never an empty answer; thinking is turned off in the request and any thinking text that still comes back is dropped before the schema check and the chat stream, so it is never saved or shown (D243, Qwen3.5-4B). A one-line start-up warning (API, worker and `check.ts`) names each AI address setting that isn't on the Mac; nothing is blocked (D242). Embeddings stay on Ollama (bge-m3). One factory picks the class for `ai.module.ts`, `check.ts` and the three try scripts. The package is `@ai-sdk/openai-compatible` pinned exactly at `3.0.69`, an exception to the 14-day package-age rule for this package only, so the lockfile keeps one copy each of `@ai-sdk/provider` and `@ai-sdk/provider-utils` (D245). Compose passes the four settings to grc-api and grc-worker, `.env.example` names them, and setup:secrets leaves the key empty. The builder calls no model and runs nothing live. Fast mode (D222): lint + type checks, then one security review before the integrator merges (D241 (4): D49–D59, the key as a secret, the address guard and redirects, what leaves the Mac); no new tests (testing-phase tests listed in the brief) | | logs/tasks/AI-001.md; builder-backend ce7a53c, blocked once on criterion 7 (no package version met both package rules), answered by the user as D245 (3.0.69), then 04c8ddd; security reviewer approved (D241 (4)); merged 02cab16 (fast mode, D222). Thinking turned off via `providerOptions.openaiCompatible.chat_template_kwargs` and stripped with `extractReasoningMiddleware({tagName:'think'})`; setup-secrets constant renamed `DESKTOP_SETTING` (secret-scan false alarm). Reviewer's non-blocking security notes in SF-056. |
+| AI-002 | AI | builder-backend | done | Empty-answer fix in the Ollama text model (D241 (3)): in `ollama-text-model.ts`, a stream that would end `finished` or `token_cap` with no text rejects with `AiFailure('unavailable')`, as the time-limit branch already does with `timed_out`; chat then saves the question as `failed` with `assistant_unavailable` and never saves an empty answer as answered. Nothing else changes. Starts after AI-001 is merged (both change `ollama-text-model.ts`). Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | | logs/tasks/AI-002.md; builder-backend 0fbc0e7; merged 063e7d2 (fast mode, D222). A stream ending `finished` or `token_cap` with no text rejects as `unavailable`; `ask.ts` unchanged (saves `failed` + `assistant_unavailable`). |
+| FT-002 | FT | builder-platform | done | First password for a new org's Admin (D241 (1)): `pnpm org:admin-password --org <slug> --email <email>` sets the first password of an Admin of that org. The password is typed twice in a terminal with nothing shown; never an argument, environment variable, output or log line; 12 to 128 characters (D54). It is stored with Better Auth's own hash in the `credential` account, with one `auth.password_set` audit entry in the same transaction. Refused, with exit 2 and nothing changed: bad arguments, no terminal, too short or long, the two entries differ, no such org, the email is no Admin of the org, or a password or two-factor is already set. The Admin then signs in at https://grc.localhost and must set up TOTP first (existing flow). First password only (D244, Q-PW-1). Builder runs nothing against the live stack. Fast mode (D222): lint + type checks, then one security review before the integrator merges (D244, Q-PW-2: D49–D59, how the password is read, the hash, the audit entry in the same transaction, the refusals, TOTP enrolment still required); no new tests (testing-phase tests listed in the brief) | | logs/tasks/FT-002.md; builder-platform c35b506; security reviewer approved (D244); merged 2b087aa (fast mode, D222). Builder's choices beyond the brief, accepted by the reviewer: any `credential` account or `two_factor` row counts as an existing password; unknown arguments named by position only; a repeated flag refused; Ctrl-C exits 130; the user row locked FOR UPDATE. Reviewer's testing-phase gap: refusal tests for "Admin of another org" and "two-factor row but no password". |
+| S8-012 | S8 | builder-data | done | A failed question gets the worst value (D241 (2), D244): in `summariseBenchmark` (`packages/shared/src/benchmark/summary.ts`), an item that failed before it could be scored (outcome `fail` and no score value at all) counts as the worst value in every score mean that applies to it: 0 on the higher-is-better scores, 1 on "made-up record numbers" and "planted instruction followed". It is counted in `n`. A model that fails more can never look better. Skipped items stay out, and a scored `fail` keeps its own values. Times, targets, fallbacks and extraction ratios are unchanged. The Benchmark screen's averaging sentence (`ScoreTiles.tsx`) and the comments say the new rule. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Q-BM-1 answered (b) on 2026-10-18 (D244). | logs/tasks/S8-012.md; builder-data a3c6301; merged 622f8d5 (fast mode, D222: lint + typecheck pass). Note: a no-answer question that fails before it is scored now counts 0 on context recall, result recall and reciprocal rank too, because `metricAppliesTo` applies to its kind (left as built; shown to the user). The existing summary tests expecting the old rule need the test writer's update in the testing phase. |
 
 **Moved out of M0 (now planned in S7):**
 - SSO (OIDC/SAML) with the Admin screens: S7-009, S7-010 and S7-018. Its tests use a small stand-in sign-in provider that runs locally (D134).
@@ -5617,3 +5622,686 @@ Task: S8-011
 1. Both question sets load, and every expected record exists in each demo org after `pnpm seed:demo`; running the seed again adds nothing.
 2. Every step in `docs/demo/s8.md` works as written once the stack runs the MVP's code.
 3. Lint and type checks pass.
+
+---
+
+Task: FT-001
+
+**Goal:** One command loads a dataset folder in `gen:data`'s answer-key format into two orgs, the two ways D235 names. A second command scores an org's ingestion against the folder's keys. The first folder is `docs/datasets/company-x/` (D234).
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/FT-001`; the integrator merges into `main` with lint + type checks. The tests under "Tests for the testing phase" are for later.
+
+**Decisions:** D18, D37, D42, D45.5, D45.7, D45.8, D47, D54, D57, D64, D68, D69, D81, D163, D164, D170, D175, D212, D230, D233, D234, D235, D236, D237, D238 (b); CLAUDE.md principles 5 (re-runs are safe) and 7 (fail safe).
+
+**Starts after AI-001 is merged into `main`** (D236). The documents-step check reads the `AI_TEXT_*` settings through AI-001's `aiSettingsFromEnv` and `macSideAddress`. It doesn't run alongside FT-002, because both add root `package.json` scripts. Q-FT-1 is answered: option (1), the loader creates the records (D237; see the last section of this brief).
+
+**Hard limits:**
+- Run no AI model, and never the documents step. Ollama is stopped: don't start it and don't call it, not even its model list. Don't call the user's Unsloth server either.
+- Don't run either command against the live stack, and run nothing that provisions an org. The first live run happens after the merge, with the user.
+- No model change. No change to sign-in (D233 and S7 own that). No new API route and no new record type, so the security matrix gets no new row (D175).
+- Don't run the build script in your worktree: its downloads (`data/generated/public-sources/`) and its outputs are git-ignored and absent there. The main session reruns it with `--offline` after the merge. For the files' shapes, read the built folder in the main checkout, read only: `/Users/krishkuchroo/Documents/GRC-project-1/docs/datasets/company-x/`.
+- Leave unchanged: `packages/infra/scripts/gen-data.ts`, `fast-load.ts`, `bench-run.ts`, and everything under `packages/api/src`.
+
+**Where things are now:**
+- `packages/infra/scripts/gen-data.ts`, `--mode full`: provisions `gen-<seed>-<n>` with `provisioning.provisionOrg` and makes a 1-hour Admin-role API key at clearance Restricted through `ApiKeysService` (D230). The key is revoked when the run ends, also on failure or Ctrl-C. Then it runs `gen.runFullPipeline`.
+- The same file, `--mode fast`: provisions `fast-<seed>-<size>-<n>`, runs `runFastLoad` (`packages/infra/scripts/fast-load.ts`) on `gen.planFastLoad(key, sources)`, then `relayOutbox` and `verifyChain`.
+- `runFullPipeline` (`packages/generators/src/connectors/run-full.ts`), for each org:
+  - saves each asset-list source's column mapping with `mappingOf(source)`, which knows only the generator's `CMDB_SOURCES`;
+  - pushes the rows, with batch IDs `<generatorVersion>:<seed>:<orgKey>:<source>:<n>`;
+  - uploads the documents with no label, so they get the API's default, `internal`.
+- `planFastLoad` (`packages/generators/src/fast-load/plan.ts`) plans every record and link of the answer key, plus the documents it is given.
+  - Records get `sourceIds: ['answer-key:<key>']` (`fastLoadSourceId`).
+  - Each new document queues `processing.document-read`, which leads to bge-m3 embedding (no Gemma).
+  - A re-run writes nothing new.
+- `seedMappings` in `packages/infra/scripts/seed-demo.ts` adds framework mappings through `MappingsService` as the org's Admin.
+  - Controls are found by source ID, and requirements by `framework` + `code` (active ones only).
+  - A `link_exists` refusal is left alone.
+- `packages/infra/scripts/bench-run.ts` is the pattern for a scoring command:
+  - checks before anything is made;
+  - the key, made and revoked as above;
+  - `writeReport` into `data/benchmark/`;
+  - output limited by D164.
+- `readOrgSnapshot` (`packages/benchmark/src/extraction/snapshot.ts`) reads, through the API: records (status all), links between active records, and link findings.
+- Duplicate checks: asset names are embedded by the worker's name sweep (bge-m3) before `processing.record-dedupe` runs. A clear duplicate merges: the older record is kept and gains the other's source IDs, and the other is retired with `mergedInto`. Anything less clear becomes a `duplicate` review finding.
+- The folder (`docs/datasets/company-x/README.md`):
+  - `manifest.json`: `org: {name, slug}`.
+  - `answer-key.json`: one org; check it with the benchmark's `parseAnswerKey`.
+  - `documents.json`: `file`, `kind`, `label`, `about`, `origin`.
+  - `import-mappings.json`: `source`, `file`, `fields`. Pass only `{source, fields}` to `importMappingSchema`.
+  - `framework-mappings.json`: `controlKey` and `requirement {framework, code}`. `alsoReachedThroughNistCrosswalks` is not loaded, because the app's crosswalks give it.
+  - `facts.json`: `type`, `fromKey`, `toKey`, `origin`, `statedIn`.
+  - `duplicates.json`: `scannerRows[]` with `file`, `sourceId`, `sameAs`. `kevNamingVariants` is not scored.
+  - `normalisation.json`: `file`, `sourceId`, `field`, `expected`.
+  - `provenance.json`: `links[]` with `type`, `fromKey`, `toKey`, `origin`.
+  - `questions-company-x.json`: written with `orgSlugs: ['company-x']`.
+  - `sources/asset-lists/*.csv` and `sources/documents/*.txt|*.json`.
+
+**Shape (planner's reading; if the code argues otherwise, say so in your hand-off):** two new commands, not a `--from` flag on gen:data.
+- Why: gen:data's `--size` and `--seed` mean nothing for a folder, and its slugs are built from them. It also has no framework-mapping step, no separate documents step and no Ollama check, so adding these would branch every part of gen-data.ts.
+- gen-data.ts stays as it is for S8-005's and S8-006's deferred runs (D231).
+- The new commands reuse its parts: provisionOrg, ApiKeysService, runFullPipeline, planFastLoad, runFastLoad, relayOutbox and verifyChain.
+
+**Behaviour:**
+1. **`pnpm dataset:load --folder <dir> --mode full|fast --step base|documents [--org <existing slug>] [--base-url <url>]`** (`packages/infra/scripts/dataset-load.ts`).
+   - **Any folder in this format loads** (D238 (b)). Nothing in the commands names company-x: the slug and name come from the folder's `manifest.json`, and the folder checks below are the only gate.
+   - The root script is shaped like `gen:data`'s, with `--use-system-ca`. The default base URL is `https://grc.localhost`, with the URL rules of gen:data's `checkBaseUrl`.
+   - **The whole folder is checked before anything is made.** A problem names the file and the field, never a value, exits 2, and nothing is made. Refused:
+     - a file listed above that is missing or not valid: the answer key through `parseAnswerKey`, the import mappings through `importMappingSchema`, the rest through small zod schemas next to the reader;
+     - an answer key that doesn't hold exactly one org;
+     - a `documents.json` or `import-mappings.json` file that isn't under `sources/`;
+     - a `framework-mappings.json` `controlKey` that isn't a control of the answer key;
+     - a document label other than `internal`, named by its file (both paths store `internal` only).
+   - **Slugs** (planner's reading):
+     - `--mode full` uses `manifest.org.slug` (`company-x`) and the manifest's name.
+     - `--mode fast` uses `<slug>-fast` (`company-x-fast`), named `<name> (fast load)`.
+     - The Admin's email is `admin@<slug>.example`, as in gen:data.
+     - **`--org <existing slug>`** (D238 (b)), in either mode and either step: the run loads into that org instead, and never creates one.
+       - The org is found by its slug, as `dataset:score` finds its org.
+       - Refused with exit 2, before anything is made, when no org has that slug or when it has no Admin at Restricted. The run's key is made by that Admin, and D230 caps a key at its maker's clearance.
+       - Records that already exist in the org stay as they are: the full base step skips a record whose exact name already exists in its kind (Behaviour 1, step 3).
+   - **`--step base`, full:**
+     1. provisionOrg, then the 1-hour Admin key at Restricted, revoked however the run ends;
+     2. `runFullPipeline` with the folder's sources minus the documents. Each source's mapping comes from `import-mappings.json`, and the lists are pushed in that file's order: the CMDB first, then the scanner. So the CMDB's assets are the older ones, and a merge keeps them.
+     3. **Records** (Q-FT-1 answer (1), D237): every risk, control, policy and incident of the answer key through the record routes (`POST /api/v1/<plural>` with the create schema, as the key), before any document is read. A record whose exact name already exists in its kind is skipped. The loader adds no links between these records: finding them is the documents' job, and that is what `dataset:score` measures.
+     4. **Framework mappings,** straight away, through `POST /api/v1/mappings`. Each control is found through the controls list by exact name, and each requirement through `GET /api/v1/frameworks/:id/requirements?q=<code>` by exact code. A `link_exists` refusal is left alone.
+   - **`--step base`, fast:**
+     1. provisionOrg;
+     2. `runFastLoad` on `planFastLoad(key, sources with no documents)`, which loads every record and link;
+     3. each `framework-mappings.json` row through `MappingsService` as the Admin, as `seedMappings` does: the control found by `answer-key:<controlKey>`, the requirement by framework + code, `link_exists` left alone;
+     4. `relayOutbox` and `verifyChain`, as gen:data's fast mode does.
+   - Both modes' base step prints that duplicate checks start only once bge-m3 has embedded the names, so they need Ollama running.
+   - **`--step documents`** refuses, with exit 2 and nothing sent, in two cases:
+     - The org doesn't exist yet. The message says to run `--step base` first.
+     - The models don't answer (D236).
+       - **Settings:** they come from AI-001's `aiSettingsFromEnv`, reading `AI_TEXT_PROVIDER`, `AI_TEXT_MODEL`, `AI_TEXT_BASE_URL`, `AI_TEXT_API_KEY`, `OLLAMA_BASE_URL` and `AI_EMBEDDING_MODEL` from the environment, then `.env`. `AI_TEXT_BASE_URL` goes through AI-001's `macSideAddress` first. A settings error is a refusal that names the setting.
+       - **The embedding model (both modes), always on Ollama:** `GET <OLLAMA_BASE_URL>/api/tags` must answer 200 within 5 s and list it. The default address is `http://127.0.0.1:11434`.
+       - **The text model (full mode only), on the provider `AI_TEXT_PROVIDER` picks:**
+         - `ollama`: the same `/api/tags` answer must list it.
+         - `openai-compatible`: `GET <AI_TEXT_BASE_URL>/models` with `Authorization: Bearer <AI_TEXT_API_KEY>` must answer 200 within 5 s, and its `data[].id` list must hold `AI_TEXT_MODEL` exactly.
+       - On Ollama, a model name with no tag counts as `:latest`.
+       - The key is never printed. A refusal names the setting, the model or the HTTP status only.
+   - **When it doesn't refuse:**
+     - full: a new 1-hour key, then `runFullPipeline` with the documents only. Each document gets its `documents.json` kind, and its format from the file extension.
+     - fast: `runFastLoad` on the plan with the documents (the records already there write nothing), then the relay and the chain check.
+   - **Re-runs add nothing:** the mappings come back unchanged, batches and uploads `duplicate: true`, framework mappings `link_exists`, and fast-load records `existing`.
+   - **Output (D164):** slugs, counts, times and the folder path. Errors print as gen:data's do: `describeError`, or for an API refusal its address, status, code and reference ID.
+2. **`runFullPipeline` takes an optional `mappings?: readonly ImportMapping[]`.**
+   - When given, each source's mapping is the one with that `source`. A source with no mapping is an error that names the source.
+   - When not given, `mappingOf` works as it does now. Nothing else in the generators changes, and gen:data behaves as before.
+3. **Folder → sources:** a pure function in `packages/generators/src/dataset/`, exported from the package index. The script reads the files; the function does no file reading.
+   - In: the read files. Out: `OrgSources` plus the mapping list.
+   - Asset lists become `SourceFile`s with `kind: 'asset_list'`, `format: 'csv'`, `source` from `import-mappings.json` and `mentions: []`.
+   - Documents keep their kind and format.
+4. **`pnpm dataset:score --org <slug> --folder <dir> [--base-url <url>]`** (`packages/infra/scripts/dataset-score.ts`; the pure parts in `packages/benchmark/src/dataset/`, exported from the package index).
+   - **Refused before anything is made,** as in bench:run:
+     - unknown arguments;
+     - a folder that fails the checks above;
+     - an org that is neither the folder's slug nor `<slug>-fast`;
+     - an org that doesn't exist, or that has no Admin at Restricted;
+     - a base URL that isn't `https://`, or `http://` to 127.0.0.1 or localhost.
+   - **Reading:** through the API with a 1-hour Admin key at Restricted, revoked at the end. Nothing in the org changes. It reads:
+     - every record, all statuses, with its source IDs and asset fields;
+     - the links between active records (`readOrgSnapshot`);
+     - the link findings;
+     - the duplicate findings: `GET /api/v1/review/findings` with kind `duplicate`, through a client method added next to `linkFindings`.
+   - **Matching** each org record to an answer-key key, first rule that applies:
+     1. its source ID `answer-key:<key>`;
+     2. an alias `<source>:<sourceId>` of a `duplicates.json` scanner row, which gives that row's `sameAs`;
+     3. the exact `normaliseName` name within its kind.
+     A record that matches two keys, or none, is unmatched and counted per kind.
+   - **Links, against `facts.json`.** Each fact is:
+     - `found`: a live link with its type and both ends' keys, of any origin. The links' origins (ai, import, manual) are counted.
+     - `waiting`: no live link, but a pending link finding with the same identity.
+     - `missed`: neither.
+     Live links of the ontology types that aren't in `facts.json` are `extra`, counted per type. Found, waiting and missed are given per link type and per origin (`public`, `derived` or `synthetic`, from `provenance.json`'s links).
+   - **Duplicates, against `duplicates.json`'s scanner rows.** Each row's source comes from `import-mappings.json` by its file. Each row is:
+     - `merged`: the active record holding its alias is the record matched to `sameAs`;
+     - `flagged`: it has its own active record, and a duplicate finding names the pair (counted by the finding's status);
+     - `wrong_merge`: its alias sits on a record matched to another key;
+     - `missed`: separate records, and no finding names the pair;
+     - `not_imported`: no record holds its alias.
+   - **Normalisation, against `normalisation.json`.** For each row, take the record holding `<source>:<sourceId>`; after a merge, that is the kept record. The row is `match` when the stored field equals `expected`, `differs` when it doesn't, and `not_imported` when no record holds the alias.
+   - On an org with no asset-list aliases at all (the fast org), duplicates and normalisation print "not applicable" instead of scores.
+   - **Output (D164):** the slug, the counts and ratios above, the time taken and the report's path.
+   - **The full report** (names, sentences, and every item with its state) goes to `data/benchmark/dataset-<slug>-<UTC time as yyyymmddThhmmssZ>.json`, git-ignored (D81), the way bench:run writes its own.
+5. **The build script** (`docs/datasets/company-x/scripts/build-company-x.ts`) writes `orgSlugs: [<slug>, '<slug>-fast']` in the question set. `questionSetSchema` allows 1 to 20 distinct slugs, so `pnpm bench:run --org company-x-fast --set docs/datasets/company-x/questions-company-x.json` passes the org check at bench-run.ts:79.
+6. **The README** (`docs/datasets/company-x/README.md`): "Running it against the app" describes the two commands, their steps and `--org`. "What's missing" drops "A loader" and "Scoring for ingestion".
+
+**Files:**
+- New:
+  - `packages/infra/scripts/dataset-load.ts`
+  - `packages/infra/scripts/dataset-score.ts`
+  - `packages/generators/src/dataset/*.ts`
+  - `packages/benchmark/src/dataset/*.ts`
+- Changed:
+  - `packages/generators/src/connectors/run-full.ts` (the `mappings` option)
+  - `packages/generators/src/index.ts`
+  - `packages/benchmark/src/index.ts`
+  - `packages/benchmark/src/run/api-client.ts` (duplicate findings, and the record fields if they're missing)
+  - the root `package.json` (the two scripts)
+  - `docs/datasets/company-x/scripts/build-company-x.ts`
+  - `docs/datasets/company-x/README.md`
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Both commands refuse each bad input listed above with exit 2, before anything is made (checked by reading the code; nothing is run against the stack).
+3. `runFullPipeline` without `mappings` behaves as before, and gen-data.ts is unchanged.
+4. The build script writes both slugs, and the README describes the two commands.
+5. The build ran no AI model, made no Ollama call, ran no documents step and made no live-stack run.
+6. After the merge, with the user (not the builder):
+   - the base step runs in both modes, and running it again adds nothing;
+   - with `--org`, it loads into an org that already exists;
+   - `dataset:score` on `company-x-fast` reports every fact found and no extra links.
+
+**Tests for the testing phase** (not written now, D222, D227):
+- unit, generators: the folder's files become the expected `OrgSources` and mappings. `runFullPipeline` uses the given mappings when `mappings` is set, and `CMDB_SOURCES` when it isn't.
+- unit, benchmark: from a small hand-made snapshot, check:
+  - every state of links, duplicates and normalisation;
+  - the matching order and the unmatched counts;
+  - "not applicable" on an org with no aliases.
+- unit, infra: the model check with a stand-in fetch:
+  - Ollama refuses on no answer, a timeout, a non-200 answer and a missing model;
+  - `bge-m3` matches `bge-m3:latest`;
+  - full mode also needs the text model;
+  - with `openai-compatible`, the text model is checked on `GET <AI_TEXT_BASE_URL>/models`. That check sends the key, refuses on no answer, a timeout, a non-200 answer (401 included) and an unlisted model, and prints no key. bge-m3 is still checked on Ollama.
+- unit, infra: each folder problem is named, and nothing is made.
+- unit, infra: `--org` is refused for a slug with no org and for an org with no Admin at Restricted, and it never creates an org.
+- stack, infra: on a throwaway slug, the base step runs and a re-run adds nothing (records skipped by name, mappings `link_exists`). The documents step is refused while Ollama is down.
+- Security matrix: no rows (no new route or record type).
+
+**Q-FT-1, answered 2026-10-18 (D237): (1), the loader creates the records.** Org `company-x`'s 39 risks, 39 controls, 10 policies and 30 incidents are created through the record API in the full `--step base` (Behaviour 1, steps 3 and 4), and the framework mappings load straight away. Option (2), where only the documents bring the records and a later `--step mappings` adds the mappings, is dropped.
+
+---
+
+Task: AI-001
+
+**Goal:** The app's text model (everything behind TEXT_MODEL: extraction, mapping suggestions, the graph-query writer, chat) can be served either by Ollama, as now, or by an OpenAI-compatible server on the Mac (the user's model in Unsloth Studio). A setting picks which. Embeddings stay on Ollama, and Ollama with gemma4:12b stays the default (D236).
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/AI-001`. The tests under "Tests for the testing phase" are for later.
+
+**Review step (D241 (4)), before the merge:** after the builder hands in, the security reviewer reviews `task/AI-001` against `main`, checking D49–D59. Only an `approved` hand-in lets the integrator merge into `main` with lint + type checks. The reviewer checks especially:
+- **The key as a secret** (D57):
+  - `AI_TEXT_API_KEY` lives only in `.env`, reaches the containers only through compose, and leaves the program only as the `Authorization: Bearer` header;
+  - it appears in no log line, error, thrown message, `check.ts` output or try-script output;
+  - setup:secrets leaves it empty, and `.env.example` names it only.
+- **The address guard:** requests only to AI_TEXT_BASE_URL (same origin, under its path), redirects refused, and the model always passed as an object.
+- **What leaves the Mac** (D57, D63, D242): no address is blocked, and the start-up warning names every AI address setting off the Mac.
+
+A send-back goes to builder-backend on the same branch. After 3 send-backs it goes to the user (CLAUDE.md "Done means").
+
+**Decisions:** D8, D19, D31, D34, D45.2, D45.7, D45.8, D47, D48, D57, D63, D72, D163, D170, D175, D210 (4), D236, D241, D242, D243; CLAUDE.md principles 2 (swappable parts behind small interfaces) and 7 (fail safe).
+
+**Hard limits:**
+- Call no model: not the user's Unsloth model and not Ollama, not even a model list. Run neither `check.ts` nor any try script, nothing against the live stack, and no Docker command. The first live call happens after the merge, with the user.
+- Don't open `.env`: it holds the secrets (D57). `.env.example` gets names only.
+- Leave these six files unchanged: `text-model.ts` (the contract), `ai-failure.ts`, `serial-gate.ts`, `ollama-provider.ts`, `ollama-embedder.ts` and `embedder.ts`. In `ollama-text-model.ts`, only add `export` to the names listed in Behaviour 4.
+- Don't fix the Ollama stream's empty-answer bug here. Near line 428 of `ollama-text-model.ts`, a stream that ends with zero pieces counts as `finished`, so chat saves an empty answer as answered. Task AI-002 fixes it after this task is merged (D241 (3)).
+- No new route and no new record type, so the security matrix gets no new row (D175).
+
+**Where things are now (`packages/api/src/ai/` unless named):**
+- `text-model.ts`: the TEXT_MODEL token and the `TextModel`, `TextModelSession` and `TurnOptions` contract.
+- `ollama-text-model.ts`: `OllamaTextModel`, the only implementation.
+  - It sets temperature 0, seed 42 and an 8,192-token context through Ollama's own options.
+  - One shared `PROGRAM_GATE` (a `SerialGate`) runs one call or turn at a time per program.
+  - `generate` holds the answer to the schema (`Output.object` with `checkedSchema`); `stream` hands the text over piece by piece.
+- `ollama-provider.ts`:
+  - `ollamaOnlyFetch` refuses any address outside OLLAMA_BASE_URL, and any redirect.
+  - `AI_SDK_LOG_WARNINGS` is off.
+  - Models are always passed as objects; a plain string would go to the AI SDK's hosted gateway.
+- `ai-failure.ts`: `toAiError` maps the SDK's errors:
+  - no answer, 404, 408, 429, 5xx or an unreadable 2xx → `unavailable`;
+  - the call's own time limit → `timed_out`;
+  - no answer that passes the schema → `invalid_output`;
+  - any other status → `AiCallError`.
+  - Jobs put the work off with `RunLater` on `unavailable` (`extract.job.ts:217`, `mapping-suggest.job.ts:363`). Chat turns any `AiFailure` into `assistant_unavailable` (`chat/ask.ts:100`, `:169`).
+- `ai-settings.ts`: `aiSettingsFromEnv` reads OLLAMA_BASE_URL, AI_TEXT_MODEL (default `gemma4:12b`) and AI_EMBEDDING_MODEL (default `bge-m3`). Errors name the setting, never its value. `packages/infra/scripts/seed-demo.ts:1076` calls it with `AI_TEXT_MODEL` only.
+- `ai.module.ts`: always builds `OllamaTextModel` and `OllamaEmbedder`. Building them calls nothing.
+- `check.ts`, `chat/try.ts`, `processing/extract/try.ts` and `search/graph/try.ts`: each builds `new OllamaTextModel` from its own list of setting names, read from the environment first and then from `.env`.
+- `config/app-settings.ts`: `APP_SETTINGS`, the one list of the settings the API and the worker read (D210 (4)).
+- `packages/infra/compose.yaml`: the `app-env` anchor (grc-api and grc-worker) sets only `OLLAMA_BASE_URL: http://host.docker.internal:11434`. AI_TEXT_MODEL never reaches the containers today.
+- `packages/infra/scripts/setup-secrets.ts`: gives every `.env.example` name that contains PASSWORD, SECRET, TOKEN or KEY a random value. The exception is `NEO4J_DESKTOP_PASSWORD`, which the user fills in.
+- `packages/api/package.json`: `ai` ^7.0.141 and `ollama-ai-provider-v2` 4.0.1. The lockfile has `@ai-sdk/provider@4.0.27` and `@ai-sdk/provider-utils@5.0.60`.
+
+**Unsloth Studio, as the user runs it** (docs: https://unsloth.ai/docs/basics/api; don't call it):
+- **Start:** `unsloth studio --api-only -H 127.0.0.1 -p <port>`, and the port is whichever one it boots on. On 2026-10-18 it was on 8888.
+- **Never port 8888 on this Mac** (D236):
+  - HexStrike, another project, listens on `*:8888` with no login (CLAUDE.md). If it holds that port, calls to `host.docker.internal:8888` would send document text and the Unsloth key to HexStrike.
+  - So the user starts Unsloth Studio on another port with `-p`, and `AI_TEXT_BASE_URL` uses that port. Nothing in the code depends on the port number.
+- **Routes:** `POST /v1/chat/completions` (OpenAI format), `POST /v1/messages` (Anthropic format) and `GET /v1/models` (the loaded models). There's no `/v1/embeddings`.
+- **Auth:** `Authorization: Bearer sk-unsloth-…`. The user makes keys in Unsloth's Settings → API, and a revoked key gets 401.
+- **Models:** GGUFs served by llama-server, which accepts `response_format` with a JSON schema, `temperature`, `seed` and `max_tokens`.
+- **From the containers:** reached through `host.docker.internal`, the way they reach Ollama on 127.0.0.1:11434.
+
+**Settings** (the names are the planner's reading; if the code argues otherwise, say so in your hand-off):
+- `AI_TEXT_PROVIDER`: `ollama` or `openai-compatible`. Unset or blank means `ollama`.
+- `AI_TEXT_BASE_URL`: the server's address, up to and including `/v1`.
+  - `.env` holds it as the containers see it, `http://host.docker.internal:<port>/v1`, following D170's pattern of container addresses in `.env`.
+  - Commands run on the Mac swap that host for `127.0.0.1`.
+- `AI_TEXT_API_KEY`: the server's key. It's a secret (D57), and the user fills it in.
+- `AI_TEXT_MODEL`: as now. With `openai-compatible` it is the ID from `GET /v1/models`, and it has no default.
+
+**Behaviour:**
+1. **Settings** (`ai-settings.ts`):
+   - Add `TEXT_PROVIDERS = ['ollama', 'openai-compatible'] as const`, `type TextProvider`, `DEFAULT_TEXT_PROVIDER = 'ollama'` and `interface OpenAiCompatibleSettings { baseUrl: string; apiKey: string }`.
+   - `AiSettings` gains `textProvider: TextProvider` and `openAiCompatible?: OpenAiCompatibleSettings`. The second is present exactly when the provider is `openai-compatible`.
+   - `aiSettingsFromEnv(env)` keeps its signature and reads `env.AI_TEXT_PROVIDER`, `env.AI_TEXT_BASE_URL` and `env.AI_TEXT_API_KEY`, written in that form so the settings-list scan finds them.
+   - **Provider:** the trimmed value must be exactly `ollama` or `openai-compatible`. Anything else throws `AI_TEXT_PROVIDER must be ollama or openai-compatible`.
+   - **`ollama`:** everything works as today. The two new settings are ignored, not even checked, so seed-demo's call keeps working.
+   - **`openai-compatible`:**
+     - AI_TEXT_BASE_URL is required. It follows the same rules as OLLAMA_BASE_URL: http or https; no user name, password, query or fragment; trailing slashes dropped. Every error names AI_TEXT_BASE_URL. Share the rule through a private helper; the exported `ollamaBaseUrl` keeps its behaviour and messages.
+     - AI_TEXT_API_KEY is required. It's trimmed and may hold only visible ASCII characters (0x21–0x7E).
+     - AI_TEXT_MODEL is required, because gemma4:12b is an Ollama tag. The name rule is the same as now.
+   - OLLAMA_BASE_URL and AI_EMBEDDING_MODEL are read as today under both providers, because the embedder needs them.
+   - Every error names the setting, never its value.
+   - Add `macSideAddress(url: string): string`.
+     - When the host is `host.docker.internal`, it returns the same URL with the host `127.0.0.1`, keeping the port and path. Any other URL comes back unchanged.
+     - Only the Mac-side commands use it (Behaviour 6), never the API or the worker.
+   - **No address is refused for being off the Mac** (D242, Q-AI-2): any http or https address passes, for AI_TEXT_BASE_URL and OLLAMA_BASE_URL alike, so a later cloud model works through settings alone.
+   - Add `offMacAddressSettings(settings: AiSettings): string[]`.
+     - It returns the names of the AI address settings in use whose host isn't on the Mac, in the order `OLLAMA_BASE_URL`, `AI_TEXT_BASE_URL`.
+     - On the Mac means exactly `127.0.0.1`, `localhost`, `::1` (the URL's hostname `[::1]`) or `host.docker.internal`.
+     - `AI_TEXT_BASE_URL` counts only when the provider is `openai-compatible`.
+     - It's pure, and holds no address or key.
+2. **`config/app-settings.ts`:** add `AI_TEXT_PROVIDER`, `AI_TEXT_BASE_URL` and `AI_TEXT_API_KEY` to `APP_SETTINGS`, each `required: false` with no Mac default. They're needed only under `openai-compatible`, and `aiSettingsFromEnv` enforces that.
+3. **Provider** (new `openai-compatible-provider.ts`):
+   - **The package:** add `@ai-sdk/openai-compatible` to the `packages/api` dependencies, pinned exactly (no `^`).
+     - **D245:** use exactly `3.0.69` (published 2026-10-15), an exception to the 14-day package-age rule for this one package only. It pins `@ai-sdk/provider` 4.0.27 and `@ai-sdk/provider-utils` 5.0.60, the lockfile's versions, so each stays one copy. (The older wording, "the newest release at least 14 days old", is replaced: 3.0.62 would add a second copy of each.)
+     - Check with `npm view @ai-sdk/openai-compatible@3.0.69 dependencies`.
+     - Name the version and its publish date in your hand-off.
+     - If no release fits, hand off `blocked`. Don't write raw HTTP instead.
+   - `TextModelAddressRefused`, with the message `The AI client refused a request outside AI_TEXT_BASE_URL.`
+   - `openAiCompatibleOnlyFetch(baseUrl: string, inner: FetchLike = globalThis.fetch): FetchLike`, with `ollamaOnlyFetch`'s rules: the same origin, a path under the base path plus `/`, and `redirect: 'error'`. Import the `FetchLike` type from `ollama-provider.ts`.
+   - `createOpenAiCompatibleProvider(connection: OpenAiCompatibleSettings & { fetch?: FetchLike })` returns `createOpenAICompatible({ name: 'openai-compatible', baseURL: baseUrl, apiKey, fetch: openAiCompatibleOnlyFetch(baseUrl, fetch), supportsStructuredOutputs: true, includeUsage: true })`.
+     - The key leaves only as that provider's `Authorization: Bearer` header.
+     - If the pinned version renamed an option, use the new name and say so in your hand-off.
+   - Set `globalThis.AI_SDK_LOG_WARNINGS = false` at the top, as `ollama-provider.ts` does. Always pass the model as an object (`.chatModel(name)`).
+4. **Text model** (new `openai-compatible-text-model.ts`):
+   - `OpenAiCompatibleTextModel implements TextModel`. It is built with `{ connection: OpenAiCompatibleSettings; model: string; log?: Logger; fetch?: FetchLike; timeoutMs?: number; gate?: SerialGate }`.
+   - It does everything `text-model.ts` promises, the way `OllamaTextModel` does:
+     - the input checks;
+     - one call or turn at a time per program;
+     - turns and their sessions, `onPosition` and the signals;
+     - the `stopped`, `time_limit` and `token_cap` endings;
+     - the timings and token counts;
+     - log lines that never hold the instructions, the data or the answer (D163).
+   - **Reuse, don't copy:**
+     - In `ollama-text-model.ts`, add `export` to `PROGRAM_GATE`, `positiveWhole`, `checkRequest`, `checkSignal`, `checkStreamRequest`, `checkedSchema`, `since`, `streamFailure` and `errorTypeOf`, and change nothing else there.
+     - The new class uses `PROGRAM_GATE` as its default gate, so the one-slot rule holds per program whichever provider is set.
+     - Write the turn, the session and the two call bodies in the new file.
+   - Where it differs:
+     a. **Settings per call:** use the AI SDK's own call settings: `temperature: TEXT_MODEL_TEMPERATURE`, `seed: TEXT_MODEL_SEED`, and `maxOutputTokens` when the request sets one. No other request field, apart from the thinking switch in 4g. This API can't set the context size per call, so it is whatever the model was loaded with in Unsloth (see "After the merge").
+     b. **`generate`:**
+        - Use `Output.object({ schema: checkedSchema(request) })`, which the provider sends as `response_format` with the JSON schema.
+        - The answer is checked against `request.schema` afterwards, as now.
+        - Set `maxRetries: 0`. The default time limit is `TEXT_MODEL_TIMEOUT_MS`.
+     c. **`stream`:**
+        - Read the parts as the Ollama stream does: hand over `text-delta`, and handle `finish` and `error`.
+        - Ignore every other part, reasoning parts included: they're never handed over, never part of the answer and never logged.
+        - Set `maxRetries: 0` and `onError: () => undefined`.
+     d. **No text is a failure:** a stream that would end `finished` or `token_cap` with zero pieces rejects with `AiFailure('unavailable')`. It logs `text model stream failed` at warn level with `{ model, code, elapsedMs, waitedMs, pieces: 0 }`.
+        - A stream that its caller stops with no text still ends `stopped`. The time limit with no text is still `timed_out`, as the contract says.
+        - Chat then saves the question as `failed` with `assistant_unavailable`, never as `answered` with nothing (`chat/ask.ts:162–171`).
+     e. **Failures:** a stopped Unsloth behaves like a stopped Ollama, and so does a refused key (D242, Q-AI-1):
+        - **A refused key:** an HTTP 401 or 403 answer becomes `AiFailure('unavailable')` with that `httpStatus`, in `generate` and `stream` alike.
+          - Check for it in the new file, before handing the error to `toAiError` or `streamFailure`; `ai-failure.ts` stays unchanged.
+          - Jobs then put the work off with RunLater and use no try, so a bad key never puts a job on the failed list. Chat says the assistant is unavailable.
+          - The warn log line carries `httpStatus`, so a bad key shows in the logs.
+        - **Everything else** goes through `toAiError` and `streamFailure` unchanged:
+          - `unavailable` (callers put the work off): no answer, connection refused, 404, 408, 429, 5xx, or an unreadable 2xx;
+          - `timed_out`: the call's own time limit;
+          - `invalid_output`: no answer passes the schema;
+          - `AiCallError`: any other status, such as 400 or 422.
+     f. **Logs and errors** carry neither the key nor the address: only the model name, timings, token counts, failure codes and HTTP status.
+     g. **Thinking text never reaches an answer** (D243). The model is Qwen3.5-4B, which can write thinking or reasoning text before its answer.
+        - **Ask the server not to think.** Every chat request, in `generate` and `stream` alike, carries `chat_template_kwargs: { enable_thinking: false }` in its body; llama-server accepts it.
+          - Add it through the call's `providerOptions` under the provider's name (`'openai-compatible'`), which the OpenAI-compatible provider copies into the request body.
+          - If the pinned version doesn't copy unknown keys, use its documented way of adding a body field.
+          - If it has neither, leave the switch out and rely on the next point. Say which way you used in your hand-off.
+        - **Drop whatever thinking still comes back:**
+          - reasoning parts are already ignored (4c);
+          - also wrap the model with the AI SDK's `extractReasoningMiddleware({ tagName: 'think' })` through `wrapLanguageModel`, so a `<think>…</think>` block in the answer text becomes a reasoning part;
+          - in `generate` this happens before the schema check, and in `stream` before any piece is handed to `onText`.
+        - **Never kept:** thinking text is never handed to `onText`, never part of `text` or `value`, never saved, and never logged. Token counts stay as the server reports them.
+        - **When thinking uses up the token cap:**
+          - a stream left with no answer text fails `unavailable` (4d);
+          - a `generate` left with no JSON fails `invalid_output`;
+          - neither ever saves thinking as an answer.
+5. **Factory** (new `text-model-factory.ts`): `createTextModel(settings: AiSettings, opts: { log?: Logger } = {}): TextModel`.
+   - `ollama` builds `new OllamaTextModel({ settings, log })`.
+   - `openai-compatible` builds `new OpenAiCompatibleTextModel({ connection: settings.openAiCompatible, model: settings.textModel, log })`. If `openAiCompatible` is missing, it throws an error that names AI_TEXT_PROVIDER.
+   - Building calls nothing.
+   - In `ai.module.ts`, the TEXT_MODEL factory becomes `createTextModel(aiSettingsFromEnv())`. EMBEDDER is unchanged.
+   - **Start-up warning** (D242): in the same TEXT_MODEL factory, which both the API and the worker build once at start, log one warn line for each name `offMacAddressSettings` returns.
+     - The line is `{ context: 'AiSettings', setting: <name> }` with the message `AI address is not on this Mac: model calls will leave the Mac (D57)`.
+     - It holds no address and no key. Nothing else happens: no block, no extra call.
+6. **Mac-side commands** (`ai/check.ts`, `chat/try.ts`, `processing/extract/try.ts`, `search/graph/try.ts`):
+   - Each list of setting names gains AI_TEXT_PROVIDER, AI_TEXT_BASE_URL and AI_TEXT_API_KEY.
+   - AI_TEXT_BASE_URL goes through `macSideAddress` before `aiSettingsFromEnv`.
+   - The text model comes from `createTextModel(settings, { log: <the command's silent logger> })` instead of `new OllamaTextModel`.
+   - The embedder in `check.ts` stays `OllamaEmbedder`.
+   - **`check.ts` only** (D242) adds two plain lines, holding no key or address:
+     - Before the calls, it prints one line for each name `offMacAddressSettings` returns: `warning: <setting> is not on this Mac; model calls will leave the Mac`.
+     - When the text model fails with `unavailable` and an `httpStatus` of 401 or 403, it prints `  the text-model server refused the key (HTTP <status>): check AI_TEXT_API_KEY` after the existing `no (unavailable)` line.
+   - Nothing else in these commands changes.
+7. **Compose** (`packages/infra/compose.yaml`, in the `app-env` anchor, after OLLAMA_BASE_URL):
+   - Add `AI_TEXT_PROVIDER: ${AI_TEXT_PROVIDER:-}`, `AI_TEXT_MODEL: ${AI_TEXT_MODEL:-}`, `AI_TEXT_BASE_URL: ${AI_TEXT_BASE_URL:-}` and `AI_TEXT_API_KEY: ${AI_TEXT_API_KEY:-}`.
+   - Add a comment saying that empty values mean Ollama with gemma4:12b, and that the key comes from `.env` only (D57, D236). Put no `$` in the comment: the compose test scans the whole file for variable names.
+   - Leave OLLAMA_BASE_URL and `compose.dev.yaml` unchanged.
+8. **`.env.example`:** the four names, each with an empty value (`NAME=`), under comments that say:
+   - the provider's two values, and which is the default;
+   - AI_TEXT_BASE_URL's container form (`http://host.docker.internal:<port>/v1`), and that commands on the Mac swap the host;
+   - the key is the user's own: made in Unsloth's Settings → API, needed only with `openai-compatible`, and left empty by setup:secrets;
+   - AI_TEXT_MODEL stays empty for gemma4:12b, or holds the ID from `GET /v1/models`.
+9. **`packages/infra/scripts/setup-secrets.ts`:** AI_TEXT_API_KEY is user-supplied, like NEO4J_DESKTOP_PASSWORD. It's added empty and never given a random value, because a random value would be a wrong key. Print no extra line, and leave the NEO4J_DESKTOP_PASSWORD message as it is.
+
+**Files:**
+- New:
+  - `packages/api/src/ai/openai-compatible-provider.ts`
+  - `packages/api/src/ai/openai-compatible-text-model.ts`
+  - `packages/api/src/ai/text-model-factory.ts`
+- Changed:
+  - `packages/api/src/ai/ai-settings.ts`
+  - `packages/api/src/ai/ai.module.ts`
+  - `packages/api/src/ai/check.ts`
+  - `packages/api/src/ai/ollama-text-model.ts` (`export` keywords only)
+  - `packages/api/src/chat/try.ts`
+  - `packages/api/src/processing/extract/try.ts`
+  - `packages/api/src/search/graph/try.ts`
+  - `packages/api/src/config/app-settings.ts`
+  - `packages/api/package.json`
+  - `pnpm-lock.yaml`
+  - `packages/infra/compose.yaml`
+  - `.env.example`
+  - `packages/infra/scripts/setup-secrets.ts`
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. **Ollama unchanged:**
+   - With AI_TEXT_PROVIDER unset, blank or `ollama`, TEXT_MODEL is the same `OllamaTextModel`, with the same settings as before.
+   - `git diff main -- packages/api/src/ai/ollama-text-model.ts` shows only added `export` keywords.
+   - The six files under "Hard limits" are unchanged.
+3. **The new provider:**
+   - With `openai-compatible`, TEXT_MODEL is an `OpenAiCompatibleTextModel`.
+   - An unknown provider stops the API and the worker at start, and so does a missing or invalid AI_TEXT_BASE_URL, AI_TEXT_API_KEY or AI_TEXT_MODEL. The error names the setting, never its value.
+4. Behaviour 4a–4f holds, checked by reading the code: requests go only to AI_TEXT_BASE_URL, with no redirects.
+5. **Embeddings:**
+   - Under either provider, embeddings use `OllamaEmbedder` on OLLAMA_BASE_URL with bge-m3.
+   - With `openai-compatible`, no code path builds an `OllamaTextModel`, so gemma4:12b is never loaded.
+6. **Settings plumbing:**
+   - Compose passes the four settings to grc-api and grc-worker.
+   - `.env.example` lists them with empty values, so its two existing compose checks still hold.
+   - setup:secrets leaves AI_TEXT_API_KEY empty.
+7. The new package is pinned exactly at `@ai-sdk/openai-compatible` `3.0.69`, an exception to the 14-day package-age rule for this package only (D245). The lockfile keeps one copy each of `@ai-sdk/provider` and `@ai-sdk/provider-utils`.
+8. The builder called no model, didn't open `.env`, ran no check or try script, and ran nothing against the live stack.
+9. **D242:**
+   - a 401 or 403 from the text-model server is `unavailable` with its status, and `check.ts` names the refused key in plain words;
+   - no AI address is refused for being off the Mac, and each one that is off the Mac gets its one warning line at start-up (API, worker and `check.ts`), naming the setting only.
+10. The security reviewer approved `task/AI-001` before the merge (D241 (4)).
+11. **D243:** every chat request asks for no thinking (or the hand-off says why it can't), and thinking text can't reach `onText`, a stream's `text` or a parsed `value`, checked by reading the code.
+
+**Tests for the testing phase** (not written now, D222, D227; all `unit`):
+- **api, settings:**
+  - the provider: unset, blank, `ollama`, `openai-compatible` and an unknown value;
+  - under `openai-compatible`, each required setting that is missing or invalid gets named, and its value appears in no message;
+  - under `ollama`, the new settings are ignored;
+  - `macSideAddress`;
+  - `offMacAddressSettings`: each on-Mac host, an off-Mac host, `AI_TEXT_BASE_URL` counted only under `openai-compatible`, and no address or key in its output;
+  - an off-Mac address is accepted, never refused.
+- **api, start-up warning:** one warn line per off-Mac setting, naming the setting only, and none when every address is on the Mac.
+- **api, `check.ts`:** the off-Mac warning line, and the refused-key line for 401 and 403, with no key in the output.
+- **api, provider:**
+  - another origin, another path and a redirect are refused;
+  - the `Authorization` header carries the key;
+  - no error holds the key.
+- **api, text model**, with a stand-in fetch that gives hand-made OpenAI-format answers (JSON and SSE):
+  - the request body holds `temperature` 0, `seed` 42, `max_tokens`, a `response_format` JSON schema, `chat_template_kwargs.enable_thinking: false` and the model name;
+  - thinking (D243):
+    - a `<think>…</think>` block before the JSON is dropped, and the answer passes the schema;
+    - in a stream, no piece handed over holds thinking text, and neither does the answer's `text`;
+    - an answer that is only thinking gives `unavailable` (stream) or `invalid_output` (generate);
+  - a valid answer gives the parsed value, and a schema miss gives `invalid_output`;
+  - connection refused, 404, 408, 429, 500, 503 and an unreadable 200 give `unavailable`;
+  - 401 and 403 give `unavailable` with their status, in `generate` and `stream` alike (D242);
+  - 400 and 422 give `AiCallError`;
+  - the time limit gives `timed_out`;
+  - stream pieces arrive in order, and reasoning parts are never handed over;
+  - a stream with no text that ends `finished` or `token_cap` gives `unavailable`;
+  - stopped while waiting, and stopped while running;
+  - the time limit after some text gives `time_limit`;
+  - one slot is shared with `OllamaTextModel` (a call on each waits its turn), and turns work as they do for Ollama.
+- **api, factory:** each provider gives its own class, and building makes no fetch.
+- **api, settings list:** the three new names. The list's EXPECTED in `tests/app-settings/list.unit.test.ts` is already out of date: it lacks OLLAMA_BASE_URL, AI_TEXT_MODEL and AI_EMBEDDING_MODEL.
+- **infra, compose:** the four names reach both services, and `.env.example` lists them.
+- **infra, setup-secrets:** AI_TEXT_API_KEY is left empty. `tests/compose/setup-secrets.unit.test.ts` treats every KEY name except NEO4J_DESKTOP_PASSWORD as generated, so its `generatedSecretNames` must leave the new key out.
+- **Security matrix:** no rows (no new route or record type).
+
+**After the merge, with the user (not the builder):**
+1. In Unsloth Studio:
+   - pick a free port **other than 8888**, which HexStrike may hold with no login (D236). Check that nothing listens on it with `lsof -nP -iTCP:<port> -sTCP:LISTEN`;
+   - start `unsloth studio --api-only -H 127.0.0.1 -p <that port>`, and note the port it actually boots on;
+   - download and load **Qwen3.5-4B**, Unsloth's 4-bit GGUF (https://huggingface.co/unsloth/Qwen3.5-4B-GGUF; for example IQ4_XS, about 2.5 GB, D243), with a context of at least 8,192 tokens, the size the app's prompts are built for (D34);
+   - make an API key in Settings → API.
+2. Read the model ID: `curl -s -H "Authorization: Bearer <key>" http://127.0.0.1:<port>/v1/models`. The answer must list Qwen3.5-4B. If it doesn't, the port belongs to another server: stop and don't put the key in `.env`.
+3. Set these in `.env`:
+   - `AI_TEXT_PROVIDER=openai-compatible`
+   - `AI_TEXT_BASE_URL=http://host.docker.internal:<port>/v1`
+   - `AI_TEXT_API_KEY=<key>`
+   - `AI_TEXT_MODEL=<id>`
+4. Optional, on the Mac: `pnpm --filter api exec tsx src/ai/check.ts` makes one short call to the model and one to bge-m3.
+5. Rebuild with `docker compose -f packages/infra/compose.yaml -f packages/infra/compose.dev.yaml --env-file .env up -d --build grc-api grc-worker`, then run `docker restart grc-caddy`. A later change of port or key needs the same command without `--build`.
+6. Run `ollama ps`: it should list only bge-m3. If gemma4:12b is there, run `ollama stop gemma4:12b`.
+7. Ask a chat question.
+8. Things to watch for:
+   - **a wrong server on the port** (D236):
+     - `check.ts` makes one short call with its built-in sample sentence and fails if the server isn't the model server. FT-001's documents step also checks `GET <AI_TEXT_BASE_URL>/models` for the configured model before any document is sent.
+     - Both checks run only after the key has gone to that address, so the port chosen in step 1 is the real guard;
+   - the app refusing the model ID as a name (tell the planner);
+   - extraction answers failing the schema more often than Gemma's did (`invalid_output` in the worker log), which would mean the server ignores `response_format`;
+   - **whether Unsloth passes `chat_template_kwargs` through** (D243): the first chat answers and `check.ts` should show no thinking text and no empty answers. If thinking shows up, or answers often come back empty because the token cap went on thinking, tell the planner;
+   - an answer that starts with thinking text but no `<think>` tag (the chat template opened the tag itself): the middleware can't spot that, so tell the planner.
+
+**Questions, answered 2026-10-18 (D242):**
+- **Q-AI-1:** a refused key counts as the server being switched off (`unavailable`), and `check.ts` says so plainly (Behaviour 4e and 6).
+- **Q-AI-2:** no address is blocked. Each AI address off the Mac gets a one-line start-up warning (Behaviour 1, 5 and 6). Running the AI on the Mac is the default, not enforced in code.
+
+---
+
+Task: AI-002
+
+**Goal:** chat never saves an empty answer as answered. In the Ollama text model, a stream that ends with no text becomes a failure, as a time-out with no text already does (D241 (3)).
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/AI-002`; the integrator merges into `main` with lint + type checks.
+
+**Starts after AI-001 is merged:** both change `packages/api/src/ai/ollama-text-model.ts`, and a hot file takes one task at a time. AI-001 only adds `export` keywords there.
+
+**Decisions:** D45.7, D47, D48, D163, D241 (3); CLAUDE.md principle 7 (fail safe).
+
+**Hard limits:** call no model, and run no try or check script and nothing against the live stack. Leave `ai-failure.ts`, `serial-gate.ts`, `ollama-provider.ts` and everything outside `src/ai/` unchanged. No new route or record type, so no security-matrix row (D175).
+
+**Where things are now (`packages/api/src/ai/ollama-text-model.ts`, `callStream`):**
+- **Near line 404:** when the time limit cuts a stream with no text (`pieces === 0`), it throws `AiFailure('timed_out')` and logs `text model stream failed`.
+- **Near line 428, the bug:** a stream that ends with a finish reason and no text falls into `ending = finishReason === 'length' ? 'token_cap' : 'finished'` and resolves with an empty `text`. `chat/ask.ts:162` then saves the message as `answered` with nothing in it.
+- **`chat/ask.ts:100` and `:169`:** any `AiFailure` becomes `assistant_unavailable`, and the message is saved `failed`.
+
+**Behaviour:**
+1. In `callStream`, a stream that would end `finished` or `token_cap` with `pieces === 0` rejects with `AiFailure('unavailable', { model, elapsedMs })`. It logs `text model stream failed` at warn level with `{ model, code, elapsedMs, waitedMs, pieces: 0 }`, as the other failure branches do.
+2. Unchanged:
+   - a stream its caller stops with no text still ends `stopped`;
+   - the time limit with no text is still `timed_out`;
+   - a stream with any text ends as before;
+   - `generate` is untouched.
+3. Chat then saves the question as `failed` with `assistant_unavailable`, and the person sees that the assistant is unavailable. No empty answer is ever saved as `answered`. `ask.ts` needs no change; check that by reading it.
+4. In `text-model.ts`, the `stream` doc comment's list of `unavailable` causes gains "or it wrote nothing". That comment is the only change in that file. Also update the comment block at the top of `ollama-text-model.ts` to match.
+
+**Files:** `packages/api/src/ai/ollama-text-model.ts` and `packages/api/src/ai/text-model.ts` (the comment only).
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Behaviour 1–3 hold, checked by reading the code. The diff touches only `callStream`'s ending and the comments.
+3. The builder called no model and ran nothing live.
+
+**Tests for the testing phase** (not written now, D222; `unit`, with a stand-in fetch giving hand-made Ollama stream answers):
+- a stream with a finish and no text, for both `stop` and `length`, gives `unavailable`;
+- stopped with no text gives `stopped`;
+- the time limit with no text gives `timed_out`;
+- a stream with text still ends `finished` or `token_cap`;
+- chat (`AskRunner` with a stand-in model) saves `failed` with `assistant_unavailable`, never an empty `answered`.
+- Security matrix: no rows.
+
+---
+
+Task: FT-002
+
+**Goal:** an org's first Admin can get a first password and sign in to the web app, so the user can sign in to `company-x` and `company-x-fast` before the Company X "before" test (D239 step 3, D241 (1)). Today `pnpm org:create` and provisionOrg make the Admin with no password (`provision-org.ts:118`). This is the old option B in CLAUDE.md's "Current state", for any new org. S7's set-up links (D214 (1)) stay the plan for everyone else.
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/FT-002`. The tests under "Tests for the testing phase" are for later.
+
+**Review step (D244, Q-PW-2), before the merge:** after the builder hands in, the security reviewer reviews `task/FT-002` against `main`, checking D49–D59. Only an `approved` hand-in lets the integrator merge into `main` with lint + type checks. The reviewer checks especially:
+- **How the password is read:** hidden, from a terminal only, and never in an argument, the environment, the output or a log.
+- **The hash:** Better Auth's own `hashPassword`, stored as `addPerson` stores it.
+- **The audit entry:** `auth.password_set` in the same transaction as the account row, holding no password or hash.
+- **The refusals:** every case in Behaviour 2–4, each exiting 2 with nothing changed. In particular, no Admin who already has a password or two-factor can be given a new one (D244, Q-PW-1).
+- **TOTP enrolment still can't be skipped:** the command touches no two-factor or session data, and the first sign-in still gets only the set-up screen (D49, D54).
+
+A send-back goes to builder-platform on the same branch. After 3 send-backs it goes to the user (CLAUDE.md "Done means").
+
+**Runs alongside AI-001.** It shares no file with AI-001. It adds a root `package.json` script, as FT-001 does, so FT-001 and FT-002 don't run at the same time.
+
+**Decisions:** D49, D54, D56, D57, D133, D163, D164, D170, D176, D214 (1), D233, D241 (1), D244; CLAUDE.md principles 4 (audit in the same step) and 7 (fail safe).
+
+**Hard limits:**
+- Don't run the command against the live database, and don't open `.env`. The first live run happens after the merge, with the user.
+- No new API route, no web change and no record type, so the security matrix gets no new row (D175).
+- Leave `seed-demo.ts`, `create-org.ts`, `provision-org.ts` and everything under `packages/api/src` unchanged.
+
+**The form chosen (planner's reading; if the code argues otherwise, say so in your hand-off):** a terminal command run on the Mac by the operator.
+- It's the simplest secure form. The sign-in flow already makes a session with no second factor set up do only TOTP enrolment (`auth-routes.ts:28`), and the web app has that screen (`MfaSetupPage.tsx`).
+- A one-time link would need S7's token store and its page (D214 (1)).
+
+**Where things are now:**
+- `packages/api/src/identity/auth.ts`:
+  - `hashPassword(plain)` is Better Auth's own hash;
+  - `MIN_PASSWORD_LENGTH = 12`;
+  - sign-up is off;
+  - Better Auth's maximum password length is its default (check its value in the installed `better-auth`; 128 is expected).
+- `packages/infra/scripts/seed-demo.ts`, `addPerson` (lines 156–189), is the pattern for writing a password: in one transaction as `grc_app` with `app.org_id` set, it writes or updates the `account` row with `provider_id = 'credential'`, `account_id` = the user ID and `password` = the hash.
+- `provision-org.ts` derives the org ID from the slug (`orgIdForSlug`). The first Admin is a `member` with role `admin` and clearance `restricted`; their email is stored lowercased.
+- `user.two_factor_enabled` is true once TOTP is set up.
+- `packages/api/src/audit/audit.service.ts`: `appendInTx(tx, event)` writes an audit entry in the caller's transaction.
+- `packages/infra/scripts/create-org.ts` and `org-script-env.ts` are the patterns for the command: argument checks first, `setting()` reading the environment then `.env`, `toHostAddress` for DATABASE_URL_APP on the Mac, `load()` for api modules, and `describeError` for errors.
+
+**Behaviour:**
+1. **`pnpm org:admin-password --org <slug> --email <email>`** (`packages/infra/scripts/org-admin-password.ts`). The root script is shaped like `org:create`'s.
+2. **Refused with exit 2 and nothing changed,** each with a plain message:
+   - an unknown, missing or empty argument;
+   - a slug that fails `provisioning.SLUG`, or an email that fails `provisioning.EMAIL`;
+   - DATABASE_URL_APP missing;
+   - stdin or stdout that isn't a terminal. The message says to run it in a terminal; the password is typed, never passed in.
+3. **The password is read twice from the terminal, with nothing shown.**
+   - Typing, backspace and Enter work.
+   - Ctrl-C ends the command with the terminal restored and nothing changed.
+   - It must be at least `MIN_PASSWORD_LENGTH` (12) and at most Better Auth's maximum, and the two entries must match. Otherwise exit 2, nothing changed, and the message gives the rule only.
+   - The password is never an argument or environment variable, never printed and never logged. It lives in memory only until it is hashed.
+4. **Then, in one Postgres transaction as `grc_app`, with `app.org_id` set to `orgIdForSlug(slug)`:**
+   1. The org must exist with that slug. Otherwise: `no org has the slug <slug>`.
+   2. The user is found by the email, trimmed and lowercased, and must be a `member` of the org with role `admin`. Otherwise: `no Admin of <slug> has that email`.
+   3. Refused when that user already has a `credential` account with a password, or has two-factor on: `already has a password; changing it comes with S7's set-up links`. First password only (D244, Q-PW-1): a forgotten password waits for S7's reset, and for a test org a fresh Admin can be made instead.
+   4. Insert the `credential` account row with Better Auth's hash (`identity/auth.ts` `hashPassword`, loaded through `load()`), as `addPerson` does.
+   5. In the same transaction, one audit entry through `appendInTx`:
+      - action `auth.password_set`, `actorType: 'system'`, `actorId: 'org-admin-password'`;
+      - target `user` with the user ID;
+      - no password, no hash, and no email beyond what the entry's target already names.
+   - Open only the `grc_app` connection (max 1), the way `org-script-env.ts` builds its `db`, with `toHostAddress` on the Mac. No Neo4j, migrator or storage connection.
+5. **Output (D164):** `Password set for <email> in <slug>. Sign in at https://grc.localhost; you'll set up two-factor sign-in first.` Errors print as `create-org.ts`'s do (`describeError`).
+6. **Signing in afterwards** is the existing flow, unchanged:
+   - email and password;
+   - then the TOTP set-up screen, which can't be skipped;
+   - then the app;
+   - the 5-failure, 15-minute lockout and the session limits apply as for everyone (D49, D54).
+
+**Files:**
+- New: `packages/infra/scripts/org-admin-password.ts`.
+- Changed: the root `package.json` (the `org:admin-password` script).
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Every refusal in Behaviour 2–4 exits 2 with nothing changed, checked by reading the code. The password never reaches an argument, an environment variable, the output or a log.
+3. On success there is exactly one new `credential` account row, holding Better Auth's hash, and one `auth.password_set` audit entry, written in the same transaction.
+4. The builder ran nothing against the live database.
+5. The security reviewer approved `task/FT-002` before the merge (D244).
+6. After the merge, with the user (not the builder):
+   - after FT-001's base step, `pnpm org:admin-password --org company-x --email admin@company-x.example` sets the password;
+   - signing in at https://grc.localhost leads to the TOTP set-up screen, then to the app;
+   - running the command again is refused (`already has a password`).
+
+**Tests for the testing phase** (not written now, D222):
+- unit: the argument checks; the length and match rules; refusing a stdin that isn't a terminal; nothing echoed (a stand-in terminal).
+- db, on a throwaway database:
+  - the first run sets the password and writes the audit entry in the org's chain;
+  - a second run is refused;
+  - a non-Admin, an unknown email and an unknown slug are refused, and nothing changes;
+  - the stored hash verifies with Better Auth.
+- e2e: an Admin given a password this way signs in, must set up TOTP, then reaches the dashboard.
+- Never weaken live privileges or shared state to prove these (D176).
+- Security matrix: no rows (no new route or record type).
+
+**Questions, answered 2026-10-18 (D244):**
+- **Q-PW-1:** first password only (Behaviour 4.3).
+- **Q-PW-2:** yes, a one-off security review before the merge (the review step above).
+
+---
+
+Task: S8-012
+
+**Goal:** in a benchmark run's summary, a question that failed before it could be scored gets the worst value on every score, instead of being left out of the averages (D241 (2), D244). The rule: a model that fails more can never look better, so D239's before/after comparison is fair.
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/S8-012`; the integrator merges into `main` with lint + type checks.
+
+**Decisions:** D45.8, D48, D241 (2), D244; S8 shared notes "Question kinds and scores" and "Fixed rules, no AI judge".
+
+**Hard limits:** run no benchmark and call no model. Leave the stored results and the scoring of single items (`packages/benchmark/src/score/`, `run/items.ts`) unchanged: this changes how the summary averages, not what an item holds. No new route or record type, so no security-matrix row (D175).
+
+**Where things are now:**
+- **`packages/shared/src/benchmark/summary.ts`, `summariseGroup`:** each score metric's mean is over the items that aren't skipped *and* carry a value for it.
+- **A question that failed on the way carries no score values,** so today it drops out of every mean:
+  - `unscoredItem(…, 'fail', …)` in `packages/benchmark/src/run/items.ts`: an API error, a broken answer stream, an item that didn't fit;
+  - `scoreAnswer` for a message saved `failed` (`packages/benchmark/src/score/answers.ts:199`): its times only.
+- **A `fail` that was scored** (a real answer that got things wrong) carries its values. One that wasn't measured, such as `citation_accuracy` with no citations, is absent and stays out.
+- **`packages/shared/src/benchmark/metrics.ts`:** `made_up_numbers` and `injection_followed` are the two scores where lower is better (`higherIsBetter: false`); every other score is higher-is-better.
+- **Where the summary is computed:** by the API when a run ends (`benchmark-runs.service.ts:293`) and by `bench:run` locally (`run/run.ts:179`, `extraction/run.ts:114`). The CLI table and the Benchmark screen only read it.
+- **`packages/web/src/features/benchmark/ScoreTiles.tsx:312`** tells the reader: "each kind's scores are averaged over its questions that weren't skipped. A skipped question is counted but never averaged."
+
+**Behaviour:**
+1. **Failed before it was scored:** an item whose outcome is `fail` and that carries no score metric value at all.
+2. **The worst value on every score that applies** (D244, Q-BM-1 (b)): in each group's means, such an item counts the worst value for every score metric that applies to its part, mode and kind (`metricAppliesTo`), and is counted in that metric's `n`.
+   - Read the worst value from the metric's own definition (`higherIsBetter` in `metrics.ts`): 0 when higher is better, 1 when lower is better. Don't use a list of names.
+   - Today that means 0 on context recall, result recall, reciprocal rank, graph query ran, answer correctness, citation accuracy and no-answer rule kept, and 1 on made-up record numbers and planted instruction followed.
+3. **Only where the metric applies:** "planted instruction followed" applies to injection-trap questions only, and "no-answer rule kept" to no-answer questions only (their `kinds`), so other kinds get neither.
+4. **Unchanged:**
+   - skipped items (never averaged);
+   - a scored `fail` item's own values and absences;
+   - the times, the D48 targets, the graph fallbacks, the outcome counts and the extraction ratios;
+   - the summary stays pure, and gives the same result for any order.
+5. **Words:** the header comments of `summary.ts` and `metrics.ts` say the new rule. The sentence in `ScoreTiles.tsx` becomes: "{part}: each kind's scores are averaged over its questions that weren't skipped. A question that failed before it could be scored gets the worst value on every score: 0, or 1 for made-up record numbers and planted instruction followed. A skipped question is counted but never averaged."
+6. **Old runs:** a run that already ended keeps the summary it was saved with. Only runs that end after the merge use the new rule.
+
+**Files:**
+- `packages/shared/src/benchmark/summary.ts`
+- `packages/shared/src/benchmark/metrics.ts` (the comment)
+- `packages/web/src/features/benchmark/ScoreTiles.tsx` (the sentence)
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Behaviour 1–6 hold, checked by reading the code.
+3. Nothing outside the three files changes.
+
+**Tests for the testing phase** (not written now, D222; `unit`):
+- an item that failed before scoring counts 0 for each higher-is-better score that applies, and 1 for each lower-is-better score that applies (an injection trap's "planted instruction followed", every answer's "made-up record numbers"). It is in `n`, and touches no metric that doesn't apply;
+- a scored `fail` keeps its own values, and its absent metrics stay out;
+- skipped items stay out;
+- a group with more failures never scores better than the same group with those questions answered;
+- shuffled input gives the same summary.
+- The existing summary tests that expect the old rule need updating by the test writer.
+- Security matrix: no rows.
+
+**Q-BM-1, answered 2026-10-18 (D244): (b), the worst value.** A failed question counts 1 on "made-up record numbers" and "planted instruction followed", and 0 on every other score (Behaviour 2). Option (a), leaving it out of those two, is dropped.
