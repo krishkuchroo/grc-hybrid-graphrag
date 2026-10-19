@@ -7,6 +7,8 @@
 // extraction part (S8-006) it also reads, read-only, each record's links
 // (`GET /api/v1/<plural>/:id/links`) and the review queue's link findings of every status with
 // their decisions' outcomes (`GET /api/v1/review/findings`, `GET /api/v1/review/findings/:id`).
+// For `pnpm dataset:score` (FT-001) it also reads each record's own fields (an asset's type,
+// criticality and classification) and the review queue's duplicate findings of every status.
 // - The key goes only in the `Authorization: Bearer …` header, and is held in a private field, so
 //   it never shows in an error, a log line or a spread of the client.
 // - A 429 is waited out for its `Retry-After` (at most 2 minutes a time) and the same call is sent
@@ -22,12 +24,14 @@ import {
   EXTRACTION_LINK_TYPES,
   LINK_END_STATES,
   LINK_OUTCOME_RESULTS,
+  RECORD_KINDS,
   RECORD_PATHS,
   REVIEW_FINDING_STATUSES,
   REVIEW_MAX_PAGE_SIZE,
   benchmarkResultsAddedSchema,
   benchmarkRunDetailSchema,
   chatStreamEventSchema,
+  createSchemas,
   isRecordKind,
   searchAnswerSchema,
   type AddBenchmarkResultsBody,
@@ -93,6 +97,19 @@ export interface OrgRecordRow {
   status: string;
   /** `manual`, `import` or `ai`; empty when the list gave none. */
   origin: string;
+  /** The kind's own fields as the list gives them (an asset's `assetType`, `criticality` and
+   * `dataClassification` …); only the text and number ones. */
+  fields?: Record<string, string | number>;
+}
+
+/** A duplicate finding, as the review queue's list gives it: the pair's two records, by ID (null
+ * for one the reader can't see). */
+export interface DuplicateFindingRow {
+  id: string;
+  status: ReviewFindingStatus;
+  recordKind: RecordKind;
+  keptId: string | null;
+  otherId: string | null;
 }
 
 /** One of a record's links, as `GET /api/v1/<plural>/:id/links` gives it: its type, whether the
@@ -204,6 +221,25 @@ const orgRecordRowSchema = z.object({
   origin: z.string().nullable().optional(),
 });
 
+/** Each kind's own fields: its create schema's, but the name, owner and label. */
+const OWN_FIELDS: Readonly<Record<RecordKind, readonly string[]>> = Object.fromEntries(
+  RECORD_KINDS.map((kind) => [
+    kind,
+    Object.keys(createSchemas[kind].shape).filter((f) => !['name', 'owner', 'label'].includes(f)),
+  ]),
+) as unknown as Record<RecordKind, readonly string[]>;
+
+/** The text and number values of a list item's own fields. */
+function ownFieldsOf(kind: RecordKind, item: unknown): Record<string, string | number> {
+  const fields: Record<string, string | number> = {};
+  if (typeof item !== 'object' || item === null) return fields;
+  for (const field of OWN_FIELDS[kind]) {
+    const value = (item as Record<string, unknown>)[field];
+    if (typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))) fields[field] = value;
+  }
+  return fields;
+}
+
 const recordLinksSchema = z.object({ items: z.array(z.unknown()) });
 
 const recordLinkRowSchema = z.object({
@@ -231,6 +267,15 @@ const linkFindingRowSchema = z.object({
   kind: z.literal('link'),
   status: z.enum(REVIEW_FINDING_STATUSES),
   summary: z.object({ type: z.enum(EXTRACTION_LINK_TYPES), from: linkFindingEndSchema, to: linkFindingEndSchema }),
+});
+
+const shownOrHiddenSchema = z.union([z.object({ recordId: z.string().min(1) }), z.object({ hidden: z.literal(true) })]);
+
+const duplicateFindingRowSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('duplicate'),
+  status: z.enum(REVIEW_FINDING_STATUSES),
+  summary: z.object({ recordKind: z.string(), kept: shownOrHiddenSchema, other: shownOrHiddenSchema }),
 });
 
 const linkFindingDetailSchema = z.object({
@@ -348,7 +393,8 @@ export class BenchApiClient implements BenchApi {
       const row = orgRecordRowSchema.safeParse(item);
       if (!row.success) throw this.unexpected('GET', path);
       const { id, number, name, sourceIds, status, origin } = row.data;
-      return [{ kind, id, number, name, sourceIds: sourceIds ?? [], status, origin: origin ?? '' }];
+      const fields = ownFieldsOf(kind, item);
+      return [{ kind, id, number, name, sourceIds: sourceIds ?? [], status, origin: origin ?? '', fields }];
     });
   }
 
@@ -383,6 +429,28 @@ export class BenchApiClient implements BenchApi {
       if (!row.success) throw this.unexpected('GET', path);
       const { id, status, summary } = row.data;
       return [{ id, status, type: summary.type, from: endOf(summary.from), to: endOf(summary.to) }];
+    });
+  }
+
+  /** Every duplicate finding in the review queue, of every status, oldest first
+   * (`GET /api/v1/review/findings?kind=duplicate`). */
+  async duplicateFindings(options?: CallOptions): Promise<DuplicateFindingRow[]> {
+    const path = `${API_PREFIX}/review/findings`;
+    const query = { kind: 'duplicate', status: REVIEW_FINDING_STATUSES.join(','), sort: 'oldest' };
+    const idOf = (end: z.infer<typeof shownOrHiddenSchema>): string | null => ('recordId' in end ? end.recordId : null);
+    return this.paged(path, query, options, REVIEW_MAX_PAGE_SIZE, (item) => {
+      const row = duplicateFindingRowSchema.safeParse(item);
+      if (!row.success || !isRecordKind(row.data.summary.recordKind)) throw this.unexpected('GET', path);
+      const { id, status, summary } = row.data;
+      return [
+        {
+          id,
+          status,
+          recordKind: summary.recordKind as RecordKind,
+          keptId: idOf(summary.kept),
+          otherId: idOf(summary.other),
+        },
+      ];
     });
   }
 

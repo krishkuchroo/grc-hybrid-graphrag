@@ -3,3 +3,4 @@ export * from './world/index.js';
 export * from './sources/index.js';
 export * from './connectors/index.js';
 export * from './fast-load/index.js';
+export * from './dataset/index.js';

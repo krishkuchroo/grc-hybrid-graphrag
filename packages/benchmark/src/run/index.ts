@@ -26,6 +26,7 @@ export {
   type BenchApi,
   type BenchApiClientOptions,
   type CallOptions,
+  type DuplicateFindingRow,
   type LinkFindingEnd,
   type LinkFindingOutcome,
   type LinkFindingRow,

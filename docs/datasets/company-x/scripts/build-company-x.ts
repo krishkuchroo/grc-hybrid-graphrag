@@ -22,7 +22,8 @@
 // - Writes, under docs/datasets/company-x/: answer-key.json in `pnpm gen:data`'s format (checked
 //   with the benchmark's own parseAnswerKey), the upload files under sources/ (two asset lists, the
 //   vulnerability reports, the policies and the SOC tickets), questions-<slug>.json (a hand-written
-//   question set, checked with questionSetSchema), and the keys the scores are taken from: facts,
+//   question set for the orgs <slug> and <slug>-fast, the two `pnpm dataset:load` makes, checked with
+//   questionSetSchema), and the keys the scores are taken from: facts,
 //   provenance, duplicates, normalisation, framework mappings and plants. The same inputs and seed
 //   always write the same files (D45.8): one seeded random stream per purpose, no clock.
 // - Prints counts and paths only.
@@ -1535,7 +1536,9 @@ async function main(): Promise<void> {
     );
   }
 
-  const questionSet = { version: 1, source: { type: 'hand_written', orgSlugs: [args.orgSlug] }, questions };
+  // Both orgs `pnpm dataset:load` loads the folder into: through the intake, and fast-loaded (FT-001).
+  const orgSlugs = [args.orgSlug, `${args.orgSlug}-fast`];
+  const questionSet = { version: 1, source: { type: 'hand_written', orgSlugs }, questions };
   const checked = shared.questionSetSchema.safeParse(questionSet);
   if (!checked.success) {
     const issue = checked.error?.issues[0];
