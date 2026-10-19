@@ -5,7 +5,9 @@
 //
 // `stream` (S6-002, D47) asks with the same settings and no schema, and hands the answer over in
 // pieces as Gemma writes it, ending with a report: the times, the token counts and whether it
-// finished or was cut short (token cap, time limit, or stopped by the caller).
+// finished or was cut short (token cap, time limit, or stopped by the caller). A stream that
+// finishes or reaches the token cap with no text is a failure (`unavailable`), never an empty
+// answer, as a time limit with no text is `timed_out` (D241 (3)).
 //
 // One call at a time per program (D34, D72): every client in the program shares one gate, so a
 // second call waits for the first, in the order the calls were made. The time limit starts when
@@ -424,6 +426,12 @@ export class OllamaTextModel implements TextModel {
           'text model stream failed',
         );
       }
+      throw failure;
+    } else if (pieces === 0) {
+      // Finished, or cut by the token cap, with no answer text: a failure, never an empty answer
+      // (D241 (3), fail safe).
+      const failure = new AiFailure('unavailable', { model, elapsedMs });
+      this.log.warn({ model, code: failure.code, elapsedMs, waitedMs, pieces: 0 }, 'text model stream failed');
       throw failure;
     } else {
       ending = finishReason === 'length' ? 'token_cap' : 'finished';

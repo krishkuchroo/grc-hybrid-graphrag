@@ -114,7 +114,8 @@ export interface TextModelCalls {
    * Asks the model with no schema and hands its answer over in pieces as it's written, with the
    * same settings as `generate` (temperature 0, the fixed seed, the 8,192-token context). Resolves
    * with the end report once the answer has finished or been cut short. Rejects with `AiFailure`
-   * `unavailable` (the model can't be reached or is missing, or it failed mid-answer) or
+   * `unavailable` (the model can't be reached or is missing, it failed mid-answer, or it wrote
+   * nothing) or
    * `timed_out` (no text within the time limit), or with `AiStopped` (stopped while waiting).
    */
   stream(request: TextStreamRequest): Promise<TextStreamAnswer>;
