@@ -4,7 +4,8 @@
 //   `validation` rows and the rest give `train`, so near-identical rows from one world never sit
 //   on both sides.
 // - The sample: a job with more rows than its cap keeps a seeded choice of that many, in the same
-//   split ratio, in the order they were built.
+//   split ratio, in the order they were built. Made-up-name rows (TR-002) keep their share, rounded
+//   down (`sampleKeepingShare`).
 // A choice ranks items by the SHA-256 of a text naming the seed and the item, smallest first.
 import { createHash } from 'node:crypto';
 import type { Split } from './jobs.js';
@@ -69,5 +70,38 @@ export function sampleBySplit<T>(
       keep.add(entry.index);
     }
   }
+  return { kept: indexed.filter((entry) => keep.has(entry.index)).map((entry) => entry.item), before };
+}
+
+/**
+ * `sampleBySplit` with a small group of the items (`isMinor`: TR-002's made-up-name questions) kept
+ * at no more than its share: when the items are over `max`, the group keeps
+ * floor(max × group / items) and the other items fill the rest, each part sampled by split as
+ * `sampleBySplit` does. So the group's share after the cap is never above its share before. With
+ * no item of the group, it is `sampleBySplit` itself. Kept in their given order.
+ */
+export function sampleKeepingShare<T>(
+  items: readonly T[],
+  splitOf: (item: T) => Split,
+  isMinor: (item: T) => boolean,
+  max: number,
+  seed: number,
+  label: string,
+): SampleResult<T> {
+  const indexed = items.map((item, index) => ({ item, index }));
+  const minor = indexed.filter((entry) => isMinor(entry.item));
+  if (minor.length === 0 || items.length <= max) return sampleBySplit(items, splitOf, max, seed, label);
+
+  const others = indexed.filter((entry) => !isMinor(entry.item));
+  const minorQuota = Math.floor((max * minor.length) / items.length);
+  // max − floor(max × minor / items) is at most the number of other items, as max < items.
+  const othersQuota = Math.min(others.length, max - minorQuota);
+  const splitOfEntry = (entry: { item: T }): Split => splitOf(entry.item);
+  const keep = new Set<number>([
+    ...sampleBySplit(minor, splitOfEntry, minorQuota, seed, `${label}|minor`).kept.map((entry) => entry.index),
+    ...sampleBySplit(others, splitOfEntry, othersQuota, seed, label).kept.map((entry) => entry.index),
+  ]);
+  const before: Record<Split, number> = { train: 0, validation: 0 };
+  for (const item of items) before[splitOf(item)] += 1;
   return { kept: indexed.filter((entry) => keep.has(entry.index)).map((entry) => entry.item), before };
 }

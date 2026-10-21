@@ -24,7 +24,15 @@ export interface TrainingExample {
   assistant: string;
   /** The request the app builds for this example, sent through the real client by the self-check. */
   request: TextRequest<unknown>;
+  /**
+   * Whether the example asks about a made-up name that matches no record (TR-002). A job keeps
+   * these to at most one row in MADE_UP_ONE_IN, before and after `--max-per-job`.
+   */
+  madeUp?: boolean;
 }
+
+/** At most one row in this many of a job asks about a made-up name (TR-002: at most 10%). */
+export const MADE_UP_ONE_IN = 10;
 
 export interface TrainingRow {
   job: TrainingJob;
@@ -75,7 +83,7 @@ export interface WorldExamples {
   dropped: Record<string, number>;
 }
 
-/** A job's row builder: TR-001 adds `extraction`; TR-002 and TR-003 add theirs. */
+/** A job's row builder: TR-001 adds `extraction`, TR-002 `graph_query`. */
 export interface JobBuilder {
   readonly job: TrainingJob;
   /** The version of the app's prompt the rows are built from (D45.8). */
