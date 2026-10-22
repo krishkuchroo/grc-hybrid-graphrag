@@ -9,19 +9,45 @@ It is the "train" step of measure, train, measure (D239): the before-test runs f
 after-test runs last, on the trained one.
 
 - **Where:** free Google Colab, on a T4 GPU (D247).
-- **How long:** about 3–5 hours, using about 6–10 GB of the GPU's memory (D246). It can take longer; the progress bar
-  shows the time left.
+- **How long:** about 6–9 hours for about 3,000–4,000 rows and 2 passes, using about 6–10 GB of the GPU's memory
+  (D246, D253). That is likely two Colab sessions, the second resumed from the Drive checkpoints (see "If Colab
+  disconnects", which also says how to keep Drive space free). The progress bar shows the time left. The base file for
+  the before-test, below, takes about 20–30 minutes.
 - **What leaves the Mac:** only the made-up training file, `train.jsonl` (D247, D248). No org's data, and never the
   held-out test set (D234, D239).
 - **No keys or passwords:** the base model is public, so the notebook needs no Hugging Face token, and nothing from
   `.env` goes into Colab. Colab may say that no Hugging Face token is set: that's fine.
 
+## First: the base file for the before-test (D253)
+
+The before-test runs on the untrained Qwen3.5-4B exported by this notebook, the same way the trained model is exported
+later, so both tests load files made the same way. Set `BASE_ONLY = True` and the notebook only exports the untrained
+model: it needs no training file and trains nothing.
+
+1. **Make the Drive folder.** In My Drive, make a folder named `grc-training`. Nothing needs uploading.
+2. **Open the notebook in Colab.** Go to https://colab.research.google.com, choose **File → Upload notebook** and pick
+   `docs/training/train-qwen3.5-4b.ipynb` from this repository. Then choose **Runtime → Change runtime type → T4 GPU**
+   and save.
+3. **Choose base-only mode.** In the Settings cell, set `BASE_ONLY = True`. Leave `QUANT` at `q4_k_m`.
+4. **Run it.** Choose **Runtime → Run all** and allow Drive access. It takes about 20–30 minutes; the training cells
+   say they are skipped. If Colab disconnects, reconnect and choose **Run all** again: a finished file isn't made twice
+   (the notebook prints "Already exported").
+5. **Download the file.** In Google Drive, download `grc-training/qwen3.5-4b-base.Q4_K_M.gguf` and keep it outside
+   this repository, for example in `~/models/grc/`: model files are never committed (D81).
+6. **Load it in the Unsloth desktop app.** The app runs on port 8888, so HexStrike must be off (D252). Add that folder
+   as a model folder and load the file with at least 8,192 tokens of context and Parallel Slots 1.
+7. **Point the app at it.** List the model IDs with the `curl` command in step 6 of "Steps" below, with `8888` as the
+   port. Set `AI_TEXT_MODEL` in `.env` to the base file's ID, then rebuild grc-api and grc-worker and restart
+   grc-caddy with the two commands in that step.
+8. **Run the before-test** (D239) on this model. Don't use Unsloth's published GGUF for it (D253).
+
+To train later, set `BASE_ONLY` back to `False` (the uploaded notebook from this repository already has `False`).
+
 ## Before you start
 
 - The before-test has run on the untrained model, and you have chosen the jobs to train from its results (training
   question 2).
-- You know which 4-bit file Unsloth Studio loaded for the before-test, for example Q4_K_M or IQ4_XS. See "Matching the
-  4-bit file" below (Q-TR-4).
+- The before-test ran on the base file from the section above (D253).
 - A Google account whose Drive has about 5 GB free.
 
 ## Steps
@@ -33,7 +59,7 @@ after-test runs last, on the trained one.
 2. **Upload it to Google Drive.** In My Drive, make a folder named `grc-training` and upload `train.jsonl` into it.
 3. **Open the notebook in Colab.** Go to https://colab.research.google.com, choose **File → Upload notebook** and pick
    `docs/training/train-qwen3.5-4b.ipynb` from this repository. Then choose **Runtime → Change runtime type → T4 GPU**
-   and save.
+   and save. In the Settings cell, check that `BASE_ONLY` is `False` (the default).
 4. **Run it.** Choose **Runtime → Run all**. Colab asks for access to your Google Drive: allow it. The notebook installs
    its libraries, checks every row of the file, trains, runs the validation check and exports the GGUF file. If Colab
    disconnects, reconnect and choose **Run all** again: it carries on from the last checkpoint (see "If Colab
@@ -41,8 +67,8 @@ after-test runs last, on the trained one.
 5. **Load the model in Unsloth Studio.** In Google Drive, download `grc-training/qwen3.5-4b-grc-<run>.Q4_K_M.gguf` (the
    notebook prints its exact name and size; the ending follows `QUANT`). Keep it outside this repository, for example
    in `~/models/grc/`: model files are never committed (D81). In Unsloth Studio, add that folder as a model folder and
-   load the model with at least 8,192 tokens of context, with Studio on a port other than 8888, as for the before-test
-   (D236).
+   load the model with at least 8,192 tokens of context, in the Unsloth desktop app on port 8888 with HexStrike off
+   (D252), as for the before-test.
 6. **Point the app at it.** List the model IDs Unsloth Studio serves, with your port in place of `<port>`:
 
    ```sh
@@ -98,15 +124,15 @@ companies it never trained on. The table is printed and saved in Drive as `grc-t
       answer worded differently counts as a miss.
 - These numbers come from made-up data. The real measure is the after-test compared with the before-test (D239).
 
-## Matching the 4-bit file (Q-TR-4)
+## Matching the 4-bit file (Q-TR-4, answered: D253)
 
-The after-test must use the same kind of 4-bit file as the before-test, so the two tests compare like for like (D243).
-Set `QUANT` in the notebook's Settings cell before step 4. Unsloth's export can make `q4_k_m` (the default), `q4_k_s`,
-`q4_0` or `q4_1`. It can't make IQ4_XS: if the before-test used IQ4_XS, run both tests with Q4_K_M.
+Both tests load files this notebook made with the same `QUANT`: the base file before (see "First: the base file for the
+before-test") and the trained file after. Keep `QUANT` at `q4_k_m` for both runs.
 
-Even with the same name, the files Unsloth publishes use Unsloth's own Dynamic 2.0 method, which keeps some layers at
-higher precision, while this export uses llama.cpp's standard method. The two can differ a little in size and
-quality.
+Neither test uses the GGUF files Unsloth publishes. Even with the same name, those are made with Unsloth's own Dynamic
+2.0 method, which keeps some layers at higher precision, while this notebook's export uses llama.cpp's standard method.
+Comparing a published file with this export would mix the effect of training with the difference in how the files were
+made.
 
 ## Training again
 
@@ -125,4 +151,5 @@ over it.
 | `checkpoints/`                      | the last 2 checkpoints while training, and `run.json` naming it |
 | `adapter/`                          | the trained LoRA add-on, saved when training ends               |
 | `validation.json`                   | the validation table                                            |
+| `qwen3.5-4b-base.<QUANT>.gguf`      | the untrained base for the before-test                          |
 | `qwen3.5-4b-grc-<run>.<QUANT>.gguf` | the merged 4-bit model for Unsloth Studio                       |
