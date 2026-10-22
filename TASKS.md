@@ -140,6 +140,11 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | AI-002 | AI | builder-backend | done | Empty-answer fix in the Ollama text model (D241 (3)): in `ollama-text-model.ts`, a stream that would end `finished` or `token_cap` with no text rejects with `AiFailure('unavailable')`, as the time-limit branch already does with `timed_out`; chat then saves the question as `failed` with `assistant_unavailable` and never saves an empty answer as answered. Nothing else changes. Starts after AI-001 is merged (both change `ollama-text-model.ts`). Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | | logs/tasks/AI-002.md; builder-backend 0fbc0e7; merged 063e7d2 (fast mode, D222). A stream ending `finished` or `token_cap` with no text rejects as `unavailable`; `ask.ts` unchanged (saves `failed` + `assistant_unavailable`). |
 | FT-002 | FT | builder-platform | done | First password for a new org's Admin (D241 (1)): `pnpm org:admin-password --org <slug> --email <email>` sets the first password of an Admin of that org. The password is typed twice in a terminal with nothing shown; never an argument, environment variable, output or log line; 12 to 128 characters (D54). It is stored with Better Auth's own hash in the `credential` account, with one `auth.password_set` audit entry in the same transaction. Refused, with exit 2 and nothing changed: bad arguments, no terminal, too short or long, the two entries differ, no such org, the email is no Admin of the org, or a password or two-factor is already set. The Admin then signs in at https://grc.localhost and must set up TOTP first (existing flow). First password only (D244, Q-PW-1). Builder runs nothing against the live stack. Fast mode (D222): lint + type checks, then one security review before the integrator merges (D244, Q-PW-2: D49–D59, how the password is read, the hash, the audit entry in the same transaction, the refusals, TOTP enrolment still required); no new tests (testing-phase tests listed in the brief) | | logs/tasks/FT-002.md; builder-platform c35b506; security reviewer approved (D244); merged 2b087aa (fast mode, D222). Builder's choices beyond the brief, accepted by the reviewer: any `credential` account or `two_factor` row counts as an existing password; unknown arguments named by position only; a repeated flag refused; Ctrl-C exits 130; the user row locked FOR UPDATE. Reviewer's testing-phase gap: refusal tests for "Admin of another org" and "two-factor row but no password". |
 | S8-012 | S8 | builder-data | done | A failed question gets the worst value (D241 (2), D244): in `summariseBenchmark` (`packages/shared/src/benchmark/summary.ts`), an item that failed before it could be scored (outcome `fail` and no score value at all) counts as the worst value in every score mean that applies to it: 0 on the higher-is-better scores, 1 on "made-up record numbers" and "planted instruction followed". It is counted in `n`. A model that fails more can never look better. Skipped items stay out, and a scored `fail` keeps its own values. Times, targets, fallbacks and extraction ratios are unchanged. The Benchmark screen's averaging sentence (`ScoreTiles.tsx`) and the comments say the new rule. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Q-BM-1 answered (b) on 2026-10-18 (D244). | logs/tasks/S8-012.md; builder-data a3c6301; merged 622f8d5 (fast mode, D222: lint + typecheck pass). Note: a no-answer question that fails before it is scored now counts 0 on context recall, result recall and reciprocal rank too, because `metricAppliesTo` applies to its kind (left as built; shown to the user). The existing summary tests expecting the old rule need the test writer's update in the testing phase. |
+| TR-001 | TR | builder-data | to do | Training-data builder, the command and the `extraction` job (D239, D248): `pnpm train:data --jobs <list> [--seed] [--worlds] [--size] [--max-per-job] [--name] [--tokenizer-dir]` builds `data/generated/training/<name>/train.jsonl` and `manifest.json` (git-ignored) only from `buildWorld` + `renderSources` in memory; no option reads a folder, an answer key or an org, and any value naming `company-x` or `docs/datasets/` is refused (D234). One row per example: `job`, `messages` (system = the app's own `instructions`, user = its own `data`, assistant = the correct answer in the app's output format, no thinking text), `split` (by world, about 90/10), `seed`. The jobs are chosen at run time (training question 2 stays open); jobs with no builder yet are refused by name. A self-check sends one row per job through the real `OpenAiCompatibleTextModel` with a stand-in fetch and stops if the messages sent differ from the row. Extraction: each generated document read and chunked as the worker does, the correct answer per chunk from the answer key, the mentions and the plants; nothing unsure is guessed (dropped and counted). Same arguments give byte-identical files. No model, network, database or stack. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Hot files: root `package.json` (not alongside another task adding root scripts); `packages/infra/scripts/training/` (TR-002 and TR-003 extend it, so they run after). Wording to fix later (noted 2026-10-22, no task): the refusal message for `answer` in `packages/infra/scripts/training/jobs.ts:20` still says "its builder comes with TR-003", which was dropped (D249). | |
+| TR-002 | TR | builder-data | to do | Training-data builder, the `graph_query` job (D15, D22, D248): questions from the benchmark's `QUESTION_SHAPES` over each generated org (plus a few made-up-name ones), the system text from `graphQueryRequest(role, question)` for a seeded role that sees every kind and link on the question's path, and the correct answer `{"query": …}` written from a fixed pattern per shape, in the style of the prompt's own first example. Each query passes `checkGraphQuery` and `graphQueryAnswerSchema`; a start name that isn't unique by the query's `CONTAINS` match is skipped and counted; the expected records are worked out on the answer key in memory. Self-check and output as TR-001. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Q-TR-2 answered 2026-10-20 (D250): offline checks only, as the brief is written. dependsOn TR-001 (same files). | |
+| TR-003 | TR | builder-data | dropped | Training-data builder, the `answer` job (D17, D23, D52.3, D248): per question, a context built by the app's own `buildContext` from answer-key records and generated passages, the user text from `answerRequest(context, question)`, and a correct cited answer in plain text. How the correct answer is made waits on Q-TR-1; the brief describes the recommended way (fixed sentence patterns per question shape). Every cited number is in the context, and every expected record is named and cited. Self-check through the real `stream` path with a stand-in fetch. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Dropped 2026-10-20 (D249, Q-TR-1 answered "leave the answer job out"): the `answer` job isn't trained, and chat answers stay as the untrained model writes them. Not to be built; the brief is kept for the record. | |
+| TR-004 | TR | builder-data | to do | Colab training notebook (D243, D246, D247, D248): `docs/training/train-qwen3.5-4b.ipynb` and `docs/training/README.md`. Unsloth LoRA on Qwen3.5-4B over the uploaded `train.jsonl` (rows checked, jobs filtered by a setting), the chat template with thinking off, assistant-only training, checkpoints in Google Drive so a cut-off session resumes with "Run all", a validation check at the end (loss, then per job: answers that parse and exact matches), the LoRA adapter saved, then merged and exported to a 4-bit GGUF (one quant setting, default Q4_K_M, matched to the before-test's file, Q-TR-4). Plain step-by-step instructions for the user. No secrets, no outputs saved in the notebook, no Company X path. The builder can't run it (no GPU); the user's first run is after the merge. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Not blocked by Q-TR-4: the quant is one setting at the top. No dependsOn (the format is fixed by D248); can run alongside TR-001 (no shared files). | |
+| TR-005 | TR | builder-data | to do | The notebook's "base only" mode (D253): a `BASE_ONLY` setting (default `False`) in `docs/training/train-qwen3.5-4b.ipynb`. With `True`, "Run all" reads no `train.jsonl`, trains nothing, writes no `checkpoints/`, `adapter/` or `validation.json`, and exports the untrained Qwen3.5-4B to `grc-training/qwen3.5-4b-base.<QUANT>.gguf` through the same load settings and the same `save_pretrained_gguf` call as the trained export (one shared export helper; a fresh LoRA with the Model cell's settings so both take the same merge route). With `False` the notebook behaves exactly as merged. README: a "base file first" section with the user's steps for the before-test (desktop app on 8888, D252), the time estimate changed to about 6–9 h (D253), and Q-TR-4's section rewritten as answered. No GPU run. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | dependsOn TR-004 (merged as 27628f4). Hot files: `docs/training/`. Can run alongside TR-002 (no shared files). The before-test waits for the user's base-only run after the merge (D253). | |
 
 **Moved out of M0 (now planned in S7):**
 - SSO (OIDC/SAML) with the Admin screens: S7-009, S7-010 and S7-018. Its tests use a small stand-in sign-in provider that runs locally (D134).
@@ -5867,6 +5872,7 @@ A send-back goes to builder-backend on the same branch. After 3 send-backs it go
 - **Never port 8888 on this Mac** (D236):
   - HexStrike, another project, listens on `*:8888` with no login (CLAUDE.md). If it holds that port, calls to `host.docker.internal:8888` would send document text and the Unsloth key to HexStrike.
   - So the user starts Unsloth Studio on another port with `-p`, and `AI_TEXT_BASE_URL` uses that port. Nothing in the code depends on the port number.
+  - *(Changed by D252: the user runs Unsloth Studio's desktop app, which always uses 8888, so `AI_TEXT_BASE_URL` is `http://host.docker.internal:8888/v1`. It works only while HexStrike is off.)*
 - **Routes:** `POST /v1/chat/completions` (OpenAI format), `POST /v1/messages` (Anthropic format) and `GET /v1/models` (the loaded models). There's no `/v1/embeddings`.
 - **Auth:** `Authorization: Bearer sk-unsloth-…`. The user makes keys in Unsloth's Settings → API, and a revoked key gets 401.
 - **Models:** GGUFs served by llama-server, which accepts `response_format` with a JSON schema, `temperature`, `seed` and `max_tokens`.
@@ -6077,7 +6083,7 @@ A send-back goes to builder-backend on the same branch. After 3 send-backs it go
 
 **After the merge, with the user (not the builder):**
 1. In Unsloth Studio:
-   - pick a free port **other than 8888**, which HexStrike may hold with no login (D236). Check that nothing listens on it with `lsof -nP -iTCP:<port> -sTCP:LISTEN`;
+   - pick a free port **other than 8888**, which HexStrike may hold with no login (D236). Check that nothing listens on it with `lsof -nP -iTCP:<port> -sTCP:LISTEN`; *(Changed by D252: the user runs the desktop app on 8888, with HexStrike off.)*
    - start `unsloth studio --api-only -H 127.0.0.1 -p <that port>`, and note the port it actually boots on;
    - download and load **Qwen3.5-4B**, Unsloth's 4-bit GGUF (https://huggingface.co/unsloth/Qwen3.5-4B-GGUF; for example IQ4_XS, about 2.5 GB, D243), with a context of at least 8,192 tokens, the size the app's prompts are built for (D34);
    - make an API key in Settings → API.
@@ -6305,3 +6311,360 @@ Task: S8-012
 - Security matrix: no rows.
 
 **Q-BM-1, answered 2026-10-18 (D244): (b), the worst value.** A failed question counts 1 on "made-up record numbers" and "planted instruction followed", and 0 on every other score (Behaviour 2). Option (a), leaving it out of those two, is dropped.
+
+---
+
+Task: TR-001
+
+**Goal:** one offline command, `pnpm train:data`, builds the training file of D248 from the project's generators. The training jobs are chosen when the command runs, because training question 2 (which jobs) stays open until the before-test. This task builds the command, the file, the self-check and the `extraction` job. TR-002 (`graph_query`) and TR-003 (`answer`) plug into it later. `mapping` has no correct answers yet (Q-TR-3).
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/TR-001`; the integrator merges into `main` with lint + type checks. The tests under "Tests for the testing phase" are for later.
+
+**Decisions:** D18, D39, D45.8, D52.1, D52.3, D52.4, D69, D71, D81, D164, D234, D236, D239, D243, D246, D247, D248; CLAUDE.md principle 8 (repeatable results).
+
+**Owner and order:** builder-data. dependsOn: none (AI-001 is merged). Hot files: the root `package.json` (don't run it alongside another task that adds root scripts) and `packages/infra/scripts/training/` (TR-002 and TR-003 extend it, so they come after this task).
+
+**Hard limits:**
+- No model call and no network at all: no Ollama, no Unsloth server, no Postgres, Neo4j, SeaweedFS or stack. Everything is made in memory from seeds.
+- Never read `docs/datasets/company-x/`, any built dataset folder or any org (D234, D239).
+- Import from `packages/api/src`, never copy from it, and change nothing there. The rows must come from the same code the app runs, so a later prompt change shows up in the next build of the file. If something you need there isn't exported, hand in `blocked` with what is missing rather than editing it.
+- `packages/generators` and `packages/benchmark` stay unchanged, except for adding an export to their `src/index.ts` when a pure function you need isn't exported.
+- No new route or record type, so no security-matrix row (D175).
+
+**Where things are now:**
+- **How a request reaches the model** (`packages/api/src/ai/openai-compatible-text-model.ts`):
+  - a `TextRequest`'s `instructions` go as the system message and its `data` as the user message (`generateText({instructions, prompt: data, output: Output.object(...)})`);
+  - every call asks the server not to think (`chat_template_kwargs: {enable_thinking: false}`);
+  - the constructor takes `fetch` (a stand-in for the network) and `gate` (its own `SerialGate`), both meant for tests.
+- **The four jobs' prompts:**
+  - extraction: `packages/api/src/processing/extract/prompt.ts`. `extractionRequest(chunkText)` gives `instructions`, `data` and `answerShape` (`EXTRACTION_ANSWER_SHAPE`). The version is `EXTRACTION_PROMPT_VERSION` (`extract-v1`). Answers are read by `readExtractionAnswer` (`@grc/shared`).
+  - mapping: `packages/api/src/processing/suggest/suggest-prompt.ts` (`suggestInstructions`, `suggestData`, `suggestAnswerShape`, `SUGGEST_PROMPT_VERSION`). The item comes from `promptItem` in `mapping-suggest.job.ts:285` (not exported); the 5 candidates are the closest catalog items by bge-m3 name embedding. Not built in this task.
+  - graph_query: `packages/api/src/search/graph/prompt.ts` (`graphQueryRequest(role, question)`, `GRAPH_QUERY_PROMPT_VERSION`). TR-002.
+  - answer: `packages/api/src/chat/answer-prompt.ts` (`answerRequest(context, question)`, `ANSWER_PROMPT_VERSION`), streamed as plain text. TR-003.
+- **Reading and chunking, as the worker does:**
+  - `readDocumentText(bytes, format, MAX_DOCUMENT_TEXT_LENGTH)` in `packages/api/src/processing/reader/document-text.ts`; the limit is in `document-read.job.ts:72`;
+  - `chunkText(text, counter)` in `reader/chunker.ts`: 500 tokens with 50 overlap (D71). Chunks are exact slices of the text and can start or end mid-sentence;
+  - `loadTokenCounter(dir)` in `reader/tokenizer.ts`. The bge-m3 tokenizer files are git-ignored in `packages/api/tokenizer/` (`pnpm --filter api setup:tokenizer`). Your worktree won't have them; the main checkout does, at `/Users/krishkuchroo/Documents/GRC-project-1/packages/api/tokenizer/` (read only).
+- **The generators:**
+  - `buildWorld({seed, size})`, `parseSize` and `SIZES` (`tiny`, `accuracy`, `stress`);
+  - `renderSources(key)` gives, per org, `documents` (each with `fileName`, `kind`, `format`, `body`, `bytes` for PDF and DOCX, and `mentions: {fact, sentence}[]`) and `plants`: `typos` (with `fileName`, `where`, `sentence`), `falsePositives` (`sentence`, `notAFact`) and `injections` (`text`, `proposedLink`);
+  - `fileBytesOf(file)` gives any file's bytes;
+  - `packages/benchmark/src/extraction/expected.ts` shows how these are read.
+- **A script to copy the pattern from:** `packages/infra/scripts/bench-questions.ts` (offline, writes files) and its root `package.json` script. Infra scripts import `../../api/src/...` directly (see `dataset-common.ts`).
+
+**Behaviour:**
+1. **The command:** `pnpm train:data --jobs <list> [--seed <n>] [--worlds <n>] [--size <name>] [--max-per-job <n>] [--name <name>] [--tokenizer-dir <dir>]`.
+   - `--jobs` is required: a comma list of `extraction`, `mapping`, `graph_query`, `answer`.
+   - A job with no builder yet is refused with exit 2. The message names the job and why: `mapping` (no correct answers exist yet, Q-TR-3), `graph_query` (TR-002), `answer` (TR-003). TR-002 and TR-003 lift their refusals.
+   - Worlds: seeds `seed` to `seed + worlds - 1`, each one `buildWorld({seed, size})`. Choose defaults so that a plain `--jobs extraction` run gives at least 1,000 rows, and give them in the hand-off.
+   - `--max-per-job` defaults to 3,000 (D248).
+   - `--name` defaults to `train-<seed>-<worlds>-<size>`.
+   - `--tokenizer-dir` defaults to the API's default folder.
+2. **Refused with exit 2, before anything is written:**
+   - an unknown or repeated argument, or a number that isn't a positive whole number;
+   - a `--name` that isn't `^[a-z0-9][a-z0-9-]{0,63}$`;
+   - any argument value that contains `company-x` (in any case) or points under `docs/datasets/` (D234);
+   - a `--tokenizer-dir` without the tokenizer files. The message gives the setup command;
+   - an output folder that already exists. The message says to pick another `--name` or delete the folder.
+   - There is no option to read a folder, an answer key or an org. All data comes from `buildWorld` and `renderSources`.
+3. **Output:** `data/generated/training/<name>/train.jsonl` and `manifest.json`. `data/generated/` is already git-ignored (D81).
+   - Same arguments give byte-identical files (principle 8): stable order, no clock time in either file.
+   - `manifest.json` holds: the arguments, the seeds, `GENERATOR_VERSION`, each chosen job's prompt version, rows per job × split, and rows dropped per job and reason.
+4. **One row per example,** one JSON object per line, keys in this order: `{"job": …, "messages": [{"role":"system","content": …},{"role":"user","content": …},{"role":"assistant","content": …}], "split": …, "seed": …}`.
+   - `system` is the request's `instructions` and `user` its `data`, from the app's own builders.
+   - `assistant` is the correct answer in the app's output format. For JSON jobs that is `JSON.stringify` of the answer with keys in the answer shape's order and no spaces; the `answer` job is plain text. There is never any thinking text.
+   - `seed` is the seed of the world the row came from.
+5. **The self-check that training matches use:** before writing, one row of each chosen job is sent through the real `OpenAiCompatibleTextModel`.
+   - Set-up: a stand-in `fetch` and its own `SerialGate`, a dummy address `http://127.0.0.1:9/v1` and a dummy key. The stand-in records the request body and replies with the row's assistant text as a chat completion. Nothing leaves the process.
+   - It passes when the body's `messages` are exactly the row's system and user texts, in that order (a string or the SDK's one-text-part form, compared as text), `chat_template_kwargs.enable_thinking` is `false`, and the answer passes the job's schema.
+   - Otherwise it stops with exit 1, names the job and what differed, and writes nothing. If the AI SDK adds or changes any message text (for example a JSON-schema line), the rows must carry that text too: hand in `blocked` with what the SDK sends, rather than guessing.
+6. **Split, by world:** a seeded choice of about 10% of the worlds (at least one) gives `validation` rows, and the rest give `train`. So near-identical rows never sit on both sides.
+7. **Cap:** a job with more rows than `--max-per-job` keeps a seeded sample of that many, in the same split ratio. A job with fewer than 1,000 rows gets a warning (D248).
+8. **Extraction rows:** for every world, org and generated document (all three document kinds, every format):
+   1. Read and chunk it as the worker does: `readDocumentText(fileBytesOf(file), format, MAX_DOCUMENT_TEXT_LENGTH)`, then `chunkText(text, counter)` with the default options.
+   2. For each chunk, the request is `extractionRequest(chunk.text)`.
+   3. **The correct records:** every answer-key record of that org whose name appears in the chunk text exactly (case-sensitive), or a planted typo of it in this file (`plants.typos` with this `fileName`).
+      - Longest names are matched first, and matches don't overlap.
+      - Each record keeps its kind, and its `name` is written as it appears in the chunk.
+      - Refs are `r1`, `r2` … in order of first appearance. No `details`.
+   4. **The correct links:** each mention of the document whose sentence lies whole inside the chunk.
+      - Find the sentence with runs of white space counting as one space, and copy `sentence` from the chunk's own text.
+      - `from` and `to` are the refs of the fact's two ends, in the link type's direction.
+      - One link per type and pair of ends, in the order the sentences appear.
+   5. **Never a link from a plant:** a false positive's `notAFact` or an injection's `proposedLink` gives no link. The records such a sentence names are still reported.
+   6. A chunk that names nothing gets `{"records":[],"links":[]}`.
+   7. **Nothing unsure is guessed.** Drop the chunk, and count the reason, when:
+      - a mention's sentence is cut by the chunk's edge (`sentence_cut`);
+      - a link's end isn't among the chunk's records (`end_not_named`);
+      - a name matches two records of one kind (`ambiguous_name`).
+      Drop the whole document when a mention's sentence is found whole in none of its chunks (`sentence_not_found`).
+   8. Every answer must pass `EXTRACTION_ANSWER_SHAPE`, and `readExtractionAnswer` must keep all of it. Anything else is a bug: exit 1.
+9. **Output on screen (D164):** the folder path, rows per job × split, dropped rows per reason, and warnings. Never any row text.
+
+**Files:**
+- New:
+  - `packages/infra/scripts/train-data.ts` (arguments, files, output);
+  - `packages/infra/scripts/training/*.ts` (pure: rows, the split, the sample, extraction answers, the self-check).
+- Changed:
+  - the root `package.json` (the `train:data` script, shaped like `bench:questions`'s);
+  - only if needed, an export in `packages/generators/src/index.ts` or `packages/benchmark/src/index.ts`.
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Behaviour 1–9 hold, checked by reading the code.
+3. **A small local run:** `pnpm train:data --jobs extraction --worlds 2 --size tiny --name check-a --tokenizer-dir /Users/krishkuchroo/Documents/GRC-project-1/packages/api/tokenizer` passes its self-check and writes both files. The same run with `--name check-b` gives a byte-identical `train.jsonl`. Give the counts in the hand-off, then delete both scratch folders.
+4. `--jobs graph_query`, `--jobs answer` and `--jobs mapping` are each refused with their reason, and a value containing `company-x` is refused.
+5. No network, no model, nothing against the stack, and nothing under `packages/api/src` changed.
+
+**Tests for the testing phase** (not written now, D222):
+- unit, infra: each refusal in Behaviour 2, with nothing written.
+- unit, infra: extraction answers from a hand-made chunk with its mentions and plants:
+  - names as written, a typo included;
+  - longest match first;
+  - a false positive and an add-links injection give no link;
+  - a sentence copied from the chunk across different white space;
+  - the drop reasons;
+  - an empty chunk.
+- unit, infra: the split is by world; the sample is seeded; the same arguments give byte-identical files.
+- unit, infra: the self-check passes on the real path, and catches a stand-in that adds a line to the system message.
+- unit, infra: every row passes its job's schema, and the reader keeps all of it.
+- Security matrix: no rows.
+
+---
+
+Task: TR-002
+
+**Q-TR-2 answered 2026-10-20 (D250): offline checks only.** Each training query is checked with the app's own query check, and what it returns is worked out on the answer key. No query runs in Neo4j. This brief was written for that answer and is unchanged.
+
+**Goal:** `pnpm train:data` builds `graph_query` rows: a question, the graph-query prompt the app would send for it, and a correct read-only Cypher query.
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/TR-002`; the integrator merges into `main` with lint + type checks.
+
+**Decisions:** D15, D22, D45.8, D52.1, D52.2, D234, D240, D248, D250, and TR-001's.
+
+**Owner and order:** builder-data. dependsOn: TR-001 (the same files). Hot files: `packages/infra/scripts/training/`, `packages/infra/scripts/train-data.ts`.
+
+**Hard limits:** TR-001's. Nothing under `packages/api/src` or `packages/benchmark/src` changes, except exports in `packages/benchmark/src/index.ts` if needed.
+
+**Where things are now:**
+- `packages/api/src/search/graph/prompt.ts`:
+  - `graphQueryRequest(role, question)` gives the system text (`graphQueryInstructions(role)`, which describes only what the role sees) and the user text (`<QUESTION>`);
+  - `GRAPH_QUERY_ANSWER_SHAPE` and `graphQueryAnswerSchema` (at most 2,000 characters);
+  - the prompt's own first example is the style to follow: `MATCH p = (a:Asset)-[:EXPOSED_TO]->(r:Risk) WHERE toLower(a.name) CONTAINS 'app-x' RETURN p LIMIT 50`.
+- `checkGraphQuery(query)` (`search/graph/query-check.ts`) is the check a query must pass before it may run.
+- `viewedKinds(role)` and `viewedLinkRows(role)` (`search/graph/graph-description.ts`); `ROLES`, `LINK_TYPES`, `SEARCH_NODE_LABELS` and `SEARCH_LIMITS.graphRows` in `@grc/shared`.
+- The benchmark's question shapes: `QUESTION_SHAPES` (`packages/benchmark/src/questions/shapes.ts`, 12 single-hop and 8 multi-hop, each a start kind, steps with link types and a direction, and the question text). Also `recordsOf` (`org-graph.ts`) and `madeUpName` / `isMadeUp` (`made-up-names.ts`).
+
+**Behaviour:**
+1. **Questions:** per world and org, each shape × each start record of the shape's kind whose path reaches at least one record, using the shape's own `text(name)`. Also made-up-name questions (`madeUpName`, checked with `isMadeUp`), at most 10% of the job's rows. Their correct query is the same pattern on the made-up name: the model still writes a reading query, and it finds nothing.
+2. **Role:** a seeded pick among the `ROLES` that see every kind on the path and every link type used. Rows use `graphQueryRequest(role, question)`.
+3. **The correct query,** from one fixed pattern per shape:
+   - `MATCH p = (a:<Start>)-[:<T>]->(b:<Next>)[-[:<T2>]->(c:<End>)] WHERE toLower(a.name) CONTAINS '<the start name in lower case, with \ and ' escaped>' RETURN p LIMIT <SEARCH_LIMITS.graphRows>`;
+   - steps against a link's direction are written `<-[:T]-`, and two link types `[:HOSTS|RUNS]`;
+   - labels come from `SEARCH_NODE_LABELS` and the link types' ends from `LINK_TYPES`;
+   - the assistant text is `JSON.stringify({query})`.
+4. **Checks (offline only, D250):**
+   - each query passes `checkGraphQuery` and `graphQueryAnswerSchema`. A failure is a bug: exit 1;
+   - **name match:** when the start name in lower case is contained in another record's name of the same kind in that org, the query would also match that record. The question is skipped and counted (`name_not_unique`);
+   - the expected records are worked out on the answer key in memory, by following the steps. A real-name question with none is skipped (`no_path`).
+5. TR-001's refusal of `--jobs graph_query` is lifted. The self-check, split, cap, output and manifest (prompt version `chat-graph-query-v1`) follow TR-001.
+
+**Files:** `packages/infra/scripts/training/*.ts` (a graph-query part), `packages/infra/scripts/train-data.ts`, and an export in `packages/benchmark/src/index.ts` if needed.
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Behaviour 1–5 hold, checked by reading the code.
+3. `pnpm train:data --jobs extraction,graph_query --worlds 2 --size tiny --name check-a …` passes its self-check. Give the rows and drops per job in the hand-off, then delete the scratch folder.
+4. No network, no model, no Neo4j.
+
+**Tests for the testing phase** (not written now, D222):
+- unit, infra: each shape's pattern on a hand-made org gives a query that passes `checkGraphQuery`. Its in-memory result equals the shape's expected records.
+- unit, infra: a name with `'` or `\` is escaped; `name_not_unique` and `no_path` skip and count; made-up-name rows stay at or under 10%.
+- unit, infra: the role picked sees every kind and link of the path.
+- Security matrix: no rows.
+
+**Known limits (for the user, not to fix here):** the patterns cover the 20 benchmark shapes only, with no count questions and no "nothing in this graph" questions. A model trained only on them may lean towards these shapes.
+
+---
+
+Task: TR-003
+
+**Dropped on 2026-10-20 (D249). Don't build it.** The user answered Q-TR-1 "leave the answer job out": the `answer` job isn't trained, and chat answers stay as the untrained model writes them. The brief below is kept only as a record of what was proposed.
+
+**Was blocked on Q-TR-1,** asked 2026-10-20. The generators know which records answer a question but write no model answers. How should the correct answers be made?
+- (a) **recommended:** fixed sentence patterns over the answer key, with the context built by the app's own context code;
+- (b) leave the `answer` job out of training for now;
+- (c) have a larger model write the answers, then check them.
+This brief is written for (a). If the user picks (b), the task is dropped. If (c), the planner rewrites it.
+
+**Goal:** `pnpm train:data` builds `answer` rows: the context and question exactly as chat sends them, and a correct, cited, plain-text answer.
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/TR-003`; the integrator merges into `main` with lint + type checks.
+
+**Decisions:** D17, D23, D47, D52.1, D52.3, D248, and TR-001's.
+
+**Owner and order:** builder-data. dependsOn: TR-001 and TR-002 (the same files, and it reuses TR-002's questions). Hot files: as TR-002.
+
+**Hard limits:** TR-001's.
+
+**Where things are now:**
+- `packages/api/src/chat/answer-prompt.ts`: `ANSWER_INSTRUCTIONS` (cite every statement with source numbers in brackets; say so in one sentence when the context doesn't answer; brief, plain text, no headings) and `answerRequest(context, question)`.
+- `packages/api/src/search/hybrid/context.ts`: `buildContext(selection, values, clearance, maxResults)` numbers the kept sources and writes `<GRAPH_CONTEXT>` and `<UNSTRUCTURED_DOCUMENT_CONTEXT>`. Its input is a `ContextSelection` (`search/hybrid/fusion.ts`).
+- The answer reaches the model through `stream` (`TextStreamRequest`), with no schema.
+
+**Behaviour (for Q-TR-1 (a)):**
+1. **Questions:** TR-002's (real names and made-up names), with their expected records.
+2. **The context:** a `ContextSelection` built as retrieval would leave it, then passed through `buildContext` with `values` empty and clearance `restricted`.
+   - Graph entries: the start record, the expected records and the links between them, plus a seeded few unrelated records of the org (so the answer has to choose what to cite).
+   - Passages: one to three chunks (TR-001's chunking) whose text names the start record.
+   - Record numbers are made up deterministically, in the app's number format.
+   - Made-up-name questions get the same kind of context with no matching record.
+3. **The correct answer,** from one fixed sentence pattern per shape. For example: "`<start>` [n] is exposed to `<B>` [m] and `<C>` [k]." It names every expected record once, each with its own number and the start's.
+   - A made-up name gets rule 3's one sentence, for example "The context doesn't say which risks `<name>` is exposed to."
+4. **Checks:** every cited number is in the context; every expected record is named and cited; no other record is named. A failure is a bug: exit 1.
+5. **Self-check:** through the real `stream` path, the stand-in replying as a stream. It checks the messages as TR-001 does (no schema). The manifest's prompt version is `chat-answer-v1`. TR-001's refusal of `--jobs answer` is lifted.
+
+**Files:** `packages/infra/scripts/training/*.ts` (an answer part), `packages/infra/scripts/train-data.ts`.
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Behaviour 1–5 hold, checked by reading the code.
+3. A small run with `--jobs extraction,graph_query,answer` passes its self-check. Give the counts in the hand-off, then delete the scratch folder.
+4. No network, no model.
+
+**Tests for the testing phase** (not written now, D222):
+- unit, infra: per shape, the answer names and cites every expected record, and cites only numbers in the context;
+- unit, infra: a made-up-name row gives the one-sentence answer;
+- unit, infra: the stream self-check catches a changed message.
+- Security matrix: no rows.
+
+**Known limits (for the user):** pattern answers have little variety in wording. They teach the model the citation format and the "say so" rule more than the style of writing.
+
+---
+
+Task: TR-004
+
+**Goal:** a Google Colab notebook that fine-tunes Qwen3.5-4B with Unsloth (LoRA) on the uploaded `train.jsonl`, then exports a 4-bit GGUF for Unsloth Studio, plus plain step-by-step instructions for the user (D246, D247, D248).
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/TR-004`; the integrator merges into `main` with lint + type checks.
+
+**Decisions:** D57, D81, D234, D239, D243, D246, D247, D248.
+
+**Owner and order:** builder-data. dependsOn: none (the file format is fixed by D248). It can run alongside TR-001, because they share no files. Hot files: `docs/training/`.
+
+**Hard limits:**
+- No secrets in the notebook or the README: no Hugging Face token (the model is public), no API key, no `.env` value.
+- The committed notebook has no outputs and no execution counts.
+- No Company X path or name anywhere; the notebook reads only the training file.
+- You can't run it (no GPU here). Nothing on the Mac runs a model. The user's first run comes after the merge.
+
+**Behaviour, the notebook `docs/training/train-qwen3.5-4b.ipynb` (nbformat 4), cell by cell:**
+1. **What it does,** in plain words: about 3–5 hours on a free T4 and about 6–10 GB of GPU memory (D246). Free Colab can disconnect: reconnect and choose "Run all", and it carries on from the last checkpoint.
+2. **Settings,** one cell with every choice:
+   - the Drive folder (`/content/drive/MyDrive/grc-training`) and the data file name (`train.jsonl`);
+   - `JOBS`: `None` for every job in the file, or a list;
+   - the base model: the Unsloth ID for Qwen3.5-4B from https://unsloth.ai/docs/models/qwen3.5, loaded in 4-bit;
+   - `MAX_SEQ_LENGTH` 4096; 2 passes (epochs), as in D246's estimate;
+   - LoRA rank, alpha, learning rate and batch size from Unsloth's Qwen3.5 guide, named in a comment;
+   - `SAVE_STEPS`, so a checkpoint is at most about 15 minutes old;
+   - `QUANT` default `q4_k_m`, with a comment: set it to match the 4-bit file used in the before-test (Q-TR-4), from the quant names Unsloth's GGUF export accepts;
+   - `SEED` 42.
+3. **Install:** Unsloth and its libraries pinned to exact versions, each the newest at least 14 days old when you write it (the project's package-age rule).
+4. **Data:** mount Drive and stop with a plain message if the file is missing.
+   - Check every row: the four columns; `job` is one of the four; `messages` is system, user, assistant with text content; `split` is `train` or `validation`; `seed` is a whole number. Stop at the first bad row, naming its line.
+   - Filter by `JOBS`, then print rows per job × split.
+5. **Model:** load in 4-bit with Unsloth, add LoRA (the target modules from the guide), and use Unsloth's gradient checkpointing.
+6. **Format:**
+   - each row is formatted with the model's chat template and thinking off (`apply_chat_template(..., enable_thinking=False)`), the same template llama-server uses with `enable_thinking: false` (D243). Print one formatted row so the user can see it;
+   - rows longer than `MAX_SEQ_LENGTH` are skipped and counted, never cut;
+   - only the assistant part is trained (Unsloth's `train_on_responses_only`, with the template's markers).
+7. **Train with resume:** the trainer's output folder is on Drive, keeping the last 2 checkpoints.
+   - If a checkpoint is there, training resumes from it and prints from which step. Otherwise it starts fresh.
+   - The LoRA adapter is saved to Drive when training ends.
+8. **Validation check:** the loss on the validation rows. Then, for up to 50 validation rows per job: generate with thinking off and greedy decoding, and compare with the row's answer.
+   - `extraction`, `mapping`, `graph_query`: the share that parses as JSON, and the share that equals the expected answer once both are parsed.
+   - `answer`: the share that cites only source numbers present in the user text, and the share that matches exactly.
+   - Print a table per job, and save it to Drive as `validation.json`.
+9. **Export:** merge the adapter, export a GGUF with `QUANT` to Drive, and print its file name and size.
+   - Re-running only this cell after a disconnect reloads the saved adapter first.
+10. **Next steps,** in plain words, as in the README below.
+
+**Behaviour, `docs/training/README.md` (the user's steps):**
+1. On the Mac: `pnpm train:data --jobs <the jobs chosen after the before-test>` (TR-001). The file is in `data/generated/training/<name>/train.jsonl`, and only this made-up file leaves the Mac (D247).
+2. Make the Drive folder `grc-training`, and upload `train.jsonl` to it.
+3. Open the notebook in Colab (File → Upload notebook). Choose Runtime → Change runtime type → T4 GPU.
+4. Run all. If it disconnects, reconnect and Run all again; it resumes.
+5. Download the GGUF from Drive. Load it in Unsloth Studio with at least 8,192 tokens of context, on a port other than 8888 (D236). *(Changed by D252: the user runs the desktop app on 8888, with HexStrike off.)*
+6. Set `AI_TEXT_MODEL` in `.env` to the model's ID from `GET <AI_TEXT_BASE_URL>/models`. Nothing else in the app changes (D248). Then rebuild grc-api and grc-worker as CLAUDE.md says.
+7. Run the same Company X test again: the after-test (D239).
+Also say what the validation table means, and that the 4-bit file should match the before-test's (Q-TR-4).
+
+**Files:** new `docs/training/train-qwen3.5-4b.ipynb` and `docs/training/README.md`. Nothing else.
+
+**Pass criteria:**
+1. Lint and type checks pass (nothing in them changes).
+2. The notebook is valid nbformat 4 JSON (`node -e` with `JSON.parse` and the required keys), with no outputs and no execution counts.
+3. The secret scan is clean. There is no token, key or `company-x` text in either file.
+4. Behaviour holds, checked by reading. Every Unsloth call is one its Qwen3.5 guide or documentation names; say in the hand-off which page each comes from.
+5. After the merge, with the user (not the builder): one Colab run on a small file reaches the export and resumes after a forced disconnect.
+
+**Tests for the testing phase** (not written now, D222):
+- unit, infra: the notebook parses, has no outputs, contains no token-like strings and no `company-x`, and its settings cell names `QUANT`, `JOBS` and the Drive folder.
+- manual: the user's first Colab run (resume after a disconnect, the validation table, the GGUF loads in Unsloth Studio).
+- Security matrix: no rows.
+
+Task: TR-005
+
+**Goal:** a "base only" mode in the merged training notebook that exports the untrained Qwen3.5-4B to Q4_K_M through the same export path as the trained model, so the before-test and the after-test load files made the same way (D253), plus the user's README steps for it.
+
+**Why:** Unsloth's published GGUFs (Dynamic 2.0 / imatrix) differ slightly from the standard Q4_K_M that `save_pretrained_gguf` makes. The user chose (D253) to run the before-test on our own export of the untrained base, not on the published file. Today the notebook can't do that: the Data cell stops without `train.jsonl`, and the Export cell stops without a finished adapter.
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/TR-005`; the integrator merges into `main` with lint + type checks.
+
+**Decisions:** D81, D222, D234, D236, D243, D246, D247, D248, D252, D253.
+
+**Owner and order:** builder-data. dependsOn: TR-004 (merged as 27628f4). Hot files: `docs/training/`. It can run alongside TR-002 (no shared files).
+
+**Hard limits:**
+- Change only `docs/training/train-qwen3.5-4b.ipynb` and `docs/training/README.md`.
+- With `BASE_ONLY = False` (the default) the notebook behaves exactly as merged: the same checks, the same training identity and tag, the same file names, the same export. Don't change any training setting, pinned version or check.
+- No secrets, no Hugging Face token, no `.env` value, no `company-x` text. The committed notebook has no outputs and no execution counts.
+- You can't run it (no GPU here). The user's base-only run comes after the merge.
+
+**Behaviour, the notebook:**
+1. **Settings cell:** add `BASE_ONLY = False` with a plain comment: `True` makes only the untrained base file for the before-test (D253), reads no training file and trains nothing; set it back to `False` to train. Check it is `True` or `False` with the cell's existing `_need` style.
+2. **Data cell, when `BASE_ONLY`:** mount Drive and check the Drive folder exists (the message says to make `grc-training`; no upload is needed). Don't read `train.jsonl`, don't check run.json and don't create or touch `checkpoints/`, `adapter/` or `validation.json`. Print one line saying base-only mode reads no training file.
+3. **Model, Format, Train and Validation cells, when `BASE_ONLY`:** each prints one line that it is skipped in base-only mode and does nothing else, so "Run all" reaches the Export cell without stopping. (Python cells can't return early: wrap the existing body, or guard it, without changing what it does when `BASE_ONLY` is `False`.)
+4. **Export cell:**
+   - Move the shared part into one helper used by both modes: the work folder under `/content/grc-export/`, the one `save_pretrained_gguf(str(work), tokenizer, quantization_method=QUANT)` call, the pick of the single `QUANT` file that isn't an mmproj, the copy to `<name>.partial` then `os.replace`, and the printed name and size. The trained branch keeps its current file name `qwen3.5-4b-grc-<tag>.<QUANT>.gguf` and its current checks.
+   - **When `BASE_ONLY`:** the file name is `qwen3.5-4b-base.<QUANT upper>.gguf` (for example `qwen3.5-4b-base.Q4_K_M.gguf`). If it is already in Drive, print "Already exported" with its size, as the trained branch does. Otherwise load `BASE_MODEL` with `FastLanguageModel.from_pretrained(model_name=BASE_MODEL, max_seq_length=MAX_SEQ_LENGTH, load_in_4bit=LOAD_IN_4BIT, full_finetuning=False)`, add a fresh LoRA with `FastLanguageModel.get_peft_model` and exactly the Model cell's arguments (rank, alpha, target modules, dropout 0, bias "none", `random_state=SEED`), and export it through the helper. A fresh LoRA's B matrices start at zero, so it adds nothing to the weights, and the export takes the same 4-bit-load, merge-and-quantise route as the trained adapter. Say so in a comment. If Unsloth's documentation shows the plain base model takes the same route without the LoRA, you may drop it; say which you chose, and why, in the hand-off.
+   - It works when only the Settings and Install cells ran before it, as the trained branch does.
+5. **Intro cell and Next steps cell:** name base-only mode in one line each (what it is for and the README section). Change the time line to about 6–9 hours on a free T4 for about 3,000–4,000 rows and 2 passes, likely two Colab sessions resumed from the checkpoints (D253), and the base-only run to about 20–30 minutes. In Next steps, replace "with Studio on a port other than 8888" by the Unsloth desktop app on port 8888, with HexStrike off (D252). The settings comment on `QUANT` says the before-test's file is this notebook's base export (D253), keep `q4_k_m`.
+
+**Behaviour, `docs/training/README.md`:**
+1. **New section, before "Steps": "First: the base file for the before-test (D253)".** Plain steps:
+   1. Make the Drive folder `grc-training` (nothing to upload).
+   2. Open the notebook in Colab (File → Upload notebook), choose T4 GPU.
+   3. In Settings, set `BASE_ONLY = True`; leave `QUANT` at `q4_k_m`.
+   4. Runtime → Run all (about 20–30 minutes; if it disconnects, Run all again: a finished file isn't made twice).
+   5. Download `grc-training/qwen3.5-4b-base.Q4_K_M.gguf` and keep it outside the repository, for example in `~/models/grc/` (D81).
+   6. In the Unsloth desktop app (port 8888, with HexStrike off, D252), add that folder as a model folder and load the file with at least 8,192 tokens of context and Parallel Slots 1.
+   7. List the model IDs with the README's existing `curl` (with 8888 as the port), set `AI_TEXT_MODEL` in `.env` to the base file's ID, rebuild grc-api and grc-worker and restart grc-caddy as the README already shows.
+   8. Run the before-test (D239). Don't use Unsloth's published GGUF for it (D253).
+2. **"Before you start":** the bullet about knowing which 4-bit file Studio loaded becomes: the before-test ran on the base file from the section above (D253).
+3. **"How long":** about 6–9 hours for about 3,000–4,000 rows and 2 passes, likely two Colab sessions resumed from the Drive checkpoints (D253). Keep the Drive Bin note.
+4. **Steps 5:** the desktop app on 8888 with HexStrike off (D252), in place of "a port other than 8888".
+5. **"Matching the 4-bit file (Q-TR-4)":** rewrite as answered (D253): both tests load files this notebook made with the same `QUANT` (the base file before, the trained file after), never Unsloth's published file, because its Dynamic 2.0 method differs from this export's.
+6. **"What is where":** add the row `qwen3.5-4b-base.<QUANT>.gguf`, the untrained base for the before-test.
+
+**Pass criteria:**
+1. Lint and type checks pass (nothing in them changes).
+2. The notebook is valid nbformat 4 JSON (`node -e` with `JSON.parse` and the required keys), with no outputs and no execution counts.
+3. The secret scan is clean. There is no token, key or `company-x` text in either file.
+4. By reading: with `BASE_ONLY = False` every cell does what it did at 27628f4; with `True` nothing reads `train.jsonl` or writes `checkpoints/`, `adapter/` or `validation.json`; there is exactly one `save_pretrained_gguf` call, in the shared helper; the base load uses the same `BASE_MODEL`, `MAX_SEQ_LENGTH`, `LOAD_IN_4BIT` and `QUANT` as the trained export. Say in the hand-off which Unsloth page backs the base-export route.
+5. After the merge, with the user (not the builder): one base-only Colab run makes `qwen3.5-4b-base.Q4_K_M.gguf`, and it loads in the Unsloth desktop app.
+
+**Tests for the testing phase** (not written now, D222):
+- unit, infra: the notebook parses and has no outputs; its settings cell has `BASE_ONLY = False`; the source has exactly one `save_pretrained_gguf` call; the base file name pattern is `qwen3.5-4b-base.` and differs from the trained one.
+- manual: the user's base-only run (the file appears in Drive, loads in the desktop app, and a re-run prints "Already exported").
+- Security matrix: no rows.

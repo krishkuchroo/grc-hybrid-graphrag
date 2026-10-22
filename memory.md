@@ -810,7 +810,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **Task:** AI-001 (builder-backend, fast mode D222).
   - **Port** (2026-10-18, noted by the main session): Unsloth Studio was listening on 127.0.0.1:8888. HexStrike, another project, listens on `*:8888` with no login (CLAUDE.md).
     - If HexStrike holds that port, the app's calls to `host.docker.internal:8888` would send document text and the Unsloth key to HexStrike.
-    - So Unsloth Studio is started on a port other than 8888 (its `-p` flag), and `AI_TEXT_BASE_URL` uses that port (AI-001's after-merge steps).
+    - So Unsloth Studio is started on a port other than 8888 (its `-p` flag), and `AI_TEXT_BASE_URL` uses that port (AI-001's after-merge steps). *(Changed by D252: the user runs Unsloth Studio's desktop app, which always uses 8888, so `AI_TEXT_BASE_URL` is `http://host.docker.internal:8888/v1`. It works only while HexStrike is off.)*
     - The `/models` checks, by hand with `curl` and in FT-001's documents step, show a wrong server, but only after the key has been sent there. The port is the real guard.
 - **D237 Q-FT-1: the loader creates company-x's records first** (2026-10-18, the user's answer, passed on by the main session: option (1)): in full mode the loader creates the answer key's risks, controls, policies and incidents through the record API, before any document is read. The documents then only have to find links, and the framework mappings load straight away. Option (2) (only the documents bring the records, with a later mappings step) is dropped.
   - **Effect on FT-001:** it is `to do`. Its documents-step check follows D236: the text model is checked on whichever provider is set (Ollama's model list, or `GET <AI_TEXT_BASE_URL>/models` with the key), while bge-m3 is always checked on Ollama. It reads the `AI_TEXT_*` settings through AI-001's `aiSettingsFromEnv`, so it starts after AI-001 is merged.
@@ -833,7 +833,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **Company X is never used for training** (D234). It is the held-out exam, so nothing leaks from the test into training.
   - **Why:** to cut memory use with a smaller model trained for exactly these jobs. This is problem 2, the out-of-memory error on the first Ask (D236). The user also asked to streamline querying; answered in D240: decide after measuring.
   - **Data leaving the Mac:** today the AI runs only on the Mac (D57, D63). If training happens in a cloud notebook, only made-up training data would leave the Mac, never an org's data. Where training happens is still open.
-  - **Still open:** the base model, the jobs to train, where to train and the training-data format (see "Open questions"). No task brief until they're answered. *(D243: the base model is Qwen3.5-4B, Unsloth's 4-bit GGUF, the same one the app uses before training. The other three questions stay open.)*
+  - **Still open:** the base model, the jobs to train, where to train and the training-data format (see "Open questions"). No task brief until they're answered. *(D243: the base model is Qwen3.5-4B, Unsloth's 4-bit GGUF, the same one the app uses before training. The other three questions stay open.)* *(2026-10-20: D246 keeps Qwen3.5-4B; D247 answers where (free Google Colab, with checkpoints); D248 answers the data format. Only the jobs to train stay open, asked after the before-test. Tasks TR-001 to TR-004.)*
 - **D240 Streamlining Ask's querying: decide after measuring** (2026-10-18, the user's answer, passed on by the main session). It answers the querying request noted in D239.
   - **For now:** Ask keeps the AI writing the graph query (D15).
   - **Measure first:** the Company X "before" test (D239 step 3) shows how often the AI's graph query fails and how slow the answers are.
@@ -891,6 +891,59 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **Options offered:** (a) 3.0.69; (b) 3.0.62 plus a pnpm override in pnpm-workspace.yaml (the main session's recommendation); (c) accept two copies.
   - **The user chose (a):** "Newest version".
   - **Scope:** this one package, for AI-001 only. The 14-day rule stays for everything else.
+- **D246 The base model to train stays Qwen3.5-4B** (2026-10-20, the user's answer, passed on by the main session: "Keep 4B"). It confirms D243.
+  - **What the user asked:** whether a smaller Qwen, trained very specifically for GRC, would be better, and how long training takes and how much memory it needs.
+  - **The main session's estimates:** about 8,000 rows across the four jobs, about 1,500 tokens each, 2 passes.
+    - On a free cloud T4 (16 GB): about 6–10 GB of GPU memory and about 3–5 hours. *(Changed by D253: Unsloth's T4 notebook takes about 4 s per row, so with about 3,000–4,000 rows and 2 passes training is about 6–9 hours, likely two Colab sessions resumed from the Drive checkpoints.)*
+    - On the Mac through MLX: about 8–11 GB and 12–20 hours, with Docker, Neo4j and Ollama stopped.
+    - A 2B model: about half the time and about 60% of the memory.
+    - In daily use the trained 4B takes about 4.5 GB, the same as untrained, because the LoRA add-on is merged in before the 4-bit export. A 2B takes about 2.5–3 GB.
+  - **Options offered:** test both 4B and 2B in the before-test (the recommendation), keep 4B, or switch to 2B.
+  - **The user chose:** keep 4B. The before-test and the after-test use Qwen3.5-4B only (D239, D243).
+- **D247 Training question 3, where to train: Google Colab, free** (2026-10-20, the user's answer, passed on by the main session). It answers D239's open question 3.
+  - **Options offered:** Kaggle (the recommendation), Colab free, or the Mac.
+  - **Because free Colab sessions can disconnect,** training saves checkpoints and resumes from the last one.
+  - **What leaves the Mac:** only the made-up training file (D239, D248). No org's data, and never Company X.
+- **D248 Training question 4, the training-data format: accepted as proposed** (2026-10-20, the user's answer, passed on by the main session). It answers D239's open question 4.
+  - **The file:** JSONL, one row per example of one job. Columns:
+    - `job`: `extraction`, `mapping`, `graph_query` or `answer`;
+    - `messages`: an OpenAI-style chat. `system` is the app's exact prompt, `user` is the input exactly as the app sends it at run time, and `assistant` is the correct answer in the app's exact output format;
+    - `split`: `train` (about 90%) or `validation` (about 10%);
+    - `seed`: the generator seed that made it.
+  - **Size:** about 1,000–3,000 rows for each job that is trained.
+  - **Source:** built only from our generators, never from Company X (D234, D239). The file is synthetic only, and it is uploaded to Colab (D247).
+  - **Method:** LoRA with Unsloth on Qwen3.5-4B, merged, then exported to a 4-bit GGUF and loaded in Unsloth Studio. In the app only `AI_TEXT_MODEL` changes.
+  - **Still open:** training question 2, which jobs to train. It is asked after the before-test, which shows which jobs are weak. D239's order is unchanged: the before-test runs first, on the untrained model.
+  - **Tasks:** TR-001 to TR-004 (2026-10-20, fast mode D222).
+  - **Jobs trained (D249–D251, 2026-10-20):** at most `extraction` and `graph_query`. The `job` list above stays the format's four names, but `mapping` (D251) and `answer` (D249) aren't trained.
+- **D249 Q-TR-1, the `answer` job: leave it out of training** (2026-10-20, the user's answer, passed on by the main session: "leave the answer job out").
+  - **Options offered:** correct answers from fixed sentence patterns over the answer key (the recommendation); leave the job out; a larger model writes the answers, then they are checked.
+  - **The user chose:** leave it out. The `answer` job isn't trained, and chat answers stay as the untrained model writes them.
+  - **Tasks:** TR-003 is dropped.
+- **D250 Q-TR-2, checking the `graph_query` training queries: offline checks only** (2026-10-20, the user's answer, passed on by the main session: "offline checks only").
+  - **Options offered:** offline only, with the app's own query check plus working out on the answer key what each query returns (the recommendation); or also running each query against a fast-loaded org in Neo4j.
+  - **The user chose:** offline only. No training query runs in Neo4j.
+  - **Tasks:** TR-002 is unblocked (`to do`), still after TR-001.
+- **D251 Q-TR-3, the `mapping` job: leave it out of training** (2026-10-20, the user's answer, passed on by the main session: "leave it out").
+  - **Options offered:** leave mapping out (the recommendation); or use the app's official NIST crosswalks as correct answers, which overlap Company X's own mapping answers and so risk training on the exam (D234).
+  - **The user chose:** leave it out. The `mapping` job isn't trained.
+  - **Together with D249:** training covers at most two jobs, `extraction` and `graph_query`. Training question 2 (which of these two to train) stays open until after the before-test (D239).
+- **D252 Unsloth Studio runs through its desktop app on port 8888** (2026-10-20, the user's answer, passed on by the main session: option (2), keep the desktop app on 8888). It changes D236's port note.
+  - **Why asked:** the desktop app (Unsloth.app, a Tauri wrapper) always starts its backend as `unsloth studio --api-only -H 127.0.0.1 -p 8888`; its log shows `start_managed_server command called with port 8888`, and no port setting was found. HexStrike (another project) listens on `*:8888` with no login.
+  - **Options offered:** (1) quit the desktop app and run `unsloth studio -H 127.0.0.1 -p 8890 --parallel 1`, using the same Studio screens in the browser (the recommendation; keeps D236's port note); (2) keep the desktop app on 8888.
+  - **The user chose:** (2), the desktop app on 8888.
+  - **Effect:** `AI_TEXT_BASE_URL=http://host.docker.internal:8888/v1`. It works while HexStrike is off (it was off on 2026-10-20). Whenever HexStrike runs, text-model calls may reach the wrong server or fail, and the app then treats the model as unavailable. AI-001's code doesn't block 8888; only a comment in `.env.example` line 38 says "never port 8888", left as is for now (wording only).
+  - **Set-up inside Studio (unchanged):** Qwen3.5-4B GGUF Q4_K_M (Q-TR-4), context length at least 8,192, Parallel Slots 1 (llama-server shares the context window between slots; with the default 4 each request gets about a quarter). *(Changed by D253: the Q4_K_M loaded is the untrained base exported by the training notebook, not Unsloth's published file.)*
+- **D253 Q-TR-4, the before-test's 4-bit file: the untrained base exported by our own notebook** (2026-10-22, the user's answer, passed on by the main session: option (1)). It answers Q-TR-4 and changes D246's time estimate.
+  - **Why asked:** TR-004's builder found that Unsloth's published GGUFs (unsloth/Qwen3.5-4B-GGUF, Dynamic 2.0 / imatrix) differ slightly from the standard Q4_K_M that the notebook's `save_pretrained_gguf` exports after training, and that Unsloth's export can't make IQ4_XS. Comparing the published file (before) with our export (after) would mix the training's effect with the file-making difference.
+  - **Options offered:** (1) export the untrained base through the notebook's own export path first (about 20–30 min in Colab) and load that file for the before-test (the recommendation); (2) load Unsloth's published Q4_K_M and start now.
+  - **The user chose:** (1).
+  - **Effect:**
+    - The before-test waits for that base export.
+    - The user loads the exported base Q4_K_M in the Unsloth desktop app (D252) instead of the published file.
+    - The after-test loads the trained Q4_K_M, made the same way.
+    - The merged notebook (TR-004, 27628f4) can't do the base export yet: its Data cell needs `train.jsonl` and its Export cell stops without a finished adapter. **Task:** TR-005 adds a "base only" mode (2026-10-22, fast mode D222).
+  - **Corrected time estimate** (from TR-004's builder): Unsloth's T4 notebook took about 4 s per row, so D246's 3–5 h is low. With about 3,000–4,000 rows and 2 passes, training is about 6–9 h, likely two Colab sessions resumed from the Drive checkpoints. Replaced checkpoints go to Drive's Bin and still count against space (the README says to empty it).
 
 ## Open questions
 - **Phase 8, round 1:** answered on 2026-09-26 (D74–D80).
@@ -951,13 +1004,16 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **Parked for later phases:**
   - Phase 7: observability for the stress tests.
 - **Field test with real public data** (2026-10-18, the user's proposal): test the product with a real public dataset that has published answers, to cross-check chat answers and to measure ingestion accuracy, duplicate removal, and schema and data consistency through normalisation. This answers the testing-plan doc's open question "is the field test with real public data in the plan": yes. Which datasets is still being researched; none is chosen yet. Since then: D234 (Company X).
-- **Training a model with Unsloth (D239), asked 2026-10-18, not answered yet:**
-  1. ~~Which base model to train.~~ Answered on 2026-10-18 (D243): Qwen3.5-4B, Unsloth's 4-bit GGUF.
-  2. Which jobs to train it for: extraction, graph-query writing, answering with citations, or only some of them.
-  3. Where to train:
-     - Unsloth Studio on the Mac through MLX. Unsloth's requirements page lists it as supported, but it takes most of the 16 GB for hours.
-     - Or a free cloud GPU notebook, where only made-up training data leaves the Mac (D57, D63).
-  4. The training-data format.
+- **Training a model with Unsloth (D239), asked 2026-10-18; 1, 3 and 4 answered:**
+  1. ~~Which base model to train.~~ Answered on 2026-10-18 (D243): Qwen3.5-4B, Unsloth's 4-bit GGUF. Confirmed on 2026-10-20 (D246): keep 4B.
+  2. Which jobs to train it for. Narrowed on 2026-10-20 (D249, D251): mapping and answering aren't trained, so the choice is `extraction`, `graph_query`, or both. **Still open:** asked after the before-test. The training-data command takes the answer as a run-time choice (TR-001).
+  3. ~~Where to train.~~ Answered on 2026-10-20 (D247): free Google Colab, with checkpoints and resume.
+  4. ~~The training-data format.~~ Answered on 2026-10-20 (D248): JSONL with `job`, `messages`, `split` and `seed`.
+- **The training tasks' questions** (asked 2026-10-20; Q-TR-1 to Q-TR-3 answered the same day):
+  - ~~**Q-TR-1** (TR-003, the `answer` job).~~ Answered (D249): leave the answer job out. TR-003 is dropped.
+  - ~~**Q-TR-2** (TR-002, the `graph_query` job).~~ Answered (D250): offline checks only. TR-002 is `to do`.
+  - ~~**Q-TR-3** (the `mapping` job).~~ Answered (D251): leave it out.
+  - ~~**Q-TR-4** (TR-004, which 4-bit file the before-test uses).~~ Answered on 2026-10-22 (D253): the untrained base exported to Q4_K_M by the notebook's own export path; the before-test waits for that export (TR-005).
   - **Streamlining querying:** answered on 2026-10-18 (D240): decide after measuring.
 - **The D241 tasks' questions** (asked 2026-10-18; all three answered the same day, D244):
   - **Q-BM-1** (S8-012): answered (b). A failed question gets the worst value: 0 on the higher-is-better scores, 1 on the two lower-is-better ones.
