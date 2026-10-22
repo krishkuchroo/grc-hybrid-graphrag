@@ -12,12 +12,11 @@ export function isTrainingJob(value: string): value is TrainingJob {
 }
 
 /**
- * The jobs with no builder yet, and why. TR-002 (`graph_query`) and TR-003 (`answer`) take theirs
- * out when they add the builder; `mapping` has no correct answers to train on (Q-TR-3).
+ * The jobs with no builder yet, and why. TR-002 added `graph_query`'s; `mapping` has no correct
+ * answers to train on (Q-TR-3).
  */
 export const JOBS_WITHOUT_BUILDER: Readonly<Partial<Record<TrainingJob, string>>> = Object.freeze({
   mapping: 'the generated companies have no framework mappings, so no correct answers exist yet (Q-TR-3)',
-  graph_query: 'its builder comes with TR-002',
   answer: 'its builder comes with TR-003',
 });
 

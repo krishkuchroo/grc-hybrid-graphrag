@@ -6,7 +6,9 @@
 //   No option reads a folder, an answer key or an org, and no value may name Company X or point
 //   under `docs/datasets/` (D234). No model, network, database or stack.
 // - `--jobs`: a comma list of `extraction`, `mapping`, `graph_query`, `answer` (training question 2
-//   stays open, so the jobs are chosen here). A job with no builder yet is refused by name.
+//   stays open, so the jobs are chosen here). `extraction` (./training/extraction.ts) and
+//   `graph_query` (TR-002, ./training/graph-query.ts) have builders; a job with none yet is refused
+//   by name.
 // - Defaults: `--seed 1000` (clear of `pnpm gen:data`'s and the benchmark's seed 1, so no
 //   benchmark world is trained on), `--worlds 20`, `--size accuracy` (1,730 extraction rows,
 //   about a fifth of the chunks left out as cut), `--max-per-job 3000` (D248), `--name train-<seed>-<worlds>-<size>`, `--tokenizer-dir`
@@ -305,6 +307,7 @@ const manifest = {
   promptVersions: Object.fromEntries(set.jobs.map((j) => [j.job, j.promptVersion])),
   rows: Object.fromEntries(set.jobs.map((j) => [j.job, j.rows])),
   rowsBeforeCap: Object.fromEntries(set.jobs.map((j) => [j.job, j.built])),
+  madeUpRows: Object.fromEntries(set.jobs.map((j) => [j.job, j.madeUpRows])),
   dropped: Object.fromEntries(set.jobs.map((j) => [j.job, j.dropped])),
   tokenizer: {
     repository: tokenizerSource.BGE_M3_TOKENIZER.repository,
@@ -344,6 +347,7 @@ for (const job of set.jobs) {
   console.log(`  ${job.job} (${job.promptVersion}): train ${job.rows.train}, validation ${job.rows.validation}`);
   const capped = job.built.train + job.built.validation - (job.rows.train + job.rows.validation);
   if (capped > 0) console.log(`  ${job.job}: ${capped} row(s) left out by --max-per-job ${args.maxPerJob}`);
+  if (job.madeUpRows > 0) console.log(`  ${job.job}: ${job.madeUpRows} row(s) about a made-up name`);
   const dropped = Object.entries(job.dropped)
     .map(([reason, n]) => `${reason} ${n}`)
     .join(', ');
