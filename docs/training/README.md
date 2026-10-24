@@ -1,19 +1,19 @@
 # Training Qwen3.5-4B in Google Colab
 
 This folder holds the training notebook, `train-qwen3.5-4b.ipynb`, and the steps to run it. The notebook teaches
-Qwen3.5-4B, the text model the app uses through Unsloth Studio (D243), the app's own AI jobs from made-up training
-rows. It trains a small LoRA add-on with Unsloth, merges it into the model and gives you one 4-bit GGUF file to load in
+Qwen3.5-4B, the text model the app uses through Unsloth Studio (D243), the app's own AI jobs from training rows
+built from real public data. It trains a small LoRA add-on with Unsloth, merges it into the model and gives you one 4-bit GGUF file to load in
 Unsloth Studio (D248).
 
 It is the "train" step of measure, train, measure (D239): the before-test runs first, on the untrained model, and the
 after-test runs last, on the trained one.
 
 - **Where:** free Google Colab, on a T4 GPU (D247).
-- **How long:** about 6–9 hours for about 3,000–4,000 rows and 2 passes, using about 6–10 GB of the GPU's memory
-  (D246, D253). That is likely two Colab sessions, the second resumed from the Drive checkpoints (see "If Colab
-  disconnects", which also says how to keep Drive space free). The progress bar shows the time left. The base file for
-  the before-test, below, takes about 20–30 minutes.
-- **What leaves the Mac:** only the made-up training file, `train.jsonl` (D247, D248). No org's data, and never the
+- **How long:** about 5–5.5 hours for the current file (3,000 rows, 1 pass: about 670 steps at about 23 s each, then
+  the validation check and the export), using about 6–10 GB of the GPU's memory. If Colab disconnects, it resumes from
+  the Drive checkpoints (see "If Colab disconnects", which also says how to keep Drive space free). The progress bar
+  shows the time left. The base file for the before-test, below, takes about 20–30 minutes.
+- **What leaves the Mac:** only the training file, `train.jsonl`, built from public data (D247, D248). No org's data, and never the
   held-out test set (D234, D239).
 - **No keys or passwords:** the base model is public, so the notebook needs no Hugging Face token, and nothing from
   `.env` goes into Colab. Colab may say that no Hugging Face token is set: that's fine.
@@ -52,10 +52,9 @@ To train later, set `BASE_ONLY` back to `False` (the uploaded notebook from this
 
 ## Steps
 
-1. **Build the training file on the Mac.** In the project folder, run
-   `pnpm train:data --jobs <the jobs chosen after the before-test>` (TR-001), for example `--jobs extraction`. It
-   writes `data/generated/training/<name>/train.jsonl`, plus a `manifest.json` that stays on the Mac. Only this made-up
-   file leaves the Mac (D247).
+1. **Get the training file on the Mac.** The current one is `data/generated/training/train-all/train.jsonl`: real
+   public data (MITRE ATT&CK, NVD, CISA KEV, VCDB, text2cypher), built by `packages/infra/scripts/train-data-real.ts`
+   and `train-data-t2c.ts` and joined. Its `manifest.json` stays on the Mac. Only this file leaves the Mac (D247).
 2. **Upload it to Google Drive.** In My Drive, make a folder named `grc-training` and upload `train.jsonl` into it.
 3. **Open the notebook in Colab.** Go to https://colab.research.google.com, choose **File → Upload notebook** and pick
    `docs/training/train-qwen3.5-4b.ipynb` from this repository. Then choose **Runtime → Change runtime type → T4 GPU**
@@ -90,8 +89,8 @@ To train later, set `BASE_ONLY` back to `False` (the uploaded notebook from this
 
 - Reconnect, choose **Runtime → Run all** and allow Drive access again. The notebook installs the libraries again (a
   few minutes), checks the file again and resumes training from the newest complete checkpoint in
-  `grc-training/checkpoints`. A checkpoint is saved at most about 15 minutes apart, so at most that much training is
-  done twice.
+  `grc-training/checkpoints`. A checkpoint is saved about every 20 minutes, so at most that much training is done
+  twice.
 - Finished parts aren't done again: a finished training loads its saved adapter, a finished validation check prints
   its saved table, and a finished export prints the file's name.
 - Only the export left? Run the Settings cell (2) and the Install cell (3), then the Export cell (9): it reloads the
@@ -103,8 +102,8 @@ To train later, set `BASE_ONLY` back to `False` (the uploaded notebook from this
 
 ## What the validation table means
 
-At the end the notebook checks the trained model on the file's validation rows: about 10% of the rows, from generated
-companies it never trained on. The table is printed and saved in Drive as `grc-training/validation.json`.
+At the end the notebook checks the trained model on the file's validation rows: about 10% of the rows, held out from
+training. The table is printed and saved in Drive as `grc-training/validation.json`.
 
 - **Validation loss:** how far the model's predictions are from the correct answers of the validation rows; lower is
   better. It's a quick health check: a value far above the last training loss means the model learnt the training rows
@@ -122,7 +121,7 @@ companies it never trained on. The table is printed and saved in Drive as `grc-t
       have cited something.
     - **match exactly:** the share equal to the correct answer word for word. This is strict for free text: a correct
       answer worded differently counts as a miss.
-- These numbers come from made-up data. The real measure is the after-test compared with the before-test (D239).
+- These numbers come from the file's own held-out rows. The real measure is the after-test compared with the before-test (D239).
 
 ## Matching the 4-bit file (Q-TR-4, answered: D253)
 
@@ -147,7 +146,7 @@ over it.
 
 | In Google Drive, `grc-training/`    | What                                                            |
 | ----------------------------------- | --------------------------------------------------------------- |
-| `train.jsonl`                       | the made-up training file you uploaded                          |
+| `train.jsonl`                       | the training file you uploaded                                  |
 | `checkpoints/`                      | the last 2 checkpoints while training, and `run.json` naming it |
 | `adapter/`                          | the trained LoRA add-on, saved when training ends               |
 | `validation.json`                   | the validation table                                            |
