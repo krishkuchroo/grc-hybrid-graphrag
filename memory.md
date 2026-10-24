@@ -9,6 +9,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **MVP-end step (D229) ran on 2026-10-17:** all of S2–S8 is on GitHub (`main` at 995804f, pushed by the user). Migrations 0006–0011 were applied with `drizzle-kit migrate` in `packages/api` as `grc_migrator` through the dev relay (`pnpm db:migrate` doesn't exist yet; S7-026). `pnpm --filter api setup:tokenizer` had never been run and the image copies the repo at build time, so grc-api/grc-worker were rebuilt a second time after it. The compose run used `compose.yaml` plus `compose.dev.yaml`. The start check passed: health 200, S3–S8 routes give 401 without a session. `pnpm seed:demo` ran: Acme and Globex, 7 logins each. Two transient errors while the worker processed the seeded documents, both recovered: one pg-boss connection timeout on `audit.verify-chains`, and one record-dedupe Neo4j 10 s transaction timeout (`name-matcher.ts`) while Gemma ran, whose retry passed. Next: the user's click-through (D232).
 - **Next build (D233–D245), 2026-10-18:** steps 1 and 2 are built and merged into local `main` in fast mode (D222), from the main session with agents: AI-001, FT-002, S8-012, AI-002 and FT-001. Not pushed yet. Next: the user's set-up (D239): Unsloth Studio with Qwen3.5-4B, at least 8,192 tokens of context, on a port other than 8888; the `AI_TEXT_*` settings and the key in `.env`; Ollama for bge-m3 only. Then the grc-api/grc-worker rebuild, then the Company X before-test.
 - **Training tooling and Company X base step (D246–D253), 2026-10-22:** the training tooling (TR-001, TR-002, TR-004, TR-005) is built and merged into local `main` in fast mode (D222), not pushed. The Company X base step is loaded in both orgs (`company-x-fast` and `company-x`; note under D235). Next, all the user's: stop the cartography-probe-1..4 containers (another project's) so the stack can be rebuilt; run the notebook's base-only export in Colab (D253) and load `qwen3.5-4b-base.Q4_K_M.gguf` in the Unsloth desktop app on 8888 (D252) with context at least 8,192 and Parallel Slots 1; create the Unsloth API key and add the four `AI_TEXT_*` lines to `.env`. Then the main session rebuilds grc-api and grc-worker and runs the AI check, and the documents step and the before-test follow (the user sets company-x's Admin password with `pnpm org:admin-password --org company-x --email admin@company-x.example` in their own terminal).
+  - **2026-10-23:** D254 is recorded (train both `extraction` and `graph_query`, 1,000 rows each) and the training file `train-mix-1000` is built (`data/generated/training/train-mix-1000/`). Next, the user uploads `train.jsonl` to Google Drive's `grc-training` folder and runs the notebook in Colab.
 - **Known issue (workaround, no task), 2026-10-22:** Node 24.6's `--use-system-ca` doesn't trust Caddy's local root on this Mac, although it is in the keychain with the same SHA-256 (47EA0156…45F1D) and `pnpm test:env` passes caddy-root; calls fail with UNABLE_TO_GET_ISSUER_CERT_LOCALLY. The workaround keeps full checking: run the HTTPS commands (`dataset:load`, `dataset:score`, `bench:run`, `gen:data` full mode) with `NODE_EXTRA_CA_CERTS=<copy of grc-caddy:/data/caddy/pki/authorities/local/root.crt>` (`docker cp grc-caddy:/data/caddy/pki/authorities/local/root.crt <file>`). Never `NODE_TLS_REJECT_UNAUTHORIZED=0` (D176).
 - **Done:** phases 1–6 (locked), 8 (orchestration, 2026-09-27) and 9 (workflow). M0 and S1 are approved and tagged `m0` and `s1` (D193, D218). Phase 7 (stress test and benchmark) is deferred (see "Deferred phases").
 - **Task status:** `TASKS.md` is the source of truth for each task. The resume point is CLAUDE.md "Current state".
@@ -916,7 +917,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **Size:** about 1,000–3,000 rows for each job that is trained.
   - **Source:** built only from our generators, never from Company X (D234, D239). The file is synthetic only, and it is uploaded to Colab (D247).
   - **Method:** LoRA with Unsloth on Qwen3.5-4B, merged, then exported to a 4-bit GGUF and loaded in Unsloth Studio. In the app only `AI_TEXT_MODEL` changes.
-  - **Still open:** training question 2, which jobs to train. It is asked after the before-test, which shows which jobs are weak. D239's order is unchanged: the before-test runs first, on the untrained model.
+  - **Still open:** training question 2, which jobs to train. It is asked after the before-test, which shows which jobs are weak. D239's order is unchanged: the before-test runs first, on the untrained model. *(Changed by D254: the user answered it on 2026-10-23, before the before-test: both `extraction` and `graph_query`, 1,000 rows each. The before-test still runs first, on the untrained base (D253).)*
   - **Tasks:** TR-001 to TR-004 (2026-10-20, fast mode D222).
   - **Jobs trained (D249–D251, 2026-10-20):** at most `extraction` and `graph_query`. The `job` list above stays the format's four names, but `mapping` (D251) and `answer` (D249) aren't trained.
 - **D249 Q-TR-1, the `answer` job: leave it out of training** (2026-10-20, the user's answer, passed on by the main session: "leave the answer job out").
@@ -930,7 +931,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **D251 Q-TR-3, the `mapping` job: leave it out of training** (2026-10-20, the user's answer, passed on by the main session: "leave it out").
   - **Options offered:** leave mapping out (the recommendation); or use the app's official NIST crosswalks as correct answers, which overlap Company X's own mapping answers and so risk training on the exam (D234).
   - **The user chose:** leave it out. The `mapping` job isn't trained.
-  - **Together with D249:** training covers at most two jobs, `extraction` and `graph_query`. Training question 2 (which of these two to train) stays open until after the before-test (D239).
+  - **Together with D249:** training covers at most two jobs, `extraction` and `graph_query`. Training question 2 (which of these two to train) stays open until after the before-test (D239). *(Changed by D254: answered on 2026-10-23, before the before-test: both jobs, 1,000 rows each.)*
 - **D252 Unsloth Studio runs through its desktop app on port 8888** (2026-10-20, the user's answer, passed on by the main session: option (2), keep the desktop app on 8888). It changes D236's port note.
   - **Why asked:** the desktop app (Unsloth.app, a Tauri wrapper) always starts its backend as `unsloth studio --api-only -H 127.0.0.1 -p 8888`; its log shows `start_managed_server command called with port 8888`, and no port setting was found. HexStrike (another project) listens on `*:8888` with no login.
   - **Options offered:** (1) quit the desktop app and run `unsloth studio -H 127.0.0.1 -p 8890 --parallel 1`, using the same Studio screens in the browser (the recommendation; keeps D236's port note); (2) keep the desktop app on 8888.
@@ -947,6 +948,24 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
     - The after-test loads the trained Q4_K_M, made the same way.
     - The merged notebook (TR-004, 27628f4) can't do the base export yet: its Data cell needs `train.jsonl` and its Export cell stops without a finished adapter. **Task:** TR-005 adds a "base only" mode (2026-10-22, fast mode D222).
   - **Corrected time estimate** (from TR-004's builder): Unsloth's T4 notebook took about 4 s per row, so D246's 3–5 h is low. With about 3,000–4,000 rows and 2 passes, training is about 6–9 h, likely two Colab sessions resumed from the Drive checkpoints. Replaced checkpoints go to Drive's Bin and still count against space (the README says to empty it).
+- **D254 Training question 2, which jobs to train: both, kept small** (2026-10-23, the user's answer, passed on by the main session). It answers D239's open question 2.
+  - **What the user said:** first "We will do 1 job", then, asked which one, "maybe a mix of both which can make the model either training it on graph queries or knowing well about documents, hybrid could overload the compute". The user also said the compute must not fall on the Mac.
+  - **The decision:** train both `extraction` and `graph_query`, 1,000 rows each (D248's minimum), so training stays small enough for about one free Colab session. At Unsloth's ~4 s per row on a T4 with 2 passes, that is about 4 hours of training, plus the validation check and the export.
+  - **All training compute stays in Colab (D247):** the model download, training, the validation check and the GGUF export. On the Mac only the training-data file is built (about 11 seconds, offline) and, later, the exported model runs in Unsloth Studio for the tests.
+  - **The file:** `pnpm train:data --jobs extraction,graph_query --max-per-job 1000 --name train-mix-1000` wrote `data/generated/training/train-mix-1000/` (`train.jsonl` with 1,000 + 1,000 rows, and `manifest.json`; git-ignored).
+    - `extraction`: 906 train, 94 validation.
+    - `graph_query`: 901 train, 99 validation. Of all 1,000 graph_query rows (train and validation together), 99 ask about a made-up name: 9.9%, under the 10% cap.
+    - Validation worlds: seeds 1004 and 1006.
+  - **Checked by the main session** with Qwen3.5-4B's own tokenizer and chat template (thinking off):
+    - the longest row is 2,258 tokens (the notebook's limit is 4,096, so none is skipped);
+    - every answer is valid JSON;
+    - no thinking text;
+    - no Company X text.
+  - **Known flaw, not fixed (waiting on the user):** in `graph_query`, 6 validation inputs are also training inputs, and 21 inputs repeat, because generated names repeat across worlds.
+    - It only makes the notebook's `graph_query` validation score look a little better than it is. Training itself is unaffected.
+    - Fixing it needs a small change to the training-data builder (TR-002's files).
+  - **The notebook needs no change:** `JOBS = None` trains every job in the file.
+  - **Order:** D248 had planned to ask this after the before-test; the user answered it before. The before-test still uses the untrained base file that the notebook's base-only mode makes (D253). That file doesn't depend on the training, so the before-test can still run.
 
 ## Open questions
 - **Phase 8, round 1:** answered on 2026-09-26 (D74–D80).
@@ -1007,9 +1026,9 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
 - **Parked for later phases:**
   - Phase 7: observability for the stress tests.
 - **Field test with real public data** (2026-10-18, the user's proposal): test the product with a real public dataset that has published answers, to cross-check chat answers and to measure ingestion accuracy, duplicate removal, and schema and data consistency through normalisation. This answers the testing-plan doc's open question "is the field test with real public data in the plan": yes. Which datasets is still being researched; none is chosen yet. Since then: D234 (Company X).
-- **Training a model with Unsloth (D239), asked 2026-10-18; 1, 3 and 4 answered:**
+- **Training a model with Unsloth (D239), asked 2026-10-18; all four answered:**
   1. ~~Which base model to train.~~ Answered on 2026-10-18 (D243): Qwen3.5-4B, Unsloth's 4-bit GGUF. Confirmed on 2026-10-20 (D246): keep 4B.
-  2. Which jobs to train it for. Narrowed on 2026-10-20 (D249, D251): mapping and answering aren't trained, so the choice is `extraction`, `graph_query`, or both. **Still open:** asked after the before-test. The training-data command takes the answer as a run-time choice (TR-001).
+  2. ~~Which jobs to train it for.~~ Answered on 2026-10-23 (D254), before the before-test: both `extraction` and `graph_query`, 1,000 rows each, so training fits in about one free Colab session. Earlier narrowed on 2026-10-20 (D249, D251): mapping and answering aren't trained.
   3. ~~Where to train.~~ Answered on 2026-10-20 (D247): free Google Colab, with checkpoints and resume.
   4. ~~The training-data format.~~ Answered on 2026-10-20 (D248): JSONL with `job`, `messages`, `split` and `seed`.
 - **The training tasks' questions** (asked 2026-10-20; Q-TR-1 to Q-TR-3 answered the same day):
