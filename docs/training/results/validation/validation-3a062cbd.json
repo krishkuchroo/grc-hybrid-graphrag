@@ -7,14 +7,8 @@
       "parsesAsJson": 50,
       "equalsExpected": 43,
       "measures": [
-        [
-          "answers that parse as JSON",
-          "parsesAsJson"
-        ],
-        [
-          "answers equal to the expected answer",
-          "equalsExpected"
-        ]
+        ["answers that parse as JSON", "parsesAsJson"],
+        ["answers equal to the expected answer", "equalsExpected"]
       ]
     },
     "graph_query": {
@@ -22,14 +16,8 @@
       "parsesAsJson": 50,
       "equalsExpected": 41,
       "measures": [
-        [
-          "answers that parse as JSON",
-          "parsesAsJson"
-        ],
-        [
-          "answers equal to the expected answer",
-          "equalsExpected"
-        ]
+        ["answers that parse as JSON", "parsesAsJson"],
+        ["answers equal to the expected answer", "equalsExpected"]
       ]
     },
     "answer": {
@@ -37,14 +25,8 @@
       "citesOnlyGivenSources": 33,
       "matchesExactly": 32,
       "measures": [
-        [
-          "answers citing only the given sources",
-          "citesOnlyGivenSources"
-        ],
-        [
-          "answers matching exactly",
-          "matchesExactly"
-        ]
+        ["answers citing only the given sources", "citesOnlyGivenSources"],
+        ["answers matching exactly", "matchesExactly"]
       ]
     }
   },

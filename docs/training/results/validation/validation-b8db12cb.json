@@ -7,14 +7,8 @@
       "parsesAsJson": 50,
       "equalsExpected": 38,
       "measures": [
-        [
-          "answers that parse as JSON",
-          "parsesAsJson"
-        ],
-        [
-          "answers equal to the expected answer",
-          "equalsExpected"
-        ]
+        ["answers that parse as JSON", "parsesAsJson"],
+        ["answers equal to the expected answer", "equalsExpected"]
       ]
     },
     "graph_query": {
@@ -22,14 +16,8 @@
       "parsesAsJson": 50,
       "equalsExpected": 39,
       "measures": [
-        [
-          "answers that parse as JSON",
-          "parsesAsJson"
-        ],
-        [
-          "answers equal to the expected answer",
-          "equalsExpected"
-        ]
+        ["answers that parse as JSON", "parsesAsJson"],
+        ["answers equal to the expected answer", "equalsExpected"]
       ]
     }
   }
