@@ -12,8 +12,12 @@
 // 5. Otherwise `step writing_answer`, and Gemma's answer (`chat-answer-v1`, ./answer-prompt.ts)
 //    streamed as `token` events, at most 1,024 tokens and 180 s. Earlier turns aren't sent (S6-Q4).
 // 6. The citations are the source numbers the answer uses that match a source (./citations.ts).
-// 7. The message is saved with its `chat.asked` entry in one transaction (ChatService.saveMessage),
-//    then `done` with the saved message.
+// 7. Once the turn has ended (the Gemma slot is free) and unless the message failed, the pending link
+//    findings that match the question (D260, PendingLinks.pendingLinksFor): only for a role that can
+//    open the review queue, built by our code and never given to Gemma. A failure there is logged by
+//    its code and leaves the list out (null); the answer stays.
+// 8. The message is saved with its `chat.asked` entry in one transaction (ChatService.saveMessage),
+//    then `done` with the saved message and the list.
 // When things go wrong:
 // - The person leaves or presses Stop (the connection closes): the turn's signal stops Gemma and
 //   frees the slot at once; the message is saved `stopped` with what was written, and audited. A
@@ -32,6 +36,7 @@ import {
   SEARCH_LIMITS,
   type AnswerSource,
   type ChatMessageStatus,
+  type ChatPendingLinks,
   type ChatStreamEvent,
   type GraphFallbackReason,
   type Label,
@@ -42,6 +47,7 @@ import type { TextAnswer, TextModel, TextModelSession, TextRequest, TextStreamEn
 import { ApiError, errorKind, newReferenceId } from '../common/errors.js';
 import { createLogger } from '../common/logger.js';
 import type { Caller } from '../records/records.service.js';
+import { storedPendingLinks, type PendingLinks } from '../review/queue/pending-links.js';
 import type { GraphQueryModel, Retrieval, RetrievalResult, SearchCaller } from '../search/retrieval.js';
 import { ANSWER_PROMPT_VERSION, answerRequest } from './answer-prompt.js';
 import type { ChatMessageDbRow } from './chat.schema.js';
@@ -106,6 +112,8 @@ export interface AskRunnerDeps {
   textModel: TextModel;
   retrieval: Retrieval;
   chat: Pick<ChatService, 'saveMessage'>;
+  /** The "Not reviewed yet" list's lookup (D260). */
+  pendingLinks: Pick<PendingLinks, 'pendingLinksFor'>;
   log?: Logger;
   /** For tests: the clock, in milliseconds. */
   now?: () => number;
@@ -115,6 +123,7 @@ export class AskRunner {
   private readonly textModel: TextModel;
   private readonly retrieval: Retrieval;
   private readonly chat: Pick<ChatService, 'saveMessage'>;
+  private readonly pendingLinks: Pick<PendingLinks, 'pendingLinksFor'>;
   private readonly log: Logger;
   private readonly now: () => number;
 
@@ -122,6 +131,7 @@ export class AskRunner {
     this.textModel = deps.textModel;
     this.retrieval = deps.retrieval;
     this.chat = deps.chat;
+    this.pendingLinks = deps.pendingLinks;
     this.log = deps.log ?? createLogger().child({ context: 'ChatAsk' });
     this.now = deps.now ?? (() => performance.now());
   }
@@ -188,6 +198,25 @@ export class AskRunner {
     const model = state.model ?? (graphAsked ? this.textModel.modelName : null);
     const label: Label = retrieval?.label ?? 'public';
 
+    // After the turn, so the Gemma slot is already free; never for a failed message.
+    let pending: ChatPendingLinks | null = null;
+    if (status !== 'failed') {
+      try {
+        pending = await this.pendingLinks.pendingLinksFor(input.caller, input.question, retrieval);
+      } catch (err) {
+        this.log.warn(
+          {
+            ...errorKind(err),
+            orgId: input.caller.orgId,
+            conversationId: input.conversationId,
+            code: 'pending_links_failed',
+          },
+          'pending link findings could not be read',
+        );
+        pending = null;
+      }
+    }
+
     let saved: ChatMessageDbRow;
     try {
       saved = await this.chat.saveMessage(input.caller, input.conversationId, {
@@ -212,6 +241,7 @@ export class AskRunner {
         label,
         askedAt,
         graphRan: hybrid && retrieval?.graph.ran === true,
+        pendingLinks: pending !== null ? storedPendingLinks(pending) : null,
       });
     } catch (err) {
       const referenceId = newReferenceId();
@@ -239,6 +269,8 @@ export class AskRunner {
       firstWordsMs: state.firstWordsMs,
       totalMs: since(),
       model,
+      pendingLinks: pending !== null ? pending.items.length : null,
+      pendingLinksTotal: pending !== null ? pending.total : null,
     };
 
     if (failure !== null) {
@@ -270,7 +302,7 @@ export class AskRunner {
     }
 
     this.log.info(where, status === 'answered' ? 'chat question answered' : 'chat question stopped');
-    await send({ event: 'done', message: visibleMessage(saved, cited.map(shownCitation)) });
+    await send({ event: 'done', message: visibleMessage(saved, cited.map(shownCitation), pending) });
   }
 
   /** The work done in the question's Gemma turn. */

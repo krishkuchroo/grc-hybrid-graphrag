@@ -5,6 +5,10 @@
 // AI_TEXT_PROVIDER picks the text model's server (D236): `ollama` (the default, gemma4:12b) or
 // `openai-compatible` (the user's Unsloth Studio model through its local OpenAI-compatible API, at
 // AI_TEXT_BASE_URL with the secret AI_TEXT_API_KEY). Embeddings always stay on Ollama (bge-m3).
+// AI_TEXT_CONTEXT_TOKENS (D260) is the context that server's model was loaded with (set there by
+// hand, 18,432 for the user's Qwen model, D259), which its API can't report or set per call: a
+// whole number from 2,048 to 262,144, 18,432 when empty. Under `ollama` it is ignored, as the other
+// openai-compatible settings are: Ollama runs every call with its own 8,192.
 // No address is refused for being off the Mac (D242): `offMacAddressSettings` names the ones that
 // are, for a warning at start-up.
 //
@@ -20,6 +24,11 @@ export const DEFAULT_EMBEDDING_MODEL = 'bge-m3';
 export const TEXT_PROVIDERS = ['ollama', 'openai-compatible'] as const;
 export type TextProvider = (typeof TEXT_PROVIDERS)[number];
 export const DEFAULT_TEXT_PROVIDER: TextProvider = 'ollama';
+
+/** AI_TEXT_CONTEXT_TOKENS (D260): its default, and the range it may take. */
+export const DEFAULT_TEXT_CONTEXT_TOKENS = 18_432;
+export const MIN_TEXT_CONTEXT_TOKENS = 2_048;
+export const MAX_TEXT_CONTEXT_TOKENS = 262_144;
 
 /** An OpenAI-compatible text-model server (Unsloth Studio, D236). The key is a secret (D57). */
 export interface OpenAiCompatibleSettings {
@@ -37,6 +46,9 @@ export interface AiSettings {
   textProvider: TextProvider;
   /** Present exactly when `textProvider` is `openai-compatible`. */
   openAiCompatible?: OpenAiCompatibleSettings;
+  /** The OpenAI-compatible server's context in tokens (AI_TEXT_CONTEXT_TOKENS); present exactly
+   * when `textProvider` is `openai-compatible`. */
+  textContextTokens?: number;
 }
 
 /** An Ollama model tag such as `gemma4:12b`, `bge-m3` or `library/bge-m3:latest`. */
@@ -107,6 +119,16 @@ function openAiCompatibleModel(value: string | undefined): string {
   return modelName('AI_TEXT_MODEL', value, DEFAULT_TEXT_MODEL);
 }
 
+function textContextTokens(value: string | undefined): number {
+  if (isBlank(value)) return DEFAULT_TEXT_CONTEXT_TOKENS;
+  const raw = value.trim();
+  const tokens = /^\d{1,7}$/.test(raw) ? Number(raw) : Number.NaN;
+  if (!Number.isInteger(tokens) || tokens < MIN_TEXT_CONTEXT_TOKENS || tokens > MAX_TEXT_CONTEXT_TOKENS) {
+    throw new Error('AI_TEXT_CONTEXT_TOKENS must be a whole number from 2048 to 262144');
+  }
+  return tokens;
+}
+
 export function aiSettingsFromEnv(env: NodeJS.ProcessEnv = process.env): AiSettings {
   const provider = textProvider(env.AI_TEXT_PROVIDER);
   // The embedder needs these under both providers.
@@ -130,6 +152,7 @@ export function aiSettingsFromEnv(env: NodeJS.ProcessEnv = process.env): AiSetti
       baseUrl: openAiCompatibleBaseUrl(env.AI_TEXT_BASE_URL),
       apiKey: openAiCompatibleApiKey(env.AI_TEXT_API_KEY),
     },
+    textContextTokens: textContextTokens(env.AI_TEXT_CONTEXT_TOKENS),
   };
 }
 

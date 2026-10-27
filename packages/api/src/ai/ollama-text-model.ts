@@ -152,6 +152,8 @@ export function errorTypeOf(err: unknown): string {
 
 export class OllamaTextModel implements TextModel {
   readonly modelName: string;
+  /** Ollama runs every call with this context (`num_ctx`). */
+  readonly contextTokens = TEXT_MODEL_CONTEXT_TOKENS;
   private readonly model: LanguageModel;
   private readonly log: Logger;
   private readonly timeoutMs: number;

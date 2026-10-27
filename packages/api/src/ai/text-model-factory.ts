@@ -19,7 +19,12 @@ export function createTextModel(settings: AiSettings, opts: { log?: Logger } = {
       if (connection === undefined) {
         throw new Error('AI_TEXT_PROVIDER is openai-compatible, but AI_TEXT_BASE_URL and AI_TEXT_API_KEY are missing');
       }
-      return new OpenAiCompatibleTextModel({ connection, model: settings.textModel, log });
+      return new OpenAiCompatibleTextModel({
+        connection,
+        model: settings.textModel,
+        contextTokens: settings.textContextTokens,
+        log,
+      });
     }
     default:
       throw new Error('AI_TEXT_PROVIDER must be ollama or openai-compatible');

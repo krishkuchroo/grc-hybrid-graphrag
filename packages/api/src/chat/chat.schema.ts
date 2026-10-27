@@ -9,7 +9,9 @@
 //   activity); never delete.
 // - `chat_messages`: one per question, with its answer, status, mode, fallback reason, citations
 //   (S6-001's stored citation shape), graph query, model, prompt versions, timings and label (the
-//   highest label among the sources given to Gemma, Public when none). The foreign key covers
+//   highest label among the sources given to Gemma, Public when none), and the pending link findings
+//   listed with the answer (D260, migration 0012: their IDs, the total and the one document, never a
+//   name or a sentence; null for a role that can't open the review queue). The foreign key covers
 //   (org, owner, conversation), so a message can only go into its owner's own conversation in the
 //   same org. grc_app may insert and read; never change or delete.
 import {
@@ -40,6 +42,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { organization } from '../identity/schema.js';
+import type { StoredPendingLinks } from '../review/queue/pending-links.js';
 
 /** An owner ID is 1 to 200 characters. */
 export const MAX_CHAT_OWNER_ID_LENGTH = 200;
@@ -117,6 +120,9 @@ export const chatMessages = pgTable(
       .default(sql`'{}'::jsonb`),
     /** The highest label among the sources given to Gemma; Public when none (D51, S6-Q9). */
     label: text('label').$type<Label>().notNull(),
+    /** The pending link findings listed with the answer (D260): `{ findingIds, total, documentId }`,
+     * IDs and counts only; null for a role not shown them, and for messages from before 0012. */
+    pendingLinks: jsonb('pending_links').$type<StoredPendingLinks>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -143,6 +149,10 @@ export const chatMessages = pgTable(
     check('chat_messages_prompt_versions_check', sql`jsonb_typeof(${t.promptVersions}) = 'object'`),
     check('chat_messages_timings_check', sql`jsonb_typeof(${t.timings}) = 'object'`),
     check('chat_messages_label_check', inList(t.label, LABELS)),
+    check(
+      'chat_messages_pending_links_check',
+      sql`${t.pendingLinks} IS NULL OR jsonb_typeof(${t.pendingLinks}) = 'object'`,
+    ),
   ],
 );
 

@@ -151,7 +151,7 @@ export const BENCHMARK_LIMITS = Object.freeze({
   /** The most expected records one question names. */
   expectedPerQuestion: 50,
   /** The most citations one answer holds: one per source in the context. */
-  citationsPerAnswer: SEARCH_LIMITS.contextPassages + SEARCH_LIMITS.contextRecords,
+  citationsPerAnswer: SEARCH_LIMITS.contextPassagesMax + SEARCH_LIMITS.contextRecords,
   /** An item key or question ID: at most this many characters. */
   itemKeyMaxLength: 200,
   /** A short code (a skip reason, a failure code): at most this many characters. */

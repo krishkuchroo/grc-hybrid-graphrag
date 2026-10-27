@@ -114,14 +114,14 @@ documentRoute({
   method: 'get',
   path: '/chat/conversations/{id}',
   summary:
-    "One of the caller's own conversations with its messages, oldest first. Each citation is read again with the caller's access now; one they can no longer see is { type: 'hidden' }. A message above their current clearance shows its question only (hidden: true). 404 for anyone else's",
+    "One of the caller's own conversations with its messages, oldest first. Each citation is read again with the caller's access now; one they can no longer see is { type: 'hidden' }. A message above their current clearance shows its question only (hidden: true). pendingLinks: for Admins and Analysts, the pending link findings listed with the answer, read again with their access now (null for other roles). 404 for anyone else's",
   response: chatConversationSchema,
 });
 documentRoute({
   method: 'post',
   path: '/chat/conversations/{id}/messages',
   summary:
-    'Ask a question (hybrid by default; vector is for the benchmark). Answers text/event-stream, one event per frame (event: <name>, data: <JSON>): queued (the place in the queue, while waiting), step, sources, token (the answer as it is written), then done (the saved message) or error (code, message, referenceId). Every question is saved and audited as chat.asked, answered, stopped or failed. 400 and 404 come before the stream; 429 after 10 questions and searches in a minute',
+    'Ask a question (hybrid by default; vector is for the benchmark). Answers text/event-stream, one event per frame (event: <name>, data: <JSON>): queued (the place in the queue, while waiting), step, sources, token (the answer as it is written), then done (the saved message, with pendingLinks: the matching pending link findings for Admins and Analysts, null for other roles) or error (code, message, referenceId). Every question is saved and audited as chat.asked, answered, stopped or failed. 400 and 404 come before the stream; 429 after 10 questions and searches in a minute',
   body: askBodySchema,
   response: chatStreamEventSchema,
   responseContentType: 'text/event-stream',

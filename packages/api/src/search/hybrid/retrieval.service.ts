@@ -14,8 +14,9 @@
 // 4. The API's own visibility check (./entity-filter.ts): each passage's document is read again in
 //    Postgres, in the asker's org context, so a passage of a document that is removed, another
 //    org's, or hidden from the asker is dropped; records and links are checked against the role and
-//    clearance. Then RRF with k=60 (./fusion.ts), the context limits, and the two sections
-//    (./context.ts).
+//    clearance. Then RRF with k=60 (./fusion.ts), the context limits (15 passages within a token
+//    budget set by the text model's context, and 30 records, D260), a clear document's other
+//    chunks (./clear-document.ts, up to 24 passages in all), and the two sections (./context.ts).
 // Logs: IDs, counts, times and codes only; never the question, a passage, a name or the query (D163).
 import {
   DEFAULT_SEARCH_MODE,
@@ -45,7 +46,8 @@ import type {
 } from '../retrieval.js';
 import { buildContext } from './context.js';
 import { filterVisible, type DocumentFacts } from './entity-filter.js';
-import { fuseSources, selectContext } from './fusion.js';
+import { addDocumentChunks, clearDocumentOf, readDocumentChunks } from './clear-document.js';
+import { contextLimitsFor, fuseSources, selectContext, type ContextLimits, type ContextSelection } from './fusion.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -55,6 +57,9 @@ export interface HybridRetrievalDeps {
   graph: GraphSearch;
   /** The text model: Path B's model when the caller passes none. */
   textModel: GraphQueryModel;
+  /** The text model's context in tokens (`TextModel.contextTokens`), which sets the passages'
+   * token budget (D260). */
+  contextTokens: number;
   log?: Logger;
   /** The clock, in milliseconds. */
   now?: () => number;
@@ -70,6 +75,7 @@ export class HybridRetrieval implements Retrieval {
   private readonly vector: VectorSearch;
   private readonly graph: GraphSearch;
   private readonly textModel: GraphQueryModel;
+  private readonly limits: ContextLimits;
   private readonly log: Logger;
   private readonly now: () => number;
 
@@ -78,6 +84,7 @@ export class HybridRetrieval implements Retrieval {
     this.vector = deps.vector;
     this.graph = deps.graph;
     this.textModel = deps.textModel;
+    this.limits = contextLimitsFor(deps.contextTokens);
     this.log = (deps.log ?? createLogger()).child({ context: 'Retrieval' });
     this.now = deps.now ?? (() => performance.now());
   }
@@ -140,7 +147,8 @@ export class HybridRetrieval implements Retrieval {
       documents: docs,
     });
     const fused = fuseSources(filtered.passages, graphOk !== null ? filtered.records : null);
-    const selection = selectContext(fused, filtered.links);
+    const fusedSelection = selectContext(fused, filtered.links, this.limits);
+    const { selection, added } = await this.withClearDocument(caller, fusedSelection);
     const built = buildContext(selection, graphOk?.values ?? [], caller.clearance, SEARCH_LIMITS.searchResults);
 
     const graph = graphPart(mode, pathB);
@@ -171,6 +179,8 @@ export class HybridRetrieval implements Retrieval {
         },
         kept: {
           passages: keptPassages,
+          fromClearDocument: added,
+          passageTokens: selection.passageTokens,
           records: selection.kept.length - keptPassages,
           links: selection.links.length,
         },
@@ -193,6 +203,21 @@ export class HybridRetrieval implements Retrieval {
       label: built.label,
       timings,
     };
+  }
+
+  /** The selection with its clear document's other chunks added, when one document clearly matches
+   * (./clear-document.ts); unchanged when none does or there is no room. */
+  private async withClearDocument(
+    caller: SearchCaller,
+    selection: ContextSelection,
+  ): Promise<{ selection: ContextSelection; added: number }> {
+    const documentId = clearDocumentOf(selection.kept);
+    if (documentId === null) return { selection, added: 0 };
+    const keptChunkIds = selection.kept.flatMap((e) => (e.item.type === 'passage' ? [e.item.passage.chunkId] : []));
+    const room = SEARCH_LIMITS.contextPassagesMax - keptChunkIds.length;
+    if (room < 1 || selection.passageTokens >= this.limits.passageTokens) return { selection, added: 0 };
+    const more = await readDocumentChunks(this.db, caller, documentId, keptChunkIds, room);
+    return addDocumentChunks(selection, more, this.limits);
   }
 
   /** Each passage's document as the asker sees it in Postgres: only their own org's, under row

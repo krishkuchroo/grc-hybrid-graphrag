@@ -49,6 +49,7 @@ type NearestRow = {
   document_id: string;
   position: number;
   text: string;
+  token_count: number | string;
   label: string;
   record_type: string;
   document_name: string;
@@ -157,6 +158,8 @@ export class PgVectorSearch implements VectorSearch {
       const similarity = similarityOf(row.distance);
       if (similarity === null || !isDocumentKind(row.document_kind) || !isLabel(row.label)) continue;
       if (!isChunkRecordType(row.record_type)) continue;
+      const tokenCount = Number(row.token_count);
+      if (!Number.isInteger(tokenCount) || tokenCount < 1) continue;
       passages.push({
         chunkId: row.chunk_id,
         documentId: row.document_id,
@@ -168,6 +171,7 @@ export class PgVectorSearch implements VectorSearch {
         similarity,
         recordType: row.record_type as VectorPassage['recordType'],
         recordIds: recordIds.get(row.chunk_id) ?? [],
+        tokenCount,
       });
       if (passages.length >= this.limit) break;
     }
@@ -221,6 +225,7 @@ export class PgVectorSearch implements VectorSearch {
                c.document_id,
                c."position",
                c."text",
+               c.token_count,
                c.label,
                c.record_type,
                d.file_name AS document_name,

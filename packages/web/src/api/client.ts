@@ -3182,6 +3182,81 @@ export type PostChatConversationsResponse = {
         };
         label: 'public' | 'internal' | 'confidential' | 'restricted';
         createdAt: string;
+        pendingLinks: {
+          items: Array<{
+            findingId: string;
+            status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+            type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+            from:
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'matched';
+                  record: {
+                    recordId: string;
+                    number: string;
+                    name: string;
+                    kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                  };
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'candidates';
+                  candidateCount: number;
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'proposed';
+                  findingId: string;
+                  status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'hidden';
+                };
+            to:
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'matched';
+                  record: {
+                    recordId: string;
+                    number: string;
+                    name: string;
+                    kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                  };
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'candidates';
+                  candidateCount: number;
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'proposed';
+                  findingId: string;
+                  status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'hidden';
+                };
+            sentence: unknown;
+            document: {
+              id: string;
+              name: string;
+              kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+            } | null;
+          }>;
+          total: number;
+          documentId: string | null;
+        } | null;
         hidden: false;
       }
     | {
@@ -3267,6 +3342,81 @@ export type GetChatConversationsIdResponse = {
         };
         label: 'public' | 'internal' | 'confidential' | 'restricted';
         createdAt: string;
+        pendingLinks: {
+          items: Array<{
+            findingId: string;
+            status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+            type: 'HOSTS' | 'RUNS' | 'EXPOSED_TO' | 'MITIGATED_BY' | 'GOVERNED_BY' | 'IMPACTS' | 'EXPOSES';
+            from:
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'matched';
+                  record: {
+                    recordId: string;
+                    number: string;
+                    name: string;
+                    kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                  };
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'candidates';
+                  candidateCount: number;
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'proposed';
+                  findingId: string;
+                  status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'hidden';
+                };
+            to:
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'matched';
+                  record: {
+                    recordId: string;
+                    number: string;
+                    name: string;
+                    kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident' | 'requirement';
+                  };
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'candidates';
+                  candidateCount: number;
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'proposed';
+                  findingId: string;
+                  status: 'pending' | 'live' | 'approved' | 'rejected' | 'removed';
+                }
+              | {
+                  kind: 'asset' | 'risk' | 'control' | 'policy' | 'incident';
+                  name: string;
+                  state: 'hidden';
+                };
+            sentence: unknown;
+            document: {
+              id: string;
+              name: string;
+              kind: 'asset_list' | 'policy_document' | 'soc_ticket' | 'audit_report' | 'evidence';
+            } | null;
+          }>;
+          total: number;
+          documentId: string | null;
+        } | null;
         hidden: false;
       }
     | {
@@ -6190,7 +6340,7 @@ export const api = {
       `/api/v1/benchmark/runs/${encodeURIComponent(path.id)}/finish`,
       body,
     ),
-  /** Add 1 to 25 result items to a running run (Admins only), each in one of the run's parts and modes. Answers longer than 4,000 characters are cut. An item with the same item key and mode as one already stored is ignored; the answer says how many were stored and how many were repeats. The run's last activity moves on. 409 run_not_running for a finished or failed run; 404 for a missing one or another org's */
+  /** Add 1 to 25 result items to a running run (Admins only), each in one of the run's parts and modes. Answers longer than 4,000 characters are cut. An item with the same item key, part and mode as one already stored is ignored; the answer says how many were stored and how many were repeats. The run's last activity moves on. 409 run_not_running for a finished or failed run; 404 for a missing one or another org's */
   postBenchmarkRunsIdResults: (
     path: { id: string },
     body: PostBenchmarkRunsIdResultsBody,
@@ -6212,10 +6362,10 @@ export const api = {
   /** Start an empty conversation, titled "New conversation" until its first question names it */
   postChatConversations: (body: PostChatConversationsBody): Promise<PostChatConversationsResponse> =>
     request<PostChatConversationsResponse>('POST', '/api/v1/chat/conversations', body),
-  /** One of the caller's own conversations with its messages, oldest first. Each citation is read again with the caller's access now; one they can no longer see is { type: 'hidden' }. A message above their current clearance shows its question only (hidden: true). 404 for anyone else's */
+  /** One of the caller's own conversations with its messages, oldest first. Each citation is read again with the caller's access now; one they can no longer see is { type: 'hidden' }. A message above their current clearance shows its question only (hidden: true). pendingLinks: for Admins and Analysts, the pending link findings listed with the answer, read again with their access now (null for other roles). 404 for anyone else's */
   getChatConversationsId: (path: { id: string }): Promise<GetChatConversationsIdResponse> =>
     request<GetChatConversationsIdResponse>('GET', `/api/v1/chat/conversations/${encodeURIComponent(path.id)}`),
-  /** Ask a question (hybrid by default; vector is for the benchmark). Answers text/event-stream, one event per frame (event: <name>, data: <JSON>): queued (the place in the queue, while waiting), step, sources, token (the answer as it is written), then done (the saved message) or error (code, message, referenceId). Every question is saved and audited as chat.asked, answered, stopped or failed. 400 and 404 come before the stream; 429 after 10 questions and searches in a minute */
+  /** Ask a question (hybrid by default; vector is for the benchmark). Answers text/event-stream, one event per frame (event: <name>, data: <JSON>): queued (the place in the queue, while waiting), step, sources, token (the answer as it is written), then done (the saved message, with pendingLinks: the matching pending link findings for Admins and Analysts, null for other roles) or error (code, message, referenceId). Every question is saved and audited as chat.asked, answered, stopped or failed. 400 and 404 come before the stream; 429 after 10 questions and searches in a minute */
   postChatConversationsIdMessages: (
     path: { id: string },
     body: PostChatConversationsIdMessagesBody,

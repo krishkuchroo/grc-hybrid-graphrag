@@ -29,6 +29,8 @@ export const APP_SETTINGS: readonly AppSetting[] = [
   { name: 'AI_TEXT_PROVIDER', required: false },
   { name: 'AI_TEXT_BASE_URL', required: false },
   { name: 'AI_TEXT_API_KEY', required: false },
+  // That server's context in tokens (D260): 18,432 when unset, used only with `openai-compatible`.
+  { name: 'AI_TEXT_CONTEXT_TOKENS', required: false },
   { name: 'BETTER_AUTH_URL', required: false, macDefault: 'https://grc.localhost' },
   { name: 'HOST', required: false },
   { name: 'PORT', required: false },

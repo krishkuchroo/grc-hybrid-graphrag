@@ -115,7 +115,7 @@ type ParsedFinding =
   | { row: FindingDbRow; kind: 'mapping'; proposal: MappingProposal };
 
 /** A document as the reader may read it. */
-interface DocumentInfo {
+export interface DocumentInfo {
   id: string;
   fileName: string;
   kind: ReviewSourceDocument['kind'];
@@ -126,7 +126,7 @@ interface DocumentInfo {
 }
 
 /** What the Postgres side of a page knows besides its rows. */
-interface PageFacts {
+export interface PageFacts {
   documents: Map<string, DocumentInfo>;
   /** The statuses of the `record` findings that link ends point to, as the reader sees them. */
   recordFindings: Map<string, ReviewFindingStatus>;
@@ -142,16 +142,16 @@ export interface ReviewQueueServiceDeps {
   log?: Logger;
 }
 
-function contextOf(caller: Caller): OrgContext {
+export function contextOf(caller: Caller): OrgContext {
   return { orgId: caller.orgId, userId: caller.userId, role: caller.role, clearance: caller.clearance };
 }
 
-function viewerOf(caller: Caller): QueueViewer {
+export function viewerOf(caller: Caller): QueueViewer {
   return { orgId: caller.orgId, role: caller.role, clearance: caller.clearance };
 }
 
 /** The labels at or below the reader's clearance (D51). */
-function visibleLabels(caller: Caller): Label[] {
+export function visibleLabels(caller: Caller): Label[] {
   return LABELS.filter((label) => isVisible(caller.clearance, label));
 }
 
@@ -228,7 +228,7 @@ function named(records: RecordLookup, kind: ReviewRecordKind, id: string): Named
 
 /** A link end as the list shows it: its matched record (or hidden), the proposed record it points
  * to with that finding's status, or how many candidates it has. */
-function endSummary(end: LinkEndProposal, records: RecordLookup, facts: PageFacts): LinkEndSummary {
+export function endSummary(end: LinkEndProposal, records: RecordLookup, facts: PageFacts): LinkEndSummary {
   const base = { kind: end.kind, name: end.name };
   if (end.match) {
     const record = records.shown(end.kind, end.match.recordId);
@@ -399,6 +399,52 @@ function mappingEnd(record: GraphRecord | undefined): MappingEndDetail {
   };
 }
 
+/** The reader's org and the labels at or below their clearance: our own check, before row security's
+ * (the queue's visibility, used by the chat's pending links too). */
+export function findingVisibility(caller: Caller, labels: readonly Label[]): SQL {
+  return and(eq(reviewFindings.orgId, caller.orgId), inArray(reviewFindings.label, [...labels]))!;
+}
+
+/** The documents the reader may read: their own org, a record type their role views, a label at or
+ * below their clearance; row security checks the same again. */
+export async function readVisibleDocuments(
+  tx: Tx,
+  caller: Caller,
+  labels: readonly Label[],
+  ids: readonly string[],
+): Promise<Map<string, DocumentInfo>> {
+  const out = new Map<string, DocumentInfo>();
+  if (ids.length === 0) return out;
+  const rows = await tx
+    .select({
+      id: documents.id,
+      fileName: documents.fileName,
+      kind: documents.kind,
+      recordType: documents.recordType,
+      label: documents.label,
+      uploaderType: documents.uploaderType,
+      uploaderId: documents.uploaderId,
+      createdAt: documents.createdAt,
+    })
+    .from(documents)
+    .where(
+      and(eq(documents.orgId, caller.orgId), inArray(documents.id, [...ids]), inArray(documents.label, [...labels])),
+    );
+  for (const r of rows) {
+    if (!can(caller.role, r.recordType, 'view') || !isVisible(caller.clearance, r.label)) continue;
+    out.set(r.id, {
+      id: r.id,
+      fileName: r.fileName,
+      kind: r.kind,
+      label: r.label,
+      uploaderType: r.uploaderType,
+      uploaderId: r.uploaderId,
+      createdAt: r.createdAt,
+    });
+  }
+  return out;
+}
+
 export class ReviewQueueService {
   private readonly db: Db;
   private readonly graph: Pick<GraphService, 'readAs'>;
@@ -524,7 +570,7 @@ export class ReviewQueueService {
 
   // The reader's org and the labels at or below their clearance: our own check, before row security's.
   private visibility(caller: Caller, labels: readonly Label[]): SQL {
-    return and(eq(reviewFindings.orgId, caller.orgId), inArray(reviewFindings.label, [...labels]))!;
+    return findingVisibility(caller, labels);
   }
 
   // The list query's filters.
@@ -620,44 +666,14 @@ export class ReviewQueueService {
     return { documents: docs, recordFindings, pointing, people };
   }
 
-  // The documents the reader may read: their own org, a record type their role views, a label at or
-  // below their clearance; row security checks the same again.
+  // The documents the reader may read (readVisibleDocuments).
   private async readDocuments(
     tx: Tx,
     caller: Caller,
     labels: readonly Label[],
     ids: readonly string[],
   ): Promise<Map<string, DocumentInfo>> {
-    const out = new Map<string, DocumentInfo>();
-    if (ids.length === 0) return out;
-    const rows = await tx
-      .select({
-        id: documents.id,
-        fileName: documents.fileName,
-        kind: documents.kind,
-        recordType: documents.recordType,
-        label: documents.label,
-        uploaderType: documents.uploaderType,
-        uploaderId: documents.uploaderId,
-        createdAt: documents.createdAt,
-      })
-      .from(documents)
-      .where(
-        and(eq(documents.orgId, caller.orgId), inArray(documents.id, [...ids]), inArray(documents.label, [...labels])),
-      );
-    for (const r of rows) {
-      if (!can(caller.role, r.recordType, 'view') || !isVisible(caller.clearance, r.label)) continue;
-      out.set(r.id, {
-        id: r.id,
-        fileName: r.fileName,
-        kind: r.kind,
-        label: r.label,
-        uploaderType: r.uploaderType,
-        uploaderId: r.uploaderId,
-        createdAt: r.createdAt,
-      });
-    }
-    return out;
+    return readVisibleDocuments(tx, caller, labels, ids);
   }
 
   // How many visible link findings point to each of these proposed records (either end).

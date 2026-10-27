@@ -3,7 +3,8 @@
 // whole text-model contract (text-model.ts) the way OllamaTextModel does: temperature 0 and the
 // fixed seed (D45.8), answers held to the schema while the model writes (sent as a
 // `response_format` JSON schema) and checked against it afterwards, with no second try (D39).
-// The context size is whatever the model was loaded with in Unsloth: this API can't set it per call.
+// The context size is whatever the model was loaded with in Unsloth: this API can't set it per call,
+// so AI_TEXT_CONTEXT_TOKENS tells the API what it is (D260).
 //
 // One call at a time per program (D34, D72): it shares the program's one model slot with
 // OllamaTextModel (PROGRAM_GATE), whichever provider is set. Turns (D48) work as Ollama's do.
@@ -34,7 +35,12 @@ import {
 import type { Logger } from 'pino';
 import { createLogger } from '../common/logger.js';
 import { AiFailure, AiInputError, AiStopped, toAiError, type AiCallError } from './ai-failure.js';
-import type { OpenAiCompatibleSettings } from './ai-settings.js';
+import {
+  DEFAULT_TEXT_CONTEXT_TOKENS,
+  MAX_TEXT_CONTEXT_TOKENS,
+  MIN_TEXT_CONTEXT_TOKENS,
+  type OpenAiCompatibleSettings,
+} from './ai-settings.js';
 import type { FetchLike } from './ollama-provider.js';
 import {
   checkedSchema,
@@ -67,6 +73,9 @@ export interface OpenAiCompatibleTextModelOptions {
   connection: OpenAiCompatibleSettings;
   /** The model's ID on the server (from `GET /v1/models`). */
   model: string;
+  /** The context the model was loaded with on the server (AI_TEXT_CONTEXT_TOKENS, D260); 18,432
+   * when not given. */
+  contextTokens?: number;
   log?: Logger;
   /** Stands in for the network, for tests. Still limited to the connection's address. */
   fetch?: FetchLike;
@@ -104,8 +113,20 @@ function refusedKeyStatus(err: unknown): number | undefined {
   return status === 401 || status === 403 ? status : undefined;
 }
 
+/** The context size given: a whole number from 2,048 to 262,144, as AI_TEXT_CONTEXT_TOKENS allows. */
+function contextTokensOption(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_TEXT_CONTEXT_TOKENS;
+  if (!Number.isInteger(value) || value < MIN_TEXT_CONTEXT_TOKENS || value > MAX_TEXT_CONTEXT_TOKENS) {
+    throw new AiInputError(
+      `contextTokens must be a whole number from ${MIN_TEXT_CONTEXT_TOKENS} to ${MAX_TEXT_CONTEXT_TOKENS}`,
+    );
+  }
+  return value;
+}
+
 export class OpenAiCompatibleTextModel implements TextModel {
   readonly modelName: string;
+  readonly contextTokens: number;
   private readonly model: LanguageModel;
   private readonly log: Logger;
   private readonly timeoutMs: number;
@@ -113,6 +134,7 @@ export class OpenAiCompatibleTextModel implements TextModel {
 
   constructor(opts: OpenAiCompatibleTextModelOptions) {
     this.modelName = opts.model;
+    this.contextTokens = contextTokensOption(opts.contextTokens);
     // Always an object, never a plain model string (that would go to the AI SDK's hosted gateway).
     this.model = wrapLanguageModel({
       model: createOpenAiCompatibleProvider({ ...opts.connection, fetch: opts.fetch }).chatModel(this.modelName),

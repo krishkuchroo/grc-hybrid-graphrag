@@ -85,6 +85,13 @@
       "when": 1791446400000,
       "tag": "0011_benchmark",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791532800000,
+      "tag": "0012_chat_pending_links",
+      "breakpoints": true
     }
   ]
 }

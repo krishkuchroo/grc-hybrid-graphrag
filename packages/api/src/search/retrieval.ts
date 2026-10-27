@@ -58,6 +58,8 @@ export type GraphQueryModel = Pick<TextModel, 'generate'>;
 export interface VectorPassage extends SearchPassage {
   recordType: RecordType;
   recordIds: readonly string[];
+  /** The chunk's stored bge-m3 token count (`chunks.token_count`), for the context's budget (D260). */
+  tokenCount: number;
 }
 
 export interface VectorSearchResult {
