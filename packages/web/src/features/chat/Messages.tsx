@@ -7,6 +7,8 @@
 // - S6-001's plain words for documents only (a notice above the answer), nothing found,
 //   unavailable (with "Try again"), stopped and hidden. Any other failure shows the app's usual
 //   message with its reference ID.
+// - Under a saved answer (live once `done` has come, or reopened), the "Not reviewed yet" part
+//   (D260, ./PendingLinks) when the API listed pending link findings with it.
 import { CHAT_STEPS, CHAT_TEXT, chatStepText, queuePositionText, type AnswerSource, type ChatStep } from '@grc/shared';
 import {
   Check,
@@ -29,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { answerBlocks, citedNumbersInOrder, type Inline } from './answerText';
 import { CitationChip, SourcesList } from './Citations';
 import { HowFound } from './HowFound';
+import { PendingLinks } from './PendingLinks';
 import type { Message, MessageCitation, VisibleMessage } from './useChat';
 import type { LiveTurn, TurnFailure } from './useChatSession';
 import { counted, messageTime } from './words';
@@ -263,7 +266,12 @@ function SavedAnswer({
   role: string | undefined;
 }) {
   if (message.status === 'failed') {
-    return <FailureNotice failure={failure} question={message.question} retry={retry} />;
+    return (
+      <>
+        <FailureNotice failure={failure} question={message.question} retry={retry} />
+        <PendingLinks pendingLinks={message.pendingLinks} />
+      </>
+    );
   }
   return (
     <>
@@ -285,6 +293,7 @@ function SavedAnswer({
       ) : null}
       <SourcesList citations={message.citations} role={role} />
       <HowFound message={message} />
+      <PendingLinks pendingLinks={message.pendingLinks} />
     </>
   );
 }
