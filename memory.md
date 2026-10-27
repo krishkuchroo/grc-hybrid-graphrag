@@ -922,7 +922,7 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **Jobs trained (D249–D251, 2026-10-20):** at most `extraction` and `graph_query`. The `job` list above stays the format's four names, but `mapping` (D251) and `answer` (D249) aren't trained.
 - **D249 Q-TR-1, the `answer` job: leave it out of training** (2026-10-20, the user's answer, passed on by the main session: "leave the answer job out").
   - **Options offered:** correct answers from fixed sentence patterns over the answer key (the recommendation); leave the job out; a larger model writes the answers, then they are checked.
-  - **The user chose:** leave it out. The `answer` job isn't trained, and chat answers stay as the untrained model writes them.
+  - **The user chose:** leave it out. The `answer` job isn't trained, and chat answers stay as the untrained model writes them. *(Changed by D258, 2026-10-27: round 2 adds about 300 `answer` rows.)*
   - **Tasks:** TR-003 is dropped.
 - **D250 Q-TR-2, checking the `graph_query` training queries: offline checks only** (2026-10-20, the user's answer, passed on by the main session: "offline checks only").
   - **Options offered:** offline only, with the app's own query check plus working out on the answer key what each query returns (the recommendation); or also running each query against a fast-loaded org in Neo4j.
@@ -966,6 +966,50 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
     - Fixing it needs a small change to the training-data builder (TR-002's files).
   - **The notebook needs no change:** `JOBS = None` trains every job in the file.
   - **Order:** D248 had planned to ask this after the before-test; the user answered it before. The before-test still uses the untrained base file that the notebook's base-only mode makes (D253). That file doesn't depend on the training, so the before-test can still run.
+  - *(Changed by D255: the run on this made-up file was stopped; training used real public data instead.)*
+- **D255 Training on real public data replaces D254's made-up data** (2026-10-23, the user's decision, passed on by the main session). It changes D248's "Source" and D254's file.
+  - **Why:** the user stopped the D254 Colab run because it trained on made-up generator data. They want real data.
+  - **The file:** `data/generated/training/train-all/train.jsonl`, 3,000 rows (git-ignored):
+    - `extraction`: 892 train, 108 validation;
+    - `graph_query`: 1,799 train, 201 validation.
+  - **Joined from two real-data files:**
+    - `train-real` (`packages/infra/scripts/train-data-real.ts`): MITRE ATT&CK, the CTID 800-53/KEV/VERIS mappings, CISA KEV, NVD descriptions and VCDB.
+    - `train-t2c` (`train-data-t2c.ts` + `export-t2c.py`): text2cypher-2024v1 rewritten to the GRC graph. Some filter values, host names and HOSTS/RUNS links are synthetic.
+  - **Kept out:** Company X names. No input is in both splits.
+  - **Training:** `EPOCHS = 1` (D246's 2 passes dropped for time), 673 steps, in Google Colab (free T4, then Colab Pro, D247). Run tag `b8db12cb`.
+  - **Validation check** (held-out rows): loss 0.011; `extraction` 100% valid JSON, 76% exactly right; `graph_query` 100% valid JSON, 78% exactly right. The validation rows are the same kind of data as training, so Company X is the real test.
+- **D256 Before/after result on Company X** (2026-10-26, D239's measure, train, measure; recorded as the user confirmed it, passed on by the main session). Report: `docs/training/before-after-company-x.md`.
+  - **Better with the trained model:**
+    - answers right 11 → 18 of 30 (correctness 0.50 → 0.82);
+    - failed graph queries 3 → 0;
+    - context recall 0.70 → 0.82;
+    - document links found 48.6% → 56.5%;
+    - wrong links 230 → 188.
+  - **Worse:**
+    - citation accuracy 0.87 → 0.68 (chat answers weren't trained, D249);
+    - reciprocal rank 0.64 → 0.45;
+    - IMPACTS links 28 → 10 of 35.
+- **D257 The trained model is the app's text model** (2026-10-26, the user's decision, passed on by the main session). It uses AI-001's setting (D236, D243).
+  - **`.env`:** `AI_TEXT_PROVIDER=openai-compatible`, `AI_TEXT_BASE_URL=http://host.docker.internal:8888/v1`, `AI_TEXT_MODEL=qwen3.5-4b-grc-b8db12cb.Q4_K_M`, served by the Unsloth desktop app on port 8888 (D252).
+  - **Model files** stay outside the repo, in `~/models/grc/`.
+  - bge-m3 stays on Ollama.
+- **D258 Round 2 of training** (2026-10-27, the user's decision, passed on by the main session). It reverses D249 and adds to D255's file.
+  - **Gaps found in the D255 training data** (the causes behind D256's weak spots):
+    - no IMPACTS examples at all;
+    - 898 of 1,000 extraction passages had 1–3 links and none had 9 or more, while each Company X policy document states 9+ MITIGATED_BY links;
+    - only 2 GOVERNED_BY examples;
+    - no framework (Requirement/Framework) graph queries;
+    - chat answers with citations were never trained.
+  - **Round 2 adds to the 3,000 rows:**
+    - about 300 IMPACTS passages (real VCDB incidents and their assets);
+    - about 300 dense passages with 9–30 links each (from CTID 800-53 ↔ ATT&CK);
+    - about 200 GOVERNED_BY passages (policy names Company X doesn't use);
+    - about 400 framework graph queries (NIST's public 800-53 ↔ CSF 2.0 mapping);
+    - about 300 `answer` rows: chat answers with [n] citations, built from the app's own chat prompt. **This reverses D249** (the user chose it).
+  - **Training:** starts again from the base model, 1 epoch, same settings as D255.
+  - **The test:** Company X only. The user chose this over adding a new Company Y.
+    - **Caution recorded:** fixing the gaps Company X showed may flatter its score.
+    - **To limit that:** no Company X names or sentences are used, and every new row type follows the app's own prompts and graph schema.
 
 ## Open questions
 - **Phase 8, round 1:** answered on 2026-09-26 (D74–D80).
