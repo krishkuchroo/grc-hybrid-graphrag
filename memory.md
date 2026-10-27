@@ -989,10 +989,12 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
     - citation accuracy 0.87 → 0.68 (chat answers weren't trained, D249);
     - reciprocal rank 0.64 → 0.45;
     - IMPACTS links 28 → 10 of 35.
+  - *(Moved 2026-10-27: the report is now `docs/training/results/before-after-company-x.md` and also covers round 2, D259.)*
 - **D257 The trained model is the app's text model** (2026-10-26, the user's decision, passed on by the main session). It uses AI-001's setting (D236, D243).
   - **`.env`:** `AI_TEXT_PROVIDER=openai-compatible`, `AI_TEXT_BASE_URL=http://host.docker.internal:8888/v1`, `AI_TEXT_MODEL=qwen3.5-4b-grc-b8db12cb.Q4_K_M`, served by the Unsloth desktop app on port 8888 (D252).
   - **Model files** stay outside the repo, in `~/models/grc/`.
   - bge-m3 stays on Ollama.
+  - *(Changed by D259, 2026-10-27: `AI_TEXT_MODEL=qwen3.5-4b-grc-3a062cbd.Q4_K_M`, round 2's model.)*
 - **D258 Round 2 of training** (2026-10-27, the user's decision, passed on by the main session). It reverses D249 and adds to D255's file.
   - **Gaps found in the D255 training data** (the causes behind D256's weak spots):
     - no IMPACTS examples at all;
@@ -1010,6 +1012,27 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **The test:** Company X only. The user chose this over adding a new Company Y.
     - **Caution recorded:** fixing the gaps Company X showed may flatter its score.
     - **To limit that:** no Company X names or sentences are used, and every new row type follows the app's own prompts and graph schema.
+- **D259 Round 2 result on Company X** (2026-10-27, D239's measure, train, measure; recorded as the user confirmed it, passed on by the main session). Report: `docs/training/results/before-after-company-x.md`.
+  - **Training:** Google Colab on an L4 (krishkuchroo1@gmail.com), file `train-r2/train.jsonl` (4,423 rows, D258), 991 steps, run tag `3a062cbd`. Training loss → 0.0061, validation loss 0.0076.
+  - **Notebook check:** `extraction` 50/50 valid JSON, 43/50 exactly right; `graph_query` 50/50, 41/50; `answer` 33/33 cite only the given sources, 32/33 word for word.
+  - **Company X test** (same commands as D256; questions on `company-x-fast`, extraction into a fresh org `company-x-r2`), base → round 1 → round 2:
+    - answers pass/partial/fail 11/0/19 → 18/7/5 → 20/8/2; correctness 0.50 → 0.82 → 0.77;
+    - made-up record numbers 20% → 17% → 0%; injection traps resisted 0 → 1 → 2 of 2;
+    - failed graph queries 3 → 0 → 0;
+    - citation accuracy 0.87 → 0.68 → 0.68; reciprocal rank 0.64 → 0.45 → 0.43;
+    - document links found 48.6% → 56.5% → 76.7% (349 of 455); wrong links 230 → 188 → 129;
+    - IMPACTS 28 → 10 → 35 of 35; MITIGATED_BY 74 → 92 → 158 of 241; GOVERNED_BY 18 → 19 → 20 of 39;
+    - all D48 speed targets pass (full answer p95 30.9 s).
+  - **The app's model is now round 2's** `qwen3.5-4b-grc-3a062cbd.Q4_K_M` (`AI_TEXT_MODEL` in `.env`). This updates D257.
+  - **Still open (not decided):**
+    - citation accuracy;
+    - framework questions expect the CSF/ISO requirements two links away, while training taught the one-link SATISFIES query;
+    - GOVERNED_BY extraction;
+    - reciprocal rank;
+    - one long answer repeated itself until it was cut off (multi_hop-02);
+    - single_hop-09 wrote a chained HOSTS/RUNS query.
+  - **Test setting learnt:** load the model in the Unsloth app with the context set by hand to 18,432 and Parallel Slots 1. A first round-2 run with Unsloth's automatic fit got 3,328 tokens and 4 slots under memory pressure; it was discarded.
+  - **Results folder:** all training results are in `docs/training/results/`: a README index, `validation/validation-<tag>.json` (committed) and `raw/` benchmark reports (git-ignored).
 
 ## Open questions
 - **Phase 8, round 1:** answered on 2026-09-26 (D74–D80).

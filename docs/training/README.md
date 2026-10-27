@@ -6,7 +6,8 @@ built from real public data. It trains a small LoRA add-on with Unsloth, merges 
 Unsloth Studio (D248).
 
 It is the "train" step of measure, train, measure (D239): the before-test runs first, on the untrained model, and the
-after-test runs last, on the trained one.
+after-test runs last, on the trained one. Every training's results, and the Company X test of each model, are in
+`docs/training/results/` (start with its `README.md`).
 
 - **Where:** free Google Colab, on a T4 GPU (D247).
 - **How long:** round 2's file (4,423 rows, 1 pass: about 990 steps) takes about 6–7 hours on a T4 at about 23 s a

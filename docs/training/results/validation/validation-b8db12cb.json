@@ -1,0 +1,36 @@
+{
+  "run": "b8db12cb",
+  "validationLoss": 0.010965483263134956,
+  "jobs": {
+    "extraction": {
+      "rows": 50,
+      "parsesAsJson": 50,
+      "equalsExpected": 38,
+      "measures": [
+        [
+          "answers that parse as JSON",
+          "parsesAsJson"
+        ],
+        [
+          "answers equal to the expected answer",
+          "equalsExpected"
+        ]
+      ]
+    },
+    "graph_query": {
+      "rows": 50,
+      "parsesAsJson": 50,
+      "equalsExpected": 39,
+      "measures": [
+        [
+          "answers that parse as JSON",
+          "parsesAsJson"
+        ],
+        [
+          "answers equal to the expected answer",
+          "equalsExpected"
+        ]
+      ]
+    }
+  }
+}
