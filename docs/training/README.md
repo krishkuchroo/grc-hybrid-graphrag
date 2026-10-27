@@ -9,12 +9,15 @@ It is the "train" step of measure, train, measure (D239): the before-test runs f
 after-test runs last, on the trained one.
 
 - **Where:** free Google Colab, on a T4 GPU (D247).
-- **How long:** about 5–5.5 hours for the current file (3,000 rows, 1 pass: about 670 steps at about 23 s each, then
-  the validation check and the export), using about 6–10 GB of the GPU's memory. If Colab disconnects, it resumes from
+- **How long:** round 2's file (4,423 rows, 1 pass: about 990 steps) takes about 6–7 hours on a T4 at about 23 s a
+  step, roughly half on an L4, then the validation check and the export, using about 6–10 GB of the GPU's memory. If Colab disconnects, it resumes from
   the Drive checkpoints (see "If Colab disconnects", which also says how to keep Drive space free). The progress bar
   shows the time left. The base file for the before-test, below, takes about 20–30 minutes.
 - **What leaves the Mac:** only the training file, `train.jsonl`, built from public data (D247, D248). No org's data, and never the
   held-out test set (D234, D239).
+- **Progress in Drive:** every loss line, checkpoint, check result and the export are added to
+  `grc-training/progress-<tag>.txt` as they happen (one short line every 10 steps, so training isn't slowed). Open it
+  in Drive any time, even when the Colab page has refreshed or disconnected.
 - **No keys or passwords:** the base model is public, so the notebook needs no Hugging Face token, and nothing from
   `.env` goes into Colab. Colab may say that no Hugging Face token is set: that's fine.
 
@@ -103,7 +106,8 @@ To train later, set `BASE_ONLY` back to `False` (the uploaded notebook from this
 ## What the validation table means
 
 At the end the notebook checks the trained model on the file's validation rows: about 10% of the rows, held out from
-training. The table is printed and saved in Drive as `grc-training/validation.json`.
+training. The table is printed and saved in Drive as `grc-training/validation-<tag>.json`, after the validation loss
+and after each job, so a disconnect only redoes the job it was on.
 
 - **Validation loss:** how far the model's predictions are from the correct answers of the validation rows; lower is
   better. It's a quick health check: a value far above the last training loss means the model learnt the training rows
@@ -137,7 +141,8 @@ made.
 
 To train again from the start, with a new `train.jsonl` or other settings, first delete or rename the `checkpoints`
 and `adapter` folders in `grc-training`. The notebook stops with a plain message if it finds another training's files
-there. `validation.json` and the earlier GGUF file can stay: the GGUF's name carries its training's tag.
+there. The earlier validation table, progress file and GGUF file can stay: their names carry their training's tag
+(round 1's table is the untagged `validation.json`).
 
 Keep the repository's notebook as it is: the committed copy has no outputs, so don't save a run's notebook from Colab
 over it.
@@ -149,6 +154,7 @@ over it.
 | `train.jsonl`                       | the training file you uploaded                                  |
 | `checkpoints/`                      | the last 2 checkpoints while training, and `run.json` naming it |
 | `adapter/`                          | the trained LoRA add-on, saved when training ends               |
-| `validation.json`                   | the validation table                                            |
+| `progress-<tag>.txt`                | each loss line, checkpoint, check result and the export, live   |
+| `validation-<tag>.json`             | the validation table                                            |
 | `qwen3.5-4b-base.<QUANT>.gguf`      | the untrained base for the before-test                          |
 | `qwen3.5-4b-grc-<run>.<QUANT>.gguf` | the merged 4-bit model for Unsloth Studio                       |
