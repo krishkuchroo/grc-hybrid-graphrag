@@ -1033,6 +1033,19 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
     - single_hop-09 wrote a chained HOSTS/RUNS query.
   - **Test setting learnt:** load the model in the Unsloth app with the context set by hand to 18,432 and Parallel Slots 1. A first round-2 run with Unsloth's automatic fit got 3,328 tokens and 4 slots under memory pressure; it was discarded.
   - **Results folder:** all training results are in `docs/training/results/`: a README index, `validation/validation-<tag>.json` (committed) and `raw/` benchmark reports (git-ignored).
+- **D260 Ask gives complete answers, with unreviewed links shown apart** (2026-10-27, the user's decision after trying Ask on Company X, passed on by the main session). The user wants Ask to give complete answers like a normal Claude chat, with direct links to the exact items in the Analyst review queue.
+  - **What happened:** in `company-x` (as Admin), "Which controls does the Access Control Policy govern?" got 1 control of the 6. The 6 GOVERNED_BY links exist only as pending link findings in `review_findings`, not in Neo4j, so Path B's correct query found 0 records. Ask also gives the model at most 5 passages (`contextPassages: 5`), and the policy's 6 controls sit in different chunks. The answer never pointed at the review queue.
+  - **1. Unreviewed links shown apart.** The answer gives approved facts first. Then a clearly labelled "Not reviewed yet" part lists the pending link findings that match the question, each with its source sentence and a link to its finding page (`/review/<id>`).
+  - **2. Who sees them: D50 unchanged.** Only roles that can open the review queue (Admin view, Analyst work) see the "Not reviewed yet" part; every other role gets approved facts only. Sensitivity labels against clearance apply to findings as to everything else (D51).
+  - **3. More of the documents.** The passage limit goes from 5 to about 15. When one document clearly matches, its other chunks are added, within the context budget (the model runs with an 18,432-token context, D259). Answers may take a few seconds longer; the D48 targets must still hold.
+  - **Planned as** AI-003 (backend) and AI-004 (frontend), with the main session's recommendation as the plan's reading: our code, not the model, builds the "Not reviewed yet" list (D52; the AI proposes, our code decides). Readings to confirm: Q-ASK-1 to Q-ASK-5 (Open questions).
+  - **Answered the same day (2026-10-27, the user's answers, passed on by the main session), each as recommended:**
+    - Q-ASK-1: keep the "Not reviewed yet" list on reopened answers (new `chat_messages.pending_links` column, migration 0012).
+    - Q-ASK-2: no prompt change for now; the trained instructions stay as they are. If answers still feel short, a prompt change (and ideally retraining) is a later choice.
+    - Q-ASK-3: the bigger budget applies through `AI_TEXT_CONTEXT_TOKENS` (default 18,432 for the Qwen provider); Ollama/Gemma keeps 8,192 (about 5 passages).
+    - Q-ASK-4: a document clearly matches when 3 of the top 5 passages come from it.
+    - Q-ASK-5: the matching rule, the link-type narrowing, and the cap of 50 with "Showing N of M" and a queue link.
+  - **The user's checks after the merge** (in `company-x` as admin@company-x.example): "Which controls does the Access Control Policy govern?" shows all 6 controls (before: 1); "Which incidents affected Microsoft Exchange Server?" shows all 10 incidents (before: 5).
 
 ## Open questions
 - **Phase 8, round 1:** answered on 2026-09-26 (D74–D80).
@@ -1108,6 +1121,12 @@ The source of truth for decisions. Add to it as decisions are made. Newest entri
   - **Q-BM-1** (S8-012): answered (b). A failed question gets the worst value: 0 on the higher-is-better scores, 1 on the two lower-is-better ones.
   - **Q-PW-1** (FT-002): answered. First password only; a forgotten one waits for S7's reset.
   - **Q-PW-2** (FT-002): answered yes. A one-off security review before the merge.
+- **The D260 tasks' questions** (asked 2026-10-27; all five answered the same day as recommended, see D260; AI-003 and AI-004 are `to do`):
+  - ~~**Q-ASK-1** (AI-003, AI-004): keep the "Not reviewed yet" list with the answer when the conversation is opened again (saved with the message, checked again against the reader's access, each item showing its current status; needs one new database column, migrated by hand), or show it only on the fresh answer? Recommended: keep it.~~ Answered (D260): keep it (`chat_messages.pending_links`, migration 0012).
+  - ~~**Q-ASK-2** (AI-003): tell the model that more possible links wait in review? Recommended: no. The app adds the list itself, and the answer prompt stays exactly the one round 2 trained on (D258), "be brief" rule included.~~ Answered (D260): no prompt change for now; a prompt change (ideally with retraining) is a later choice if answers still feel short.
+  - ~~**Q-ASK-3** (AI-003): the default Ollama/Gemma set-up has an 8,192-token context, so it keeps about 5 passages as now; the bigger limit applies with the Qwen model, through a new setting `AI_TEXT_CONTEXT_TOKENS` (default 18,432). Recommended: yes, rather than raising Gemma's context (GPU memory ran out on 2026-10-18).~~ Answered (D260): yes.
+  - ~~**Q-ASK-4** (AI-003): "one document clearly matches" means at least 3 of the top 5 passages come from that document (the file names, such as `x-policy-ac.txt`, don't match the question's words). Recommended: yes.~~ Answered (D260): yes.
+  - ~~**Q-ASK-5** (AI-003): which pending links count as matching: one end is a record the search found, or one end's name (without a trailing "(AC-4)" or a word like "control") appears in the question or in a found record's name; only the link types the graph query asks for; at most 50 listed, with "showing N of M" and a link to the queue. Recommended: yes.~~ Answered (D260): yes.
 
 ## Known risks (noted, not acted on)
 - **Gemma writes the graph queries** (D15 + D19). A small local model writing queries is likely the weakest link in answer quality, and the benchmark will measure it.

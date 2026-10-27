@@ -145,6 +145,8 @@ The planner keeps this board current (D85), and only the planner edits it (D95).
 | TR-003 | TR | builder-data | dropped | Training-data builder, the `answer` job (D17, D23, D52.3, D248): per question, a context built by the app's own `buildContext` from answer-key records and generated passages, the user text from `answerRequest(context, question)`, and a correct cited answer in plain text. How the correct answer is made waits on Q-TR-1; the brief describes the recommended way (fixed sentence patterns per question shape). Every cited number is in the context, and every expected record is named and cited. Self-check through the real `stream` path with a stand-in fetch. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Dropped 2026-10-20 (D249, Q-TR-1 answered "leave the answer job out"): the `answer` job isn't trained, and chat answers stay as the untrained model writes them. Not to be built; the brief is kept for the record. | |
 | TR-004 | TR | builder-data | done | Colab training notebook (D243, D246, D247, D248): `docs/training/train-qwen3.5-4b.ipynb` and `docs/training/README.md`. Unsloth LoRA on Qwen3.5-4B over the uploaded `train.jsonl` (rows checked, jobs filtered by a setting), the chat template with thinking off, assistant-only training, checkpoints in Google Drive so a cut-off session resumes with "Run all", a validation check at the end (loss, then per job: answers that parse and exact matches), the LoRA adapter saved, then merged and exported to a 4-bit GGUF (one quant setting, default Q4_K_M, matched to the before-test's file, Q-TR-4). Plain step-by-step instructions for the user. No secrets, no outputs saved in the notebook, no Company X path. The builder can't run it (no GPU); the user's first run is after the merge. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Not blocked by Q-TR-4: the quant is one setting at the top. No dependsOn (the format is fixed by D248); can run alongside TR-001 (no shared files). | logs/tasks/TR-004.md; builder-data 2612936; merged 27628f4 (fast mode, D222). Judgement calls: version pins (newest at least 14 days old, or the newest unsloth 2026.10.1 allows; torch/torchvision kept at Colab's build; uv --exclude-newer 2026-10-07); 4-bit QLoRA on the T4 although Unsloth's Qwen3.5 guide advises against it (16-bit wouldn't fit, Unsloth forces float32 there); the export cell needs Settings and Install first in a fresh runtime; a run.json guard stops Run all if checkpoints/ or adapter/ hold another training's files. Risks: about 4 s per row on a T4 (D253's 6–9 h); replaced checkpoints fill Drive's Bin. |
 | TR-005 | TR | builder-data | done | The notebook's "base only" mode (D253): a `BASE_ONLY` setting (default `False`) in `docs/training/train-qwen3.5-4b.ipynb`. With `True`, "Run all" reads no `train.jsonl`, trains nothing, writes no `checkpoints/`, `adapter/` or `validation.json`, and exports the untrained Qwen3.5-4B to `grc-training/qwen3.5-4b-base.<QUANT>.gguf` through the same load settings and the same `save_pretrained_gguf` call as the trained export (one shared export helper; a fresh LoRA with the Model cell's settings so both take the same merge route). With `False` the notebook behaves exactly as merged. README: a "base file first" section with the user's steps for the before-test (desktop app on 8888, D252), the time estimate changed to about 6–9 h (D253), and Q-TR-4's section rewritten as answered. No GPU run. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | dependsOn TR-004 (merged as 27628f4). Hot files: `docs/training/`. Can run alongside TR-002 (no shared files). The before-test waits for the user's base-only run after the merge (D253). | logs/tasks/TR-005.md; builder-data bbddc8c; merged into main (fast mode, D222). BASE_ONLY mode writes `qwen3.5-4b-base.Q4_K_M.gguf` through the same save_pretrained_gguf path, with a fresh (untrained) LoRA so the export takes the same merge-to-16-bit route as the trained one; a re-run prints "Already exported". Checked with stand-in modules, no GPU. |
+| AI-003 | AI | builder-backend | to do | Complete Ask answers, backend (D260): passages in the context 5 → 15, plus a clear document's other chunks (3 of the top 5 passages from one document), up to 24 passages and a token budget set by the text model's context (new `TextModel.contextTokens`: Ollama 8,192; openai-compatible from the new `AI_TEXT_CONTEXT_TOKENS`, default 18,432); for Admins and Analysts only (`canViewReviewQueue`, D50, labels D51), the pending link findings that match the question, built by our code from `review_findings` (matched end, end name in a found record's name or in the question, the query's link types), at most 50 with the total, each with type, ends as the queue shows them, sentence, document and finding ID; saved on the message (`chat_messages.pending_links`, migration 0012, written not run), read again with the reader's access, sent in `done`, its IDs in the `chat.asked` audit meta. Answer prompt, citations, event order and benchmark scoring unchanged; `citationsPerAnswer` follows the new passage cap. Builder calls no model and runs nothing live. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | Q-ASK-1 to Q-ASK-5 answered 2026-10-27, each as recommended (D260). User checks after the merge: the 6 Access Control Policy controls and the 10 Microsoft Exchange Server incidents (brief, criterion 6). Hot files: `packages/shared/src/search/limits.ts`, `packages/api/src/chat/ask.ts`, `chat.service.ts`, `search/hybrid/*`; migration number 0012. | |
+| AI-004 | AI | builder-frontend | to do | Complete Ask answers, Ask panel (D260): after the answer and its citations, a "Not reviewed yet" part when the message's `pendingLinks` has items: a one-line note that these are possible links the AI found that an Analyst hasn't checked, then one row per finding (from end, link type, to end, as the review queue shows ends; the source sentence; the document name; "Open in review" to `/review/$id`; a status badge when it was decided since), and "Showing N of M" with a link to `/review` (filtered to the document when the API gives one). Shown for live and reopened answers; nothing when `pendingLinks` is null or empty. Web client regenerated with `pnpm gen:api-client`. Fast mode (D222): lint + type checks; no new tests (testing-phase tests listed in the brief) | dependsOn AI-003 (the shared schema and the generated client). Q-ASK-1 answered 2026-10-27 (D260): reopened answers keep the list. User checks after the merge: the 6 controls and the 10 incidents (brief, criterion 4). | |
 
 **Moved out of M0 (now planned in S7):**
 - SSO (OIDC/SAML) with the Admin screens: S7-009, S7-010 and S7-018. Its tests use a small stand-in sign-in provider that runs locally (D134).
@@ -6668,3 +6670,131 @@ Task: TR-005
 - unit, infra: the notebook parses and has no outputs; its settings cell has `BASE_ONLY = False`; the source has exactly one `save_pretrained_gguf` call; the base file name pattern is `qwen3.5-4b-base.` and differs from the trained one.
 - manual: the user's base-only run (the file appears in Drive, loads in the desktop app, and a re-run prints "Already exported").
 - Security matrix: no rows.
+
+Task: AI-003
+
+**Goal:** Ask gives complete answers (D260). More of the documents reach the model, and for Admins and Analysts our code lists the pending link findings that match the question, each with a link to its finding.
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/AI-003`; the integrator merges into `main` with lint + type checks.
+
+**Readings confirmed:** the user answered Q-ASK-1 to Q-ASK-5 on 2026-10-27, each as written below (D260). Q-ASK-2 means no prompt change for now; a prompt change (ideally with retraining) is a later choice.
+
+**Decisions:** D6, D17, D23, D45.3, D45.7, D45.8, D47, D48, D50, D51, D52, D57, D69, D163, D236, D259, D260; SF-049; CLAUDE.md principles 6 (the AI proposes, our code decides) and 7 (fail safe).
+
+**Hard limits:**
+- Call no model, run nothing live, and run no migration. Write the migration only; the main session runs it (CLAUDE.md, "Migrations").
+- `answer-prompt.ts` (`chat-answer-v1`) and the graph-query prompt stay byte for byte as they are (reading Q-ASK-2). Round 2 trained on that exact prompt (D258).
+- Finding text (names, sentences) never goes into the model's context (SF-049, D52).
+- Ask never changes a finding.
+- Logs: IDs, counts, times and codes only (D163). Never a name, a sentence or the question.
+
+**Where things are now:**
+- `packages/shared/src/search/limits.ts`: `contextPassages: 5`, `vectorPassages: 20`, `contextRecords: 30`, `answerMaxTokens: 1_024`.
+- `packages/api/src/search/hybrid/fusion.ts` `selectContext` keeps passages and records in fused order. `context.ts` `buildContext` numbers the sources and writes the two sections. `retrieval.service.ts` `fuse` wires them together.
+- `packages/api/src/search/vector/vector-search.service.ts`: Path A, 20 passages in the asker's org context.
+- `packages/api/src/chat/ask.ts` `AskRunner.run` goes in this order: the Gemma turn (retrieval, the `sources` event, the answer stream), then `ChatService.saveMessage` (the message plus its `chat.asked` audit entry, `chat.service.ts:336`), then `done`.
+- Pending link findings are `review_findings` rows with kind `link` and status `pending`. Their `proposal` follows `linkProposalSchema` (`shared/src/processing/findings.ts`); an end's `match` may be null and its name may carry extra words ("Information Flow Enforcement (AC-4)").
+- The queue's read rules live in `packages/api/src/review/queue/queue.service.ts`: `canViewReviewQueue`; `visibility()` (the org and the labels at or below the clearance, with row security on top); `endSummary`; `readChunk` (the sentence is shown only with a chunk the reader may read).
+- The text model's context: `TEXT_MODEL_CONTEXT_TOKENS = 8192` (`ai/ollama-text-model.ts:51`). The Unsloth app is set to 18,432 by hand (D259); the API doesn't know that number today.
+- `BENCHMARK_LIMITS.citationsPerAnswer` is `contextPassages + contextRecords` (`shared/src/benchmark/kinds.ts:154`).
+
+**Behaviour:**
+1. **Limits** (`limits.ts`, each with a comment):
+   - `contextPassages: 15`;
+   - new `contextPassagesMax: 24`;
+   - new `contextPassageTokens: 11_000`;
+   - new `contextReserveTokens: 4_000`;
+   - new `clearDocumentLead: 5` and `clearDocumentShare: 3`;
+   - new `pendingLinks: 50` and `pendingLinkCandidates: 5_000`.
+   - `citationsPerAnswer` becomes `contextPassagesMax + contextRecords`.
+2. **The token budget** (reading Q-ASK-3):
+   - `TextModel` gains a readonly `contextTokens`. For Ollama it is `TEXT_MODEL_CONTEXT_TOKENS`. For openai-compatible it comes from a new setting `AI_TEXT_CONTEXT_TOKENS`: a whole number from 2,048 to 262,144, default 18,432, read by `aiSettingsFromEnv` and refused like the other settings when it's bad.
+   - Compose passes the setting to grc-api and grc-worker, and `.env.example` names it.
+   - `HybridRetrieval` gets `contextTokens` in its deps. The budget is `min(contextPassageTokens, floor((contextTokens − answerMaxTokens − contextReserveTokens) / 1.2))`, counted in the chunks' stored `token_count`. The 1.2 allows for the text model's tokenizer counting more tokens than bge-m3's.
+   - This gives 2,640 tokens (about 5 passages, as today) with 8,192, and 11,000 with 18,432.
+   - `VectorPassage` gains `tokenCount`, read from `chunks.token_count` in Path A's query.
+   - `selectContext` stops adding passages at `contextPassages`, or at the first passage that would go over the budget. Records are unchanged.
+3. **A clear document** (reading Q-ASK-4), in hybrid and vector mode:
+   - It is the document that holds at least `clearDocumentShare` of the first `clearDocumentLead` kept passages (in fused order) and more of them than any other document.
+   - Its other chunks (those not already kept) are read in one query in the asker's org context, with Path A's checks: the org, the role views the record type, the label at or below the clearance, the document not removed, plus row security. Each comes with its visible `chunk_records`.
+   - They are added in position order after the fused passages while the passages stay at or under `contextPassagesMax` and within the budget.
+   - They become sources (numbered after the fused ones), go into the document section and count towards the label. They are not added to `results`, so `POST /api/v1/search`'s list and How-found keep their shape; only `inContext` marks can differ.
+   - New file `search/hybrid/clear-document.ts`. The rule itself is a pure function; the read is a small function given the Db.
+4. **Matching pending links** (reading Q-ASK-5). New file `packages/api/src/review/queue/pending-links.ts`: `pendingLinksFor(caller, question, retrieval)` and `pendingLinksByIds(caller, stored)`, exported by the queue module and used by chat.
+   - If `canViewReviewQueue(caller.role)` is false (any role but Admin and Analyst, D50), the result is `null` and nothing is read.
+   - **Candidates:** the queue's `visibility()`, kind `link`, status `pending`, newest first, at most `pendingLinkCandidates` (a warn log with the count when that cap is reached). When Path B's query names link types (`:TYPE` for the 7 extraction types; `HOSTS|RUNS` counts as both), only those types.
+   - **Normalising a name:** lower case; a trailing `(…)` removed; every run of characters that aren't letters or digits becomes one space; trimmed. Each end is also tried without a trailing kind word (`asset`, `risk`, `control`, `policy`, `incident`). A form under 4 characters, or one that is only a kind word, matches nothing.
+   - **A candidate matches when either end:** (a) has `match.recordId` among the retrieval's records (`results` and `sources`); or (b) its normalised name contains, or is contained in, a normalised name of one of those records, as whole words; or (c) its normalised name appears in the normalised question as whole words.
+   - **Dropped:** a finding with either end `hidden` (the queue's `endSummary`), or with an end kind the role can't view (`can(role, kind, 'view')`). A link shows only when both its ends do (D50).
+   - **Result:** `{ items, total, documentId }`. `items` holds the first `pendingLinks` matches in the queue's order. `total` counts every match. `documentId` is set when every match comes from one document the reader may read, and is null otherwise.
+   - **Each item:** `{ findingId, status, type, from, to, sentence, document }`. `from` and `to` are the queue's `LinkEndSummary`. `sentence` and `document` (`ReviewSourceDocument`) appear only as the queue's detail would show them, with the chunks read in one batch.
+   - `pendingLinksByIds` re-reads stored IDs under the same rules, at any status. It drops findings the reader can't see now, keeps `total` as stored, and returns null for a role without queue view.
+5. **Shared schema:** new file `packages/shared/src/chat/pending-links.ts` with `chatPendingLinkSchema` (the item above; `status` is one of the review statuses; `from` and `to` use `linkEndSummarySchema`; `document` uses `reviewSourceDocumentSchema` or null) and `chatPendingLinksSchema` (`items` at most 50, `total` a whole number at least as big as the item count, `documentId` a UUID or null). `visibleChatMessageSchema` gains `pendingLinks: chatPendingLinksSchema.nullable()`. Export both from the shared index.
+6. **Ask** (`ask.ts`): after the Gemma turn has ended (so the slot is free) and unless the status is `failed`, run `pendingLinksFor`. This includes the "nothing found" answer. If it throws, log the code only and save `pendingLinks: null`; the answer stays.
+7. **Saved and shown** (reading Q-ASK-1):
+   - `chat_messages` gets `pending_links jsonb`, nullable, with a check that it is null or an object. It holds `{ findingIds (at most 50), total, documentId }`, never names or sentences.
+   - Migration `0012_chat_pending_links.sql` comes from `drizzle-kit generate` (schema in `chat.schema.ts`). Existing rows get null.
+   - Opening a conversation re-reads the stored IDs with `pendingLinksByIds`, the way citations are re-read.
+   - The `done` event's message carries `pendingLinks`. There is no new event, so `parseChatStreamEvent` and the benchmark's stream reader don't change.
+8. **Audit (D57):** the `chat.asked` meta gains `pendingLinkFindings: string[]`, the listed IDs (empty when there are none or the role isn't shown them), in the same transaction as now.
+9. **Unchanged:** the citations and `chat_messages.citations`, the event order, the answer and graph-query prompts and their versions, the benchmark's scoring, D48's timers.
+
+**Files:** `packages/shared/src/search/limits.ts`, `shared/src/benchmark/kinds.ts`, `shared/src/chat/messages.ts`, new `shared/src/chat/pending-links.ts`, the shared index; `packages/api/src/ai/text-model.ts`, `ollama-text-model.ts`, `openai-compatible-text-model.ts`, `ai-settings.ts`; `search/retrieval.ts`, `search/vector/vector-search.service.ts`, `search/hybrid/fusion.ts`, `context.ts`, `retrieval.service.ts`, `hybrid-search.module.ts`, new `search/hybrid/clear-document.ts`; new `review/queue/pending-links.ts`, `review/queue/queue.module.ts`; `chat/ask.ts`, `chat.service.ts`, `chat.schema.ts`, `chat.module.ts`, the audit meta type; `db/migrations/0012_chat_pending_links.sql` and drizzle's journal and snapshot; `packages/infra/compose.yaml`, `.env.example`. Anything else only if the type check needs it; name it in the hand-off.
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Behaviour 1–9 hold, checked by reading. The answer prompt files are unchanged in the diff.
+3. With the Q-ASK readings as written, the Company X example ("Which controls does the Access Control Policy govern?", as Admin) would list the 6 pending GOVERNED_BY findings: the to-end "Access Control Policy" is in the question (rule c), and the query names GOVERNED_BY. Show this by reading against one sample proposal in the hand-off.
+4. The hand-off names the migration file and the commands the main session runs (drizzle-kit migrate as grc_migrator on 127.0.0.1:5433, then the rebuild of grc-api and grc-worker).
+5. After the merge, with the main session or the user, not the builder: the example question as Admin shows the 6; as Risk Manager it shows none; `pnpm bench:run` on `company-x-fast` still meets D48 (first words within 25 s, full answer within 60 s at p95). If it doesn't, lower `contextPassageTokens`.
+6. The user's checks after the merge and the rebuild, in org `company-x` signed in as admin@company-x.example:
+   1. "Which controls does the Access Control Policy govern?" shows all 6 controls, in the answer, the "Not reviewed yet" list or both: Information Flow Enforcement, Separation of Duties, Unsuccessful Logon Attempts, Remote Access, Access Control for Mobile Devices, Use of External Systems. Before the change Ask gave 1.
+   2. "Which incidents affected Microsoft Exchange Server?" shows all 10 incidents: Phishing (2019-05, 2018-07, 2019-04), Ransomware (2019-10, 2021-03), Use of stolen creds (2025-08, 2019-01) and Brute force (2017-09) on Microsoft Exchange Server, and Phishing on Staff Windows laptops (2015-01, 2013-12). Before the change Ask gave 5, because of the 5-passage limit.
+
+**Tests for the testing phase** (not written now, D222):
+- unit: the normaliser and the matching rules (a)–(c), including the 4-character and kind-word cases and "(AC-4)"; the link types read from a query, `HOSTS|RUNS` included; `selectContext` with the budget (8,192 gives about 5 passages, 18,432 gives 15); the clear-document rule (3 of 5, a tie gives no clear document); the added chunks numbered after the fused ones and absent from `results`; `citationsPerAnswer` = 54; `aiSettingsFromEnv` with `AI_TEXT_CONTEXT_TOKENS` missing, valid and out of range; Ask saves `pendingLinks: null` and keeps the answer when the lookup throws; the answer request is byte-identical to before for the same context.
+- db: `pendingLinksFor` for each of the 7 roles (only Admin and Analyst get a list), every clearance × label pair, and every org pair (none crosses); an end of a type the role can't view drops the finding; the cap and `total`; `pendingLinksByIds` after a finding is approved (status shown) and after it is relabelled above the reader (dropped); the migration on a throwaway database; the `chat.asked` meta lists the IDs.
+- stack: the ask stream's `done` message carries `pendingLinks`, and reopening the conversation shows it again.
+- Security matrix (D175): no new route or record type, so no new row. The chat route's matrix entry gains a check that only the `review_queue` view cell gets `pendingLinks`.
+
+Task: AI-004
+
+**Goal:** the Ask panel shows the "Not reviewed yet" part (D260): after the answer, the pending link findings the API listed, each with its source sentence and a link to its finding page.
+
+**Fast mode (D222):** behaviour only. Write no new tests and change no test files; the finish check is lint + type checks. Work on `task/AI-004`; the integrator merges into `main` with lint + type checks.
+
+**Starts after AI-003 is merged** (dependsOn): it uses `chatPendingLinksSchema` and the message's `pendingLinks` field. **Q-ASK-1 answered (2026-10-27, D260):** reopened answers show the list too.
+
+**Decisions:** D3, D47, D50, D51, D57, D260.
+
+**Hard limits:** no API change; if the API's shape looks wrong, stop and say so in the hand-off. Only the web package changes, plus the regenerated client.
+
+**Where things are now:**
+- `packages/web/src/features/chat/Messages.tsx`: `AnswerBody`, `SavedAnswer`, `MessageView` and `LiveTurnView`, with the citations in `Citations.tsx`. `useChatSession.ts` reads the stream; `done` carries the saved message.
+- The finding page is at `/review/$id` (`router.tsx`). The queue is `/review`; its defaults are kind `link` and status `pending`, and it takes `documentId` (`features/review/useReview.ts` `validateReviewSearch`).
+- `features/review/LinkEnds.tsx`, `ReviewBits.tsx` and `words.ts` show a `LinkEndSummary` (matched, candidates, proposed, hidden: "A record you can't see"), link type words (`linkTypeText`) and `FindingStatusBadge`.
+
+**Behaviour:**
+1. Run `pnpm gen:api-client` (it builds from the API sources, with no running API) so `client.ts` has `pendingLinks`.
+2. New `packages/web/src/features/chat/PendingLinks.tsx`, shown under the answer and its citations in both the saved and the live views. It appears only when `message.pendingLinks` isn't null and has at least one item. While the answer is still streaming nothing shows; the list arrives with `done`.
+3. Layout, with this exact copy:
+   - Heading "Not reviewed yet", with a muted line under it: "Possible links the AI found in your documents. An Analyst hasn't checked them, so they aren't facts yet."
+   - One row per item: the from end, the link type in words, the to end (each end as the review queue shows it; reuse the review components or words, without the candidate chooser); the sentence as a quote (left out when null); the document name (left out when null); a link "Open in review" to `/review/$id`. A `FindingStatusBadge` appears when the status isn't `pending`.
+   - Under the rows, when `total` > the number of items: "Showing N of M." Always a link "Open the review queue": to `/review` with `documentId` when the API gave one, otherwise `/review`.
+4. The rows set the part apart from the answer: a bordered, muted panel, visibly different from the answer's own text, keyboard-reachable links, and no colour as the only signal.
+5. Nothing else in the panel changes: citations, How-found, Stop, retry and the hidden message view.
+
+**Files:** new `packages/web/src/features/chat/PendingLinks.tsx`; `Messages.tsx`; `packages/web/src/api/client.ts` (generated only); a review component only if it needs an export to be reused (name it in the hand-off).
+
+**Pass criteria:**
+1. Lint and type checks pass.
+2. Behaviour 1–5 hold, checked by reading. `client.ts` changes only through the generator.
+3. After the merge, with the user (part of the click-through, D232): in `company-x` as Admin, the example question shows the 6 rows, and each "Open in review" opens its finding; as Risk Manager the part isn't there.
+4. The user's checks after the merge and the rebuild, in org `company-x` signed in as admin@company-x.example:
+   1. "Which controls does the Access Control Policy govern?" shows all 6 controls, in the answer, the "Not reviewed yet" list or both: Information Flow Enforcement, Separation of Duties, Unsuccessful Logon Attempts, Remote Access, Access Control for Mobile Devices, Use of External Systems. Before the change Ask gave 1.
+   2. "Which incidents affected Microsoft Exchange Server?" shows all 10 incidents: Phishing (2019-05, 2018-07, 2019-04), Ransomware (2019-10, 2021-03), Use of stolen creds (2025-08, 2019-01) and Brute force (2017-09) on Microsoft Exchange Server, and Phishing on Staff Windows laptops (2015-01, 2013-12). Before the change Ask gave 5, because of the 5-passage limit.
+
+**Tests for the testing phase** (not written now, D222):
+- unit (web, component): no part for `null` or empty; the rows and the copy; "Showing N of M" only when `total` > the item count; the queue link with and without `documentId`; a hidden end reads "A record you can't see"; the badge only for non-pending items.
+- e2e (`e2e/ask-pending-links.e2e.ts`): Admin and Analyst see the part and the link opens `/review/<id>`; Viewer and Risk Manager don't; a reopened conversation shows it again.
+- Security matrix: no rows (no new route or record type).
