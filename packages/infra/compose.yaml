@@ -111,6 +111,8 @@ services:
       AI_TEXT_MODEL: ${AI_TEXT_MODEL:-}
       AI_TEXT_BASE_URL: ${AI_TEXT_BASE_URL:-}
       AI_TEXT_API_KEY: ${AI_TEXT_API_KEY:-}
+      # That server's context in tokens, as set there by hand (D260): empty means 18,432.
+      AI_TEXT_CONTEXT_TOKENS: ${AI_TEXT_CONTEXT_TOKENS:-}
       S3_ENDPOINT: http://grc-seaweedfs:8333
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}

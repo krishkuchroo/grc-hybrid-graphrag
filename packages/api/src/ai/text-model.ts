@@ -145,6 +145,12 @@ export interface TurnOptions {
 
 export interface TextModel extends TextModelCalls {
   /**
+   * The model's context size in tokens, as the server runs it (D260): Ollama's 8,192 (set per call),
+   * or the OpenAI-compatible server's AI_TEXT_CONTEXT_TOKENS (set in that server by hand). The chat's
+   * passage budget is worked out from it.
+   */
+  readonly contextTokens: number;
+  /**
    * Reserves the program's one model slot for work that makes several calls (S6: writing the
    * graph query, then the answer), so no other call slips in between them. The work gets a
    * session whose `generate` and `stream` don't queue again. Calls on the model itself (outside

@@ -4,6 +4,7 @@
 // from the API.
 export * from './bodies.js';
 export * from './messages.js';
+export * from './pending-links.js';
 export * from './stream.js';
 export * from './names.js';
 export * from './words.js';

@@ -9,11 +9,14 @@
 // - Reading one gives its messages oldest first. A message whose label is above the reader's current
 //   clearance shows its question only (`hidden: true`, S6-Q9). Each citation of the others is read
 //   again with the reader's access now (./citation-reader.ts); one they can't see any more is
-//   "a source you can no longer see".
+//   "a source you can no longer see". Its pending link findings (D260) are read again the same way
+//   (PendingLinks.pendingLinksByIds): only for a role that can open the review queue, dropping any
+//   the reader can't see now.
 // - Saving a message is one transaction: the conversation is locked, the message inserted, the
 //   title (on the first question) and the last activity set, and the `chat.asked` entry appended
 //   (`AuditService.appendInTx`) with the message as its target, the question's words in `after`, and
-//   the mode, the graph path, the cited records and documents and the label in `meta` (D186).
+//   the mode, the graph path, the cited records and documents, the listed pending link findings
+//   (D260) and the label in `meta` (D186).
 // - Logs hold IDs and codes only, never a question, an answer or a title (D163).
 import {
   CHAT_AUDIT_ACTIONS,
@@ -36,6 +39,7 @@ import {
   type ChatMessage,
   type ChatMessageStatus,
   type ChatMessageTimings,
+  type ChatPendingLinks,
   type ChatPromptVersions,
   type Citation,
   type GraphFallbackReason,
@@ -52,6 +56,7 @@ import { pageQuerySchema, type Paged } from '../common/paging.js';
 import type { Db } from '../db/client.js';
 import { withOrgContext, type OrgContext } from '../db/org-context.js';
 import type { Caller } from '../records/records.service.js';
+import type { PendingLinks, StoredPendingLinks } from '../review/queue/pending-links.js';
 import type { CitationReader, CitedSourcesNow } from './citation-reader.js';
 import { chatConversations, chatMessages, type ChatConversationDbRow, type ChatMessageDbRow } from './chat.schema.js';
 
@@ -140,8 +145,12 @@ function isLabel(value: unknown): value is Label {
   return typeof value === 'string' && (LABELS as readonly string[]).includes(value);
 }
 
-/** A saved message, shown with the citations given. */
-export function visibleMessage(row: ChatMessageDbRow, citations: Citation[]): VisibleChatMessage {
+/** A saved message, shown with the citations and pending link findings given. */
+export function visibleMessage(
+  row: ChatMessageDbRow,
+  citations: Citation[],
+  pendingLinks: ChatPendingLinks | null,
+): VisibleChatMessage {
   return {
     id: row.id,
     question: row.question,
@@ -156,12 +165,18 @@ export function visibleMessage(row: ChatMessageDbRow, citations: Citation[]): Vi
     timings: timingsOf(row.timings),
     label: isLabel(row.label) ? row.label : 'restricted',
     createdAt: iso(row.createdAt),
+    pendingLinks,
     hidden: false,
   };
 }
 
 /** A saved message as the reader may see it now. */
-function messageFor(reader: Caller, row: ChatMessageDbRow, now: CitedSourcesNow): ChatMessage {
+function messageFor(
+  reader: Caller,
+  row: ChatMessageDbRow,
+  now: CitedSourcesNow,
+  pendingLinks: ChatPendingLinks | null,
+): ChatMessage {
   // An unknown label counts as above everyone's clearance (fail safe).
   if (!isLabel(row.label) || !isVisible(reader.clearance, row.label)) {
     return { id: row.id, question: row.question, createdAt: iso(row.createdAt), hidden: true };
@@ -175,7 +190,7 @@ function messageFor(reader: Caller, row: ChatMessageDbRow, now: CitedSourcesNow)
     const passage = now.passage(c.chunkId, c.documentId);
     return passage ? { number: c.number, type: 'passage', passage } : { number: c.number, type: 'hidden' };
   });
-  return visibleMessage(row, citations);
+  return visibleMessage(row, citations, pendingLinks);
 }
 
 function conversationOut(row: ChatConversationDbRow, messages: ChatMessage[]): ChatConversation {
@@ -214,23 +229,28 @@ export interface MessageToSave {
   askedAt: Date;
   /** Whether the graph query ran (hybrid only). */
   graphRan: boolean;
+  /** The pending link findings listed with the answer (D260); null for a role not shown them. */
+  pendingLinks: StoredPendingLinks | null;
 }
 
 export interface ChatServiceDeps {
   db: Db;
   audit: Pick<AuditService, 'appendInTx'>;
   citations: Pick<CitationReader, 'read'>;
+  pendingLinks: Pick<PendingLinks, 'pendingLinksByIdsMany'>;
 }
 
 export class ChatService {
   private readonly db: Db;
   private readonly audit: Pick<AuditService, 'appendInTx'>;
   private readonly citations: Pick<CitationReader, 'read'>;
+  private readonly pendingLinks: Pick<PendingLinks, 'pendingLinksByIdsMany'>;
 
   constructor(deps: ChatServiceDeps) {
     this.db = deps.db;
     this.audit = deps.audit;
     this.citations = deps.citations;
+    this.pendingLinks = deps.pendingLinks;
   }
 
   /** The caller's own conversations, latest activity first. */
@@ -308,9 +328,15 @@ export class ChatService {
       caller,
       shown.flatMap((m) => (Array.isArray(m.citations) ? m.citations : [])),
     );
+    // Their pending link findings, read again with the reader's access now, in one batch.
+    const lists = await this.pendingLinks.pendingLinksByIdsMany(
+      caller,
+      shown.map((m) => m.pendingLinks),
+    );
+    const pendingOf = new Map(shown.map((m, i) => [m.id, lists[i] ?? null]));
     return conversationOut(
       found.conversation,
-      found.messages.map((m) => messageFor(caller, m, now)),
+      found.messages.map((m) => messageFor(caller, m, now, pendingOf.get(m.id) ?? null)),
     );
   }
 
@@ -371,6 +397,7 @@ export class ChatService {
           promptVersions: message.promptVersions,
           timings: message.timings,
           label: message.label,
+          pendingLinks: message.pendingLinks,
           createdAt: message.askedAt,
         })
         .returning();
@@ -398,6 +425,7 @@ export class ChatService {
         citedRecords,
         citedDocuments,
         label: message.label,
+        pendingLinkFindings: message.pendingLinks !== null ? [...message.pendingLinks.findingIds] : [],
       };
       await this.audit.appendInTx(tx, {
         orgId: caller.orgId,

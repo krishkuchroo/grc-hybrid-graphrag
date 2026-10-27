@@ -32,7 +32,14 @@ Module({
     {
       provide: RETRIEVAL,
       useFactory: (db: Db, vector: VectorSearch, graph: GraphSearch, textModel: TextModel): Retrieval =>
-        new HybridRetrieval({ db, vector, graph, textModel, log: createLogger() }),
+        new HybridRetrieval({
+          db,
+          vector,
+          graph,
+          textModel,
+          contextTokens: textModel.contextTokens,
+          log: createLogger(),
+        }),
       inject: [DB, VECTOR_SEARCH, GRAPH_SEARCH, TEXT_MODEL],
     },
   ],

@@ -6,7 +6,8 @@
 //   step: ./ask.ts, with the answer prompt (./answer-prompt.ts) and the citations (./citations.ts).
 //   The event stream: ./event-stream.ts. The 10-a-minute limit: ./chat-rate-limit.ts, registered in
 //   main.api.ts. The tables: ./chat.schema.ts. The real-Gemma try command: ./try.ts.
-// - Retrieval comes only through `RETRIEVAL` (SearchModule), Gemma through `TEXT_MODEL` (AiModule).
+// - Retrieval comes only through `RETRIEVAL` (SearchModule), Gemma through `TEXT_MODEL` (AiModule),
+//   and the "Not reviewed yet" list through `PendingLinks` (ReviewQueueModule, D260).
 import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module.js';
 import { TEXT_MODEL, type TextModel } from '../ai/text-model.js';
@@ -16,6 +17,8 @@ import type { Db } from '../db/client.js';
 import { DB } from '../db/db.module.js';
 import { GRAPH } from '../graph/graph.module.js';
 import type { GraphService } from '../graph/graph.service.js';
+import { PendingLinks } from '../review/queue/pending-links.js';
+import { ReviewQueueModule } from '../review/queue/queue.module.js';
 import { RETRIEVAL, type Retrieval } from '../search/retrieval.js';
 import { SearchModule } from '../search/search.module.js';
 import { AskRunner } from './ask.js';
@@ -25,7 +28,7 @@ import { CitationReader } from './citation-reader.js';
 
 export class ChatModule {}
 Module({
-  imports: [SearchModule, AiModule, AuditModule],
+  imports: [SearchModule, AiModule, AuditModule, ReviewQueueModule],
   controllers: [ChatController],
   providers: [
     {
@@ -35,14 +38,15 @@ Module({
     },
     {
       provide: ChatService,
-      useFactory: (db: Db, audit: AuditService, citations: CitationReader) => new ChatService({ db, audit, citations }),
-      inject: [DB, AuditService, CitationReader],
+      useFactory: (db: Db, audit: AuditService, citations: CitationReader, pendingLinks: PendingLinks) =>
+        new ChatService({ db, audit, citations, pendingLinks }),
+      inject: [DB, AuditService, CitationReader, PendingLinks],
     },
     {
       provide: AskRunner,
-      useFactory: (textModel: TextModel, retrieval: Retrieval, chat: ChatService) =>
-        new AskRunner({ textModel, retrieval, chat }),
-      inject: [TEXT_MODEL, RETRIEVAL, ChatService],
+      useFactory: (textModel: TextModel, retrieval: Retrieval, chat: ChatService, pendingLinks: PendingLinks) =>
+        new AskRunner({ textModel, retrieval, chat, pendingLinks }),
+      inject: [TEXT_MODEL, RETRIEVAL, ChatService, PendingLinks],
     },
   ],
 })(ChatModule);

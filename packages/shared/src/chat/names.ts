@@ -3,8 +3,8 @@
 // - `chat.asked`: one entry per question, answered, stopped or failed, written in Postgres in the
 //   transaction that saves the message, with the message as its target. `after` holds the
 //   question's words (S6-Q5); `meta` holds the mode, whether the graph path ran or why it fell back,
-//   the cited records (IDs and numbers), the cited documents (IDs) and the message's label, so the
-//   audit viewer can hide the contents from readers below it (D186). Searches aren't audited (S6-Q7).
+//   the cited records (IDs and numbers), the cited documents (IDs), the listed pending link
+//   findings (IDs, D260) and the message's label, so the audit viewer can hide the contents from readers below it (D186). Searches aren't audited (S6-Q7).
 // - Error messages never hold a question, an answer or a record's name.
 import { z } from 'zod';
 import { LABELS } from '../access/labels.js';
@@ -32,6 +32,9 @@ export const chatAskedMetaSchema = z.object({
   citedRecords: z.array(z.object({ id: z.uuid(), number: searchRecordNumberSchema })),
   citedDocuments: z.array(z.uuid()),
   label: z.enum(LABELS),
+  /** The pending link findings listed with the answer (D260); empty when there were none, or the
+   * role isn't shown them. */
+  pendingLinkFindings: z.array(z.uuid()),
 });
 
 export type ChatAskedMeta = z.infer<typeof chatAskedMetaSchema>;

@@ -19,6 +19,7 @@ import { GRAPH_FALLBACK_REASONS } from '../search/fallback.js';
 import { SEARCH_RECORD_KINDS } from '../search/kinds.js';
 import { SEARCH_LIMITS } from '../search/limits.js';
 import { passageSourceSchema, recordSourceSchema, sourceNumberSchema } from '../search/sources.js';
+import { chatPendingLinksSchema } from './pending-links.js';
 import { CHAT_TEXT } from './words.js';
 
 const dateTime = z.iso.datetime({ offset: true });
@@ -92,6 +93,9 @@ export const visibleChatMessageSchema = z.object({
   timings: chatMessageTimingsSchema,
   label: z.enum(LABELS),
   createdAt: dateTime,
+  /** The pending link findings that matched the question (D260), read again with the reader's
+   * access now; null for a role that can't open the review queue, or when none were looked up. */
+  pendingLinks: chatPendingLinksSchema.nullable(),
   hidden: z.literal(false),
 });
 
