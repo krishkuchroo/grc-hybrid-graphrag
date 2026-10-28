@@ -49,13 +49,18 @@ import { createLogger } from '../../common/logger.js';
 import type { Db } from '../../db/client.js';
 import { withOrgContext, type Tx } from '../../db/org-context.js';
 import type { GraphService } from '../../graph/graph.service.js';
-import { chunks, reviewFindings } from '../../processing/processing.schema.js';
+import {
+  chunks,
+  reviewFindings,
+  type ReviewFindingStatus as StoredFindingStatus,
+} from '../../processing/processing.schema.js';
 import type { Caller } from '../../records/records.service.js';
 import { RecordLookup, RecordWants, readNamedRecords } from './queue-graph.js';
 import {
   contextOf,
   endSummary,
   findingVisibility,
+  queueStatus,
   readVisibleDocuments,
   viewerOf,
   visibleLabels,
@@ -199,7 +204,7 @@ interface LinkFinding {
 
 type FindingRow = {
   id: string;
-  status: ReviewFindingStatus;
+  status: StoredFindingStatus;
   proposal: unknown;
   documentId: string | null;
   chunkId: string | null;
@@ -376,7 +381,7 @@ export class PendingLinks {
       }
       out.push({
         id: row.id,
-        status: row.status,
+        status: queueStatus(row.status),
         proposal: parsed.data,
         documentId: row.documentId,
         chunkId: row.chunkId,
@@ -425,7 +430,7 @@ export class PendingLinks {
             inArray(reviewFindings.id, proposedIds),
           ),
         );
-      for (const r of rows) recordFindings.set(r.id, r.status);
+      for (const r of rows) recordFindings.set(r.id, queueStatus(r.status));
     }
 
     const documentIds = [

@@ -28,14 +28,7 @@ import type { OnApplicationBootstrap } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import {
-  NODE_LABELS,
-  RECORD_KINDS,
-  duplicateProposalSchema,
-  isLabel,
-  type RecordKind,
-  type ReviewFindingStatus,
-} from '@grc/shared';
+import { NODE_LABELS, RECORD_KINDS, duplicateProposalSchema, isLabel, type RecordKind } from '@grc/shared';
 import { EMBEDDING_DIMENSIONS } from '../../ai/embedder.js';
 import { errorKind } from '../../common/errors.js';
 import { createLogger } from '../../common/logger.js';
@@ -44,7 +37,7 @@ import { withOrgContext } from '../../db/org-context.js';
 import type { GraphService } from '../../graph/graph.service.js';
 import { INTAKE_SYSTEM_CONTEXT } from '../../intake/queues.js';
 import { RunLater, type JobsService } from '../../jobs/jobs.module.js';
-import { reviewFindings, type NewReviewFindingRow } from '../processing.schema.js';
+import { reviewFindings, type NewReviewFindingRow, type ReviewFindingStatus } from '../processing.schema.js';
 import { PROCESSING_CONCURRENCY, PROCESSING_QUEUES } from '../queues.js';
 import {
   byNumber,

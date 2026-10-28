@@ -32,6 +32,10 @@
 // and writes nothing, no findings, no chunk-to-record rows and no stage, once it is removed. A last
 // failed try never turns a removed document into a failed one.
 //
+// FX-002's repair (./reresolve.ts, `pnpm dataset:reresolve`) re-runs steps 1 to 4 on chunks already
+// resolved in a view that saw nothing, with the parts exported here (`load`, `toWrite`,
+// `refusedLinks`, `addRecordFindings`, `unlessRemoved`, `unavailable`); this job is unchanged.
+//
 // Re-runs (D45.5): a resolved chunk is skipped. A crash between the Neo4j and the Postgres steps is
 // safe: the re-run finds its own links (no second link, MERGE) and adds each finding once (the
 // finding key). Records that change between the match and the write (a merge, a retirement, a
@@ -158,14 +162,15 @@ export type ResolveAttempt = Pick<JobHandlerInput, 'attempt' | 'attempts' | 'isL
 
 const FIRST_AND_LAST: ResolveAttempt = { attempt: 1, attempts: 1, isLastAttempt: true };
 
-interface Ids {
+/** The chunk's org, document and ID (exported for ./reresolve.ts, FX-002). */
+export interface Ids {
   orgId: string;
   documentId: string;
   chunkId: string;
 }
 
-/** The chunk, its document and the uploader's view, as one run reads them. */
-interface Loaded {
+/** The chunk, its document and the uploader's view, as one run reads them (exported for ./reresolve.ts). */
+export interface Loaded {
   ids: Ids;
   stage: ChunkStage;
   text: string;
@@ -293,12 +298,13 @@ export async function resolveChunk(
 }
 
 /** True for the failures that mean "Ollama can't serve this now": wait, don't fail (D45.7). */
-function unavailable(err: unknown): err is AiFailure {
+export function unavailable(err: unknown): err is AiFailure {
   return isAiFailure(err, 'unavailable') || isAiFailure(err, 'timed_out');
 }
 
-// Reads the chunk with its document, and the uploader's view, in one transaction.
-async function load(deps: ChunkResolveDeps, orgId: string, chunkId: string): Promise<Loaded | undefined> {
+/** Reads the chunk with its document, and the uploader's view, in one transaction (exported for
+ * ./reresolve.ts, which reads a chunk the same way). */
+export async function load(deps: ChunkResolveDeps, orgId: string, chunkId: string): Promise<Loaded | undefined> {
   return withOrgContext(deps.db, INTAKE_SYSTEM_CONTEXT(orgId), async (tx) => {
     const [row] = await tx
       .select({
@@ -456,9 +462,9 @@ async function resolveFull(deps: ChunkResolveDeps, log: Logger, loaded: Loaded):
   };
 }
 
-// A link that passed every rule check (so both ends are clear matches), and whose document anyone
-// who sees both its ends may see (D51), as a live link to write; none for any other.
-function toWrite(link: EvaluatedLink, source: LinkSourceDocument): LiveLinkWrite[] {
+/** A link that passed every rule check (so both ends are clear matches), and whose document anyone
+ * who sees both its ends may see (D51), as a live link to write; none for any other. */
+export function toWrite(link: EvaluatedLink, source: LinkSourceDocument): LiveLinkWrite[] {
   const from = link.from.match;
   const to = link.to.match;
   if (link.failed.length > 0 || !from || !to) return [];
@@ -476,9 +482,9 @@ function toWrite(link: EvaluatedLink, source: LinkSourceDocument): LiveLinkWrite
   ];
 }
 
-// The links of the org the Analyst refused (rejected, or removed once live) of the types this chunk
-// proposes, as identities.
-async function refusedLinks(db: Db, orgId: string, links: readonly EvaluatedLink[]): Promise<LinkIdentity[]> {
+/** The links of the org the Analyst refused (rejected, or removed once live) of the types this chunk
+ * proposes, as identities. */
+export async function refusedLinks(db: Db, orgId: string, links: readonly EvaluatedLink[]): Promise<LinkIdentity[]> {
   if (links.length === 0) return [];
   const types = [...new Set(links.map((l) => l.type))];
   const rows = await withOrgContext(db, INTAKE_SYSTEM_CONTEXT(orgId), (tx) =>
@@ -497,9 +503,9 @@ async function refusedLinks(db: Db, orgId: string, links: readonly EvaluatedLink
   return rows.map((r) => identityOfProposal(r.proposal)).filter((i): i is LinkIdentity => i !== null);
 }
 
-// Adds the chunk's `record` findings (each once per document, kind and name) and answers each
-// proposal's finding ID by key, with how many were added now.
-async function addRecordFindings(
+/** Adds the chunk's `record` findings (each once per document, kind and name) and answers each
+ * proposal's finding ID by key, with how many were added now. */
+export async function addRecordFindings(
   tx: Tx,
   loaded: Loaded,
   proposed: readonly ProposedRecord[],
@@ -638,7 +644,7 @@ async function lockDocument(tx: Tx, ids: Ids): Promise<string | undefined> {
  * other AI link from the document; a write that comes after it finds the document removed and
  * writes nothing (the answer is null).
  */
-async function unlessRemoved<T>(db: Db, ids: Ids, write: () => Promise<T>): Promise<T | null> {
+export async function unlessRemoved<T>(db: Db, ids: Ids, write: () => Promise<T>): Promise<T | null> {
   return withOrgContext(db, INTAKE_SYSTEM_CONTEXT(ids.orgId), async (tx) => {
     const [row] = await tx
       .select({ status: documents.status })

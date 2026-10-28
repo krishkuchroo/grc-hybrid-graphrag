@@ -20,7 +20,10 @@ export function isReviewFindingKind(v: unknown): v is ReviewFindingKind {
 }
 
 /** `pending` waits for the Analyst; `live` was made live by the rule checks (kept so S5 and the
- * benchmark see every proposal); `approved`, `rejected` and `removed` are set only by the Analyst (S5). */
+ * benchmark see every proposal); `approved`, `rejected` and `removed` are set only by the Analyst (S5).
+ * These are the statuses the API answers and the review queue filters by. The stored column may also
+ * hold `superseded` (FX-002, D263: a stale finding the repair command replaced), which the queue
+ * never shows, so it isn't listed here (packages/api/src/processing/processing.schema.ts lists it). */
 export const REVIEW_FINDING_STATUSES = ['pending', 'live', 'approved', 'rejected', 'removed'] as const;
 export type ReviewFindingStatus = (typeof REVIEW_FINDING_STATUSES)[number];
 

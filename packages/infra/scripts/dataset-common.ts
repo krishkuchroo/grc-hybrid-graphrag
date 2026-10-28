@@ -217,6 +217,34 @@ export async function findOrgAdmin(db: ScriptDb, sql: SqlTag, orgId: string, slu
   });
 }
 
+export type OrgMember = { found: true; userId: string } | { found: false; missing: 'org' | 'member' };
+
+/**
+ * The org of the slug (its ID comes from the slug, as in `findOrgAdmin`) and its member with this
+ * email (compared without case), for `pnpm dataset:reresolve --as` (FX-002). Only the user ID is
+ * answered; the member's role and clearance are read by the api's `personView`.
+ */
+export async function findOrgMember(
+  db: ScriptDb,
+  sql: SqlTag,
+  orgId: string,
+  slug: string,
+  email: string,
+): Promise<OrgMember> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.org_id', ${orgId}, true)`);
+    const org = await tx.execute(sql`SELECT slug FROM "organization" WHERE id = ${orgId}::uuid`);
+    if (org.rows[0]?.['slug'] !== slug) return { found: false, missing: 'org' };
+    const member = await tx.execute(
+      sql`SELECT m.user_id FROM "member" m JOIN "user" u ON u.id = m.user_id
+          WHERE m.org_id = ${orgId}::uuid AND lower(u.email) = lower(${email})
+          ORDER BY m.created_at, m.id LIMIT 1`,
+    );
+    const userId = member.rows[0]?.['user_id'];
+    return typeof userId === 'string' ? { found: true, userId } : { found: false, missing: 'member' };
+  });
+}
+
 // ---- The run's API keys ---------------------------------------------------------------------
 
 /** The org context the keys are made and revoked in: the org's Admin at Restricted. */

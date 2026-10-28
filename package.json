@@ -28,6 +28,7 @@
     "train:data": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/train-data.ts",
     "bench:run": "node --experimental-transform-types --disable-warning=ExperimentalWarning --use-system-ca packages/infra/scripts/bench-run.ts",
     "dataset:load": "node --experimental-transform-types --disable-warning=ExperimentalWarning --use-system-ca packages/infra/scripts/dataset-load.ts",
+    "dataset:reresolve": "node --experimental-transform-types --disable-warning=ExperimentalWarning --use-system-ca packages/infra/scripts/dataset-reresolve.ts",
     "dataset:score": "node --experimental-transform-types --disable-warning=ExperimentalWarning --use-system-ca packages/infra/scripts/dataset-score.ts",
     "eval:questions": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/eval-questions.ts",
     "eval:changed": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/eval-changed.ts",
