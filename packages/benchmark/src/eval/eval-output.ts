@@ -1,14 +1,16 @@
 // The command's output for the evaluation (EV-002 behaviour 3; D164): a part headed "Evaluation
 // (checks file)" after the run's own output, with the breakdown tables (the answers part, per mode,
 // by fine kind and by wording), consistency, execution accuracy with its outcome counts, stale
-// answers (only when some question has forbidden names), and each part not measured with its
-// reason. Counts, scores, times and the checks file's path only: never a question, an answer, a
+// answers (only when some question has forbidden names), vagueness (EV-006: per mode, the overall
+// line and the tables by fine kind and by wording, then the cut-off and full-answer-time line), and
+// each part not measured with its reason. Counts, scores, times and the checks file's path only: never a question, an answer, a
 // name or a query. Pure.
 import { benchmarkModeText, summaryGroup, type BenchmarkSummaryGroup, type SearchMode } from '@grc/shared';
 import type { ConsistencyShare } from './consistency.js';
 import type { EvalReport, EvalSliceSummary } from './evaluate.js';
 import { EXECUTION_OUTCOMES, type ExecutionSummary } from './execution.js';
 import type { StaleShare } from './stale.js';
+import type { VaguenessModeSummary, VaguenessScores, VaguenessShare } from './vagueness.js';
 
 const LABEL_WIDTH = 18;
 const COLUMN_WIDTH = 15;
@@ -93,6 +95,90 @@ function executionRow(label: string, s: ExecutionSummary): string {
     s.measured === 0 ? '-' : `${share(s.score)} (${s.counts.match} of ${s.measured})`,
     EXECUTION_OUTCOMES.map((o) => String(s.counts[o])),
   );
+}
+
+const VAGUENESS_COLUMN = 12;
+
+const VAGUENESS_HEADER = [
+  'n',
+  'complete',
+  'has count',
+  'count right',
+  'has list',
+  'cited',
+  'hedges',
+  'any hedge',
+  'words/exp',
+  'too short',
+];
+
+function shareCell(s: VaguenessShare): string {
+  return s.of === 0 ? '-' : share(s.share);
+}
+
+function vaguenessRow(label: string, scores: VaguenessScores): string {
+  const v = scores.vagueness;
+  const perExpected = v.wordsPerExpected.median;
+  return row(
+    '    ',
+    label,
+    [
+      String(v.answers),
+      v.completeness.n === 0 ? '-' : share(v.completeness.mean),
+      shareCell(v.countStated),
+      shareCell(v.countRight),
+      shareCell(v.withList),
+      v.citedShare.n === 0 ? '-' : share(v.citedShare.mean),
+      v.hedges.n === 0 ? '-' : share(v.hedges.mean),
+      shareCell(v.hedged),
+      perExpected === null ? '-' : perExpected.toFixed(1),
+      shareCell(v.tooShort),
+    ],
+    VAGUENESS_COLUMN,
+  );
+}
+
+/** One mode's slices as a table, one row per slice with a measured answer. */
+function vaguenessTable(title: string, rows: readonly { label: string; scores: VaguenessScores }[]): string[] {
+  const measured = rows.filter((r) => r.scores.vagueness.answers > 0);
+  if (measured.length === 0) return [];
+  return [
+    `  ${title}`,
+    row('    ', '', VAGUENESS_HEADER, VAGUENESS_COLUMN),
+    ...measured.map((r) => vaguenessRow(r.label, r.scores)),
+  ];
+}
+
+/** The cut-off and full-answer-time line of one mode's answers. */
+function endingLine(scores: VaguenessScores): string {
+  const e = scores.ending;
+  const cut = e.cutOff;
+  const full = e.fullAnswers;
+  const over = full.overTarget;
+  return (
+    `    Cut off and full-answer times: cut off ${cut.count} of ${e.measured} (${share(cut.share)}; ` +
+    `cap ${cut.byCutBy.cap}, cap or time limit ${cut.byCutBy.cap_or_time_limit}); ` +
+    `full answers ${full.count}, median ${ms(full.medianMs)}, p95 ${ms(full.p95Ms)}, ` +
+    `over ${ms(full.targetMs)} ${over.count} (${share(over.share)})`
+  );
+}
+
+function vaguenessLines(summary: VaguenessModeSummary): string[] {
+  const mode = benchmarkModeText(summary.mode);
+  const lines: string[] = [`  Vagueness, ${mode}`];
+  lines.push(...vaguenessTable('All answers', [{ label: 'All', scores: summary.overall }]).slice(1));
+  const byKind = vaguenessTable(
+    `Vagueness by fine kind, ${mode}`,
+    summary.byKind.map((k) => ({ label: k.kind, scores: k })),
+  );
+  if (byKind.length > 0) lines.push(...byKind);
+  const byWording = vaguenessTable(
+    `Vagueness by wording, ${mode}`,
+    summary.byWording.map((w) => ({ label: w.wording, scores: w })),
+  );
+  if (byWording.length > 0) lines.push(...byWording);
+  lines.push(endingLine(summary.overall));
+  return lines;
 }
 
 /** The evaluation's output lines. */
@@ -186,6 +272,15 @@ export function evalRunOutput(report: EvalReport): string[] {
         ),
       );
     }
+  }
+
+  // Vagueness, per answers mode.
+  if (report.vagueness.length > 0) {
+    lines.push(
+      '',
+      '  Vagueness: fixed rules on the words only (correctness is the answer score); shares of the answers each rule applies to',
+    );
+    for (const summary of report.vagueness) lines.push('', ...vaguenessLines(summary));
   }
 
   // What wasn't measured.

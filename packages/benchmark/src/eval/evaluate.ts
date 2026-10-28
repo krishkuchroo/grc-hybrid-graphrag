@@ -9,6 +9,8 @@
 // - Execution accuracy (./execution.ts): each hybrid answer's own graph query against the question's
 //   gold query, through the command's runner; not measured without one (the reason is given).
 // - Stale answers (./stale.ts): answers that show a name the checks file forbids.
+// - Vagueness (./vagueness.ts, EV-006): each scored answer's fixed-rule vagueness checks, and how
+//   each answer with a message ended (cut off, or its full-answer time), summarised per mode.
 // Per-answer checks are made in one place (`answerReport`), and each answer's report and each
 // mode's summaries are plain objects, so later checks add their own fields beside these.
 // Pure apart from the runner; the same run, checks file, records and query results always give the
@@ -45,8 +47,17 @@ import {
 } from './execution.js';
 import { EVAL_QUESTION_KINDS, EVAL_WORDINGS, type EvalQuestionKind, type EvalWording } from './kinds.js';
 import { staleHitsOf, staleSummary, type EvalStaleHit, type StaleAnswer, type StaleModeSummary } from './stale.js';
+import {
+  answerEndingOf,
+  vaguenessForKind,
+  vaguenessModeSummary,
+  type AnswerEnding,
+  type VaguenessAnswer,
+  type VaguenessCheck,
+  type VaguenessModeSummary,
+} from './vagueness.js';
 
-export const EVAL_REPORT_SECTIONS = ['breakdown', 'consistency', 'execution', 'stale'] as const;
+export const EVAL_REPORT_SECTIONS = ['breakdown', 'consistency', 'execution', 'stale', 'vagueness'] as const;
 export type EvalReportSection = (typeof EVAL_REPORT_SECTIONS)[number];
 
 /** Why execution accuracy isn't measured when the command has no query account to run as. */
@@ -83,6 +94,10 @@ export interface EvalAnswerReport {
   named: NamedRecordRef[] | null;
   /** The forbidden names the answer shows (scored answers only). */
   stale: EvalStaleHit[];
+  /** The vagueness checks; null when not scored. */
+  vagueness: VaguenessCheck | null;
+  /** How the answer ended; null when the item has no message. */
+  ending: AnswerEnding | null;
 }
 
 export interface EvalQuestionReport {
@@ -143,6 +158,8 @@ export interface EvalReport {
   execution: EvalExecutionReport | null;
   /** Per answers mode; null when no question has forbidden names. */
   stale: StaleModeSummary[] | null;
+  /** Per answers mode: the vagueness scores and answer endings; empty when not measured. */
+  vagueness: VaguenessModeSummary[];
   questions: EvalQuestionReport[];
 }
 
@@ -202,17 +219,20 @@ class RecordsOfKinds {
 }
 
 /**
- * One answer's own checks: what it names and the forbidden names it shows. Later per-answer checks
- * go here, beside these.
+ * One answer's own checks: what it names, the forbidden names it shows, its vagueness checks (with
+ * the question's resolved expected count) and how it ended. Later per-answer checks go here, beside
+ * these.
  */
 function answerReport(
   item: AnswersResultItem,
   check: EvalCheckQuestion,
   records: readonly NameableRecord[],
+  expectedCount: number,
 ): EvalAnswerReport {
   const scored = isScoredAnswer(item);
   const text = answerText(item);
   const stale = scored ? staleHitsOf(text, check.forbidden) : [];
+  const message = item.details.answer;
   return {
     mode: item.mode,
     outcome: item.outcome,
@@ -220,6 +240,10 @@ function answerReport(
     scored,
     named: scored ? namedRecords(text, records) : null,
     stale,
+    vagueness: scored
+      ? vaguenessForKind(check.kind, text, expectedCount, item.metrics.answer_correctness ?? null)
+      : null,
+    ending: message === null ? null : answerEndingOf(message.status, item.details.timings.totalMs),
   };
 }
 
@@ -256,17 +280,26 @@ export async function evaluateRun(input: EvalRunInput): Promise<EvalReport> {
   const consistencyAnswers: ConsistencyAnswer[] = [];
   const staleAnswers: StaleAnswer[] = [];
   const staleIds = new Set<string>();
+  const vaguenessAnswers: VaguenessAnswer[] = [];
   for (const { question, resolution } of input.questions) {
     const check = checkById.get(question.id);
     if (check === undefined) continue;
     const named = ofKinds.nameableOf(groupKinds.get(check.group) ?? check.targetKinds);
     const reasons: ForbiddenReason[] = [...new Set(check.forbidden.map((f) => f.why))];
     const answers: EvalAnswerReport[] = [];
+    const expectedCount = resolution.resolved?.length ?? 0;
     for (const mode of answerModes) {
       const item = answersItems.get(itemKey('answers', mode, question.id));
       if (item === undefined) continue;
-      const answer = answerReport(item, check, named);
+      const answer = answerReport(item, check, named, expectedCount);
       answers.push(answer);
+      vaguenessAnswers.push({
+        mode,
+        kind: check.kind,
+        wording: check.wording,
+        vagueness: answer.vagueness,
+        ending: answer.ending,
+      });
       if (!answer.scored) continue;
       consistencyAnswers.push({
         group: check.group,
@@ -293,7 +326,7 @@ export async function evaluateRun(input: EvalRunInput): Promise<EvalReport> {
   const notMeasured: EvalReport['notMeasured'] = [];
   const noAnswers = answerModes.length === 0;
   if (noAnswers) {
-    for (const section of ['consistency', 'execution'] as const) {
+    for (const section of ['consistency', 'execution', 'vagueness'] as const) {
       notMeasured.push({ section, reason: 'the run has no answers part' });
     }
   }
@@ -382,6 +415,9 @@ export async function evaluateRun(input: EvalRunInput): Promise<EvalReport> {
     else stale = answerModes.map((mode) => staleSummary(mode, staleAnswers));
   }
 
+  // (f) Vagueness and answer endings, per answers mode.
+  const vagueness = answerModes.map((mode) => vaguenessModeSummary(mode, vaguenessAnswers));
+
   return {
     checksPath: input.checksPath,
     folder: checks.folder,
@@ -395,6 +431,7 @@ export async function evaluateRun(input: EvalRunInput): Promise<EvalReport> {
     consistency,
     execution,
     stale,
+    vagueness,
     questions,
   };
 }
