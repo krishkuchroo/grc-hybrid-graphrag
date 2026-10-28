@@ -11,7 +11,8 @@
 //   It never rejects: every failure is a fallback reason, and the answer uses documents only.
 // - RETRIEVAL (hybrid/, S6-005): both paths (or Path A only, in vector mode), RRF with k=60, the
 //   entity filter, and the context for Gemma. Rejects with an `AiFailure` when bge-m3 can't be
-//   reached.
+//   reached. In hybrid mode it also finds the records the question names (./named/, FX-003), read
+//   through the same accounts as the extraction matcher; they join Path B's records.
 // Everything these return is already limited to what the caller may see (D23): nothing hidden ever
 // reaches Gemma or the answer. Times are in milliseconds.
 import type {
@@ -28,6 +29,7 @@ import type {
   SearchMode,
   SearchPassage,
   SearchRecord,
+  SearchRecordKind,
   SearchResult,
   SearchTimings,
 } from '@grc/shared';
@@ -165,6 +167,21 @@ export interface RetrievalResult {
   /** The highest label among the sources; Public when there are none. */
   label: Label;
   timings: SearchTimings;
+  /** The records the question names (./named/named-records.ts, D263 items 4 and 10) that pass the
+   * entity filter's record check, best first; [] in vector mode. Found also when the graph path
+   * failed, though they then stay out of the context. */
+  namedRecords: NamedRecordRef[];
+  /** The record IDs the context's passages are tied to (each kept passage's visible `recordIds`, a
+   * clear document's chunks included), each once, in context order. Both modes. */
+  passageRecordIds: string[];
+}
+
+/** A named record as the result lists it: IDs and names only, for our code (FX-004, FX-005). */
+export interface NamedRecordRef {
+  id: string;
+  kind: SearchRecordKind;
+  number: string;
+  name: string;
 }
 
 export interface Retrieval {
