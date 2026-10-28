@@ -22,16 +22,16 @@ Question IDs are `<group>.<wording>`, for example `mitigated_by-03.loose`.
 
 ### Kinds
 
-| Fine kind      | Asks                                                                                                   | Set kind         | Share of the groups |
-| -------------- | ------------------------------------------------------------------------------------------------------ | ---------------- | ------------------: |
-| `mitigated_by` | the controls that mitigate a risk                                                                      | `single_hop`     |                 20% |
-| `two_step`     | two links: an asset's or an incident's risks' controls, or the policies governing a risk's controls    | `multi_hop`      |                 20% |
-| `impacts`      | the incidents that impacted an asset                                                                   | `single_hop`     |                 16% |
-| `governs`      | the controls a policy governs                                                                          | `single_hop`     |                 16% |
-| `framework`    | a control's 800-53 requirement plus the CSF 2.0 and ISO 27001 ones NIST's crosswalks reach             | `framework`      |                 16% |
-| `no_answer`    | a made-up risk or asset (the answer should say nothing matches)                                        | `no_answer`      |                  8% |
-| `injection`    | an asset whose document carries a planted instruction (the answer should ignore it)                    | `injection_trap` |                  4% |
-| `fixed`        | a failure you found by hand, kept word for word so every run asks it again (none yet; they come first) | its own          |                   – |
+| Fine kind      | Asks                                                                                                | Set kind         | Share of the groups |
+| -------------- | --------------------------------------------------------------------------------------------------- | ---------------- | ------------------: |
+| `mitigated_by` | the controls that mitigate a risk                                                                   | `single_hop`     |                 20% |
+| `two_step`     | two links: an asset's or an incident's risks' controls, or the policies governing a risk's controls | `multi_hop`      |                 20% |
+| `impacts`      | the incidents that impacted an asset                                                                | `single_hop`     |                 16% |
+| `governs`      | the controls a policy governs                                                                       | `single_hop`     |                 16% |
+| `framework`    | a control's 800-53 requirement plus the CSF 2.0 and ISO 27001 ones NIST's crosswalks reach          | `framework`      |                 16% |
+| `no_answer`    | a made-up risk or asset (the answer should say nothing matches)                                     | `no_answer`      |                  8% |
+| `injection`    | an asset whose document carries a planted instruction (the answer should ignore it)                 | `injection_trap` |                  4% |
+| `fixed`        | a failure you found by hand, kept word for word so every run asks it again (they come first)        | its own          |                   – |
 
 When a kind has fewer facts than its share (Company X has only 7 assets with incidents), it takes all it has, and the rest passes to `mitigated_by`, `two_step`, `framework` and `no_answer` in turn.
 
@@ -45,6 +45,7 @@ When a kind has fewer facts than its share (Company X has only 7 assets with inc
 | `reported` | a fixed template's own words                                                                                         |                                         |
 
 A name's short form is the part after its last `": "`, or the name without its first word, or the name itself: the first of these that only one record of that kind contains.
+The first two are skipped when they start with a joining word (a, an, and, as, at, by, for, from, in, into, of, on, or, the, to, via, with), so "Separation of Duties" is asked as "separation of duties", never "of duties" (D263).
 
 ## `pnpm eval:questions`
 
@@ -61,6 +62,21 @@ Before anything is written, every correct graph query is checked with Ask's own 
 Bad arguments, or a folder that isn't valid, exit with 2. Nothing is written in either case.
 
 The output gives the files written, the counts per kind and per wording, any shortfall and the groups dropped. It never prints a question, a name or a query (D164).
+
+## Adding a hand-found failure
+
+When you find a question Ask gets wrong, add it as a fixed template so every later run asks it again (D261).
+Each one is an entry in `FIXED_QUESTIONS`, in `packages/benchmark/src/eval/fixed-questions.ts`. The first is `phishing-findings`.
+
+- **One entry per failure,** in your own words, word for word as you asked it (`text`), with a short `name`. Its question ID is `fixed-<name>.reported`, and it is its own group.
+- **Named by answer-key keys** (`keys`), never by record names, such as `RSK-0036` and the incidents `INC-0002` and so on. A folder that lacks any of these keys leaves the entry out, and the output counts it.
+- **Its expected rule** (`expected`): the records a right answer names, worked out from the folder's graph. For example, the risk plus every incident with EXPOSES to it.
+- **Its target kinds** (`targetKinds`) and its set kind (`setKind`: `single_hop`, `multi_hop` or `framework`).
+- **Its gold query** (`goldQuery`): the correct graph query, with each name inlined through `cypherString`. It returns `RETURN DISTINCT` of the target records only, and `pnpm eval:questions` checks it with Ask's own query rules before anything is written.
+- **Left alone by the changed-data test:** `pnpm eval:changed` never renames the records or deletes the links of the entries' keys (`fixedQuestionKeys`), so the question still has its answer in the changed folder.
+- **Asked by every later run:** every `pnpm eval:questions` run puts the fixed entries first, in their order in `FIXED_QUESTIONS`, then the generated groups. Each entry takes one of the questions asked for, so with one entry `--count 150` writes 1 + 49 groups of 3 = 148 questions.
+
+Add a short note above the entry on what you saw (the wrong query, the answer, the timings), as the phishing entry has.
 
 ## The baseline
 
