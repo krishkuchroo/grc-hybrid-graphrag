@@ -15,10 +15,20 @@
 //   params, and /review/$id one finding with the Analyst's decisions. /benchmark is the Benchmark
 //   screen's runs (S8-010), its status, part and page filters in the search params, and
 //   /benchmark/$id one run with its results' part, mode, kind, outcome and page in the search params.
-//   The other screens show their empty state until their slice.
+//   /ask is the Ask page with a new conversation and /ask/$id with one of the person's own (D262).
+//   Both are drawn by /ask itself (its two children draw nothing), so the page, its question box and
+//   its scroll stay as the address moves between them; the page keeps the address and the shell's
+//   chat session in step. The other screens show their empty state until their slice.
 // Security is checked by the API (D7); these redirects only decide which screen to show.
 import type { QueryClient } from '@tanstack/react-query';
-import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router';
+import {
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  Outlet,
+  redirect,
+  useParams,
+} from '@tanstack/react-router';
 import { AppShell } from '@/app/AppShell';
 import { HomePage } from '@/app/HomePage';
 import { ScreenPage } from '@/app/ScreenPage';
@@ -47,6 +57,7 @@ import { validateIntakeSearch } from '@/features/intake/useDocuments';
 import { FindingPage as ReviewFindingPage } from '@/features/review/FindingPage';
 import { ReviewPage } from '@/features/review/ReviewPage';
 import { validateReviewSearch } from '@/features/review/useReview';
+import { AskPage } from '@/features/chat/AskPage';
 import { BenchmarkList } from '@/features/benchmark/BenchmarkList';
 import { RunPage as BenchmarkRunPage } from '@/features/benchmark/RunPage';
 import { validateBenchmarkListSearch, validateBenchmarkRunSearch } from '@/features/benchmark/useBenchmark';
@@ -118,6 +129,25 @@ export function createAppRouter(queryClient: QueryClient) {
     getParentRoute: () => shellRoute,
     path: '/',
     component: HomePage,
+  });
+
+  const askRoute = createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/ask',
+    component: function AskRoute() {
+      const id = useParams({ strict: false, select: (params) => params.id });
+      return <AskPage conversationId={id ?? null} />;
+    },
+  });
+  const askNewRoute = createRoute({
+    getParentRoute: () => askRoute,
+    path: '/',
+    component: () => null,
+  });
+  const askConversationRoute = createRoute({
+    getParentRoute: () => askRoute,
+    path: '$id',
+    component: () => null,
   });
 
   const risksRoute = createRoute({
@@ -380,6 +410,7 @@ export function createAppRouter(queryClient: QueryClient) {
     mfaSetupRoute,
     shellRoute.addChildren([
       homeRoute,
+      askRoute.addChildren([askNewRoute, askConversationRoute]),
       risksRoute,
       newRiskRoute,
       riskRoute,

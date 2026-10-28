@@ -1,6 +1,7 @@
-// How the chat panel (D27 #9) says things that aren't already in S6-001's plain words
-// (@grc/shared CHAT_TEXT, CHAT_STEP_TEXT, GRAPH_FALLBACK_TEXT, SEARCH_MODE_TEXT): the empty state,
-// record kinds and their pages, durations, counts and when a conversation was last used.
+// How the chat panel and the Ask page (D27 #9, D262) say things that aren't already in S6-001's
+// plain words (@grc/shared CHAT_TEXT, CHAT_STEP_TEXT, GRAPH_FALLBACK_TEXT, SEARCH_MODE_TEXT): the
+// panel's empty state, the page's welcome and its starter questions, record kinds and their pages,
+// durations, counts and when a conversation was last used.
 import type { SearchRecordKind } from '@grc/shared';
 import {
   ClipboardCheck,
@@ -18,6 +19,34 @@ import { formatDay } from '@/features/records/format';
 
 export const EMPTY_TEXT =
   'Ask about your risks, controls, assets, policies, incidents and frameworks. Answers use only what you can see.';
+
+/** The Ask page's welcome, for a new conversation: the greeting and what Ask answers from. */
+export const ASK_WELCOME_TEXT = {
+  greeting: (firstName: string | undefined): string =>
+    firstName === undefined || firstName === ''
+      ? 'Hi, what would you like to know?'
+      : `Hi ${firstName}, what would you like to know?`,
+  lead: 'Ask in your own words. Answers come only from the records and documents you can see, with every source cited.',
+  starters: 'Questions to start with',
+} as const;
+
+/** The record kinds every role can view (D50): a starter question is only about these, so no role
+ * gets one that finds nothing because of its role (D262, reading R2). */
+export type EveryRoleKind = 'asset' | 'risk' | 'control' | 'policy';
+
+export interface StarterQuestion {
+  question: string;
+  /** The kind the question is about, for its icon. */
+  kind: EveryRoleKind;
+}
+
+/** The Ask page's starter cards: a click asks the question at once. */
+export const STARTER_QUESTIONS: readonly StarterQuestion[] = [
+  { question: 'Which high risks have no control mitigating them?', kind: 'risk' },
+  { question: 'Which assets are exposed to the most risks?', kind: 'asset' },
+  { question: 'Which policies govern our access controls?', kind: 'policy' },
+  { question: 'Which controls mitigate the most risks?', kind: 'control' },
+];
 
 export const RECORD_KIND_TEXT: Readonly<Record<SearchRecordKind, string>> = {
   asset: 'Asset',

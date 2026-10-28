@@ -1,28 +1,36 @@
-// Screen 9, the chat side panel (S6-007, D27 #9), after ServiceNow's assistant panel (D2). "Ask" in
-// the header, for every signed-in person (the Chat cell is every role's, D50), opens it on the
-// right, over whatever screen is showing. It isn't modal: the screen behind it stays usable, it
-// stays open while the person moves between screens (a record chip opens the record's page beside
-// it), and it closes with its close button or Esc. Opening puts the keyboard in the question box;
-// closing gives it back to "Ask".
+// Screen 9's quick panel (S6-007, D27 #9 as D262 changed it), after ServiceNow's assistant panel
+// (D2). "Ask" in the header, for every signed-in person (the Chat cell is every role's, D50), opens
+// it on the right, over whatever screen is showing. It isn't modal: the screen behind it stays
+// usable, it stays open while the person moves between screens (a record chip opens the record's
+// page beside it), and it closes with its close button or Esc. Opening puts the keyboard in the
+// question box; closing gives it back to "Ask".
+// - It shows the shell's one chat session (./ChatSessionProvider), the same one the Ask page shows,
+//   so the conversation, the question being written and an answer still arriving carry across.
+// - "Open on the full page" goes to the Ask page with the open conversation (/ask/<id>), or /ask
+//   for a new one, the question being written kept; the panel closes as the page opens.
+// - On the Ask page (/ask, /ask/<id>) the header's "Ask" isn't shown and the panel doesn't open; an
+//   open panel closes as the person arrives there, by any way.
 // - Conversations are the person's own (./ConversationList); a new one is started by its first
 //   question, so no empty conversation is left behind.
 // - The panel always searches both documents and the graph (S6-Q3).
 // - Steps and outcomes are read out to screen readers once each (a polite live region); the answer's
 //   words are not, as they arrive.
 // The API decides what anyone may see or ask (D7): this panel only shows its answers.
-import { CHAT_TEXT, chatStepText, queuePositionText } from '@grc/shared';
-import { ArrowLeft, History, Sparkles, SquarePen, X } from 'lucide-react';
+import { CHAT_TEXT } from '@grc/shared';
+import { useLocation, useNavigate } from '@tanstack/react-router';
+import { ArrowLeft, History, Maximize2, Sparkles, SquarePen, X } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import { useEffect, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ApiProblem } from '@/features/records/ApiProblem';
 import { useMe } from '@/features/records/useRecords';
 import { cn } from '@/lib/utils';
+import { isAskPath } from './AskPage';
+import { useSharedChatSession } from './ChatSessionProvider';
 import { Composer } from './Composer';
 import { ConversationList } from './ConversationList';
-import { LiveTurnView, MessageView, type RetryProps } from './Messages';
-import { turnsShown, useChatSession, type ChatSession, type LiveTurn } from './useChatSession';
+import { announcementOf, Thread, useKeepAtBottom } from './Thread';
+import type { ChatSession } from './useChatSession';
 import { EMPTY_TEXT } from './words';
 
 function IconButton({ label, children, ...props }: { label: string; children: ReactNode } & ComponentProps<'button'>) {
@@ -45,30 +53,6 @@ function IconButton({ label, children, ...props }: { label: string; children: Re
   );
 }
 
-/** What the live region says: each step and outcome once, never the answer's words. */
-function announcementOf(turn: LiveTurn | null): string {
-  if (turn === null) return '';
-  switch (turn.phase) {
-    case 'sending':
-      return 'Sending your question';
-    case 'queued':
-      return queuePositionText(turn.position ?? 1);
-    case 'working':
-    case 'answering': {
-      const step = turn.steps[turn.steps.length - 1];
-      return step === undefined ? '' : chatStepText(step);
-    }
-    case 'answered':
-      return 'The answer is ready';
-    case 'stopped':
-      return CHAT_TEXT.stopped;
-    case 'failed':
-      return turn.failure === null || turn.failure.code === 'assistant_unavailable'
-        ? CHAT_TEXT.unavailable
-        : turn.failure.message;
-  }
-}
-
 function EmptyThread() {
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-4 px-10 py-12 text-center">
@@ -83,71 +67,22 @@ function EmptyThread() {
   );
 }
 
-function ThreadSkeleton() {
-  return (
-    <div aria-label="Loading the conversation" className="grid gap-6 px-4 py-5">
-      {[0, 1].map((i) => (
-        <div key={i} className="grid gap-3">
-          <span className="bg-muted h-9 w-2/3 animate-pulse justify-self-end rounded-lg" />
-          <span className="bg-muted h-3.5 w-24 animate-pulse rounded-sm" />
-          <span className="bg-muted ml-8 h-16 animate-pulse rounded-md" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Thread({ session, role, onNew }: { session: ChatSession; role: string | undefined; onNew: () => void }) {
-  const { conversationId, conversation } = session;
-  const messages = conversation.data?.messages ?? [];
-  const shown = turnsShown(session.turns, conversationId, conversation.data?.messages);
-  const onRetry = (question: string) => void session.ask(question);
-
-  if (conversationId !== null && conversation.isError) {
-    return (
-      <div className="px-4 py-5">
-        <ApiProblem error={conversation.error} title="This conversation couldn't be opened">
-          <Button type="button" size="sm" variant="outline" onClick={onNew}>
-            <SquarePen aria-hidden />
-            New conversation
-          </Button>
-        </ApiProblem>
-      </div>
-    );
-  }
-  if (conversationId !== null && conversation.isPending && shown.length === 0) return <ThreadSkeleton />;
-  if (messages.length === 0 && shown.length === 0) return <EmptyThread />;
-
-  // "Try again" goes with the conversation's latest question only.
-  const lastRetry: RetryProps = { canRetry: !session.busy, onRetry };
-  const noRetry: RetryProps = { canRetry: false, onRetry };
-  return (
-    <div className="grid gap-7 px-4 py-5">
-      {messages.map((message, i) => (
-        <MessageView
-          key={message.id}
-          message={message}
-          failure={session.failures[message.id]}
-          retry={shown.length === 0 && i === messages.length - 1 ? lastRetry : noRetry}
-          role={role}
-        />
-      ))}
-      {shown.map((turn, i) => (
-        <LiveTurnView key={turn.key} turn={turn} retry={i === shown.length - 1 ? lastRetry : noRetry} role={role} />
-      ))}
-    </div>
-  );
-}
-
-function PanelContent({ session, role }: { session: ChatSession; role: string | undefined }) {
+function PanelContent({
+  session,
+  role,
+  onExpand,
+}: {
+  session: ChatSession;
+  role: string | undefined;
+  onExpand: () => void;
+}) {
   const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const newButtonRef = useRef<HTMLButtonElement>(null);
-  const scroller = useRef<HTMLDivElement>(null);
-  const stick = useRef(true);
   const { view, conversationId, busy } = session;
   const latest = session.latest;
   const title = conversationId === null ? CHAT_TEXT.newConversation : (session.conversation.data?.title ?? '');
+  const { scrollerRef, onScroll } = useKeepAtBottom(session, view);
 
   const focusBox = () => {
     const box = textareaRef.current;
@@ -176,34 +111,6 @@ function PanelContent({ session, role }: { session: ChatSession; role: string | 
     wasBusy.current = busy;
   }, [busy, view]);
 
-  // Keep the newest words in view while the person is at the bottom; a new question or another
-  // conversation always starts there.
-  const messageCount = session.conversation.data?.messages.length ?? 0;
-  const lastKey = useRef<number | undefined>(undefined);
-  const lastConversation = useRef<string | null | undefined>(undefined);
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (el === null) return;
-    if (latest?.key !== lastKey.current || conversationId !== lastConversation.current) stick.current = true;
-    lastKey.current = latest?.key;
-    lastConversation.current = conversationId;
-    if (stick.current) el.scrollTop = el.scrollHeight;
-  }, [
-    view,
-    conversationId,
-    messageCount,
-    latest?.key,
-    latest?.phase,
-    latest?.answer,
-    latest?.steps.length,
-    latest?.saved,
-  ]);
-
-  const onScroll = () => {
-    const el = scroller.current;
-    if (el !== null) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
-  };
-
   const startNew = () => {
     session.newConversation();
     if (view === 'thread') focusBox();
@@ -211,6 +118,12 @@ function PanelContent({ session, role }: { session: ChatSession; role: string | 
 
   const answeringHere = session.answering !== null && session.answering.conversationId === conversationId;
   const answeringElsewhere = session.answering !== null && !answeringHere;
+
+  const expandButton = (
+    <IconButton label="Open on the full page" onClick={onExpand}>
+      <Maximize2 aria-hidden />
+    </IconButton>
+  );
 
   return (
     <DialogPrimitive.Content
@@ -251,6 +164,7 @@ function PanelContent({ session, role }: { session: ChatSession; role: string | 
               </IconButton>
             </>
           ) : null}
+          {expandButton}
           <IconButton label="Close" onClick={() => session.setOpen(false)}>
             <X aria-hidden />
           </IconButton>
@@ -267,8 +181,8 @@ function PanelContent({ session, role }: { session: ChatSession; role: string | 
           </div>
         ) : (
           <>
-            <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
-              <Thread session={session} role={role} onNew={startNew} />
+            <div ref={scrollerRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
+              <Thread session={session} role={role} onNew={startNew} empty={<EmptyThread />} />
             </div>
             <Composer
               draft={session.draft}
@@ -292,34 +206,51 @@ function PanelContent({ session, role }: { session: ChatSession; role: string | 
   );
 }
 
-/** "Ask" in the header and the panel it opens. */
+/** "Ask" in the header and the panel it opens; neither shows on the Ask page itself. */
 export function ChatPanel() {
-  const session = useChatSession();
+  const session = useSharedChatSession();
   const { data: me } = useMe();
+  const navigate = useNavigate();
+  const onAskPage = useLocation({ select: (location) => isAskPath(location.pathname) });
+  const { open, setOpen } = session;
+
+  // Arriving on the Ask page, by any way, closes the panel: the page shows the same conversation.
+  useEffect(() => {
+    if (onAskPage && open) setOpen(false);
+  }, [onAskPage, open, setOpen]);
+
+  const expand = () => {
+    const id = session.conversationId;
+    const going = id === null ? navigate({ to: '/ask' }) : navigate({ to: '/ask/$id', params: { id } });
+    void going.then(() => setOpen(false));
+  };
+
   return (
-    <DialogPrimitive.Root open={session.open} onOpenChange={session.setOpen} modal={false}>
-      <DialogPrimitive.Trigger asChild>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className={cn(
-            'text-chrome-foreground hover:bg-chrome-raised border border-white/15 hover:text-white',
-            'data-[state=open]:border-brand/70 data-[state=open]:bg-chrome-raised data-[state=open]:text-white',
-          )}
-        >
-          <Sparkles className="text-brand" aria-hidden />
-          Ask
-          {session.busy ? (
-            <>
-              <span aria-hidden className="bg-brand size-1.5 animate-pulse rounded-full" />
-              <span className="sr-only">(an answer is being written)</span>
-            </>
-          ) : null}
-        </Button>
-      </DialogPrimitive.Trigger>
+    <DialogPrimitive.Root open={open && !onAskPage} onOpenChange={setOpen} modal={false}>
+      {onAskPage ? null : (
+        <DialogPrimitive.Trigger asChild>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className={cn(
+              'text-chrome-foreground hover:bg-chrome-raised border border-white/15 hover:text-white',
+              'data-[state=open]:border-brand/70 data-[state=open]:bg-chrome-raised data-[state=open]:text-white',
+            )}
+          >
+            <Sparkles className="text-brand" aria-hidden />
+            Ask
+            {session.busy ? (
+              <>
+                <span aria-hidden className="bg-brand size-1.5 animate-pulse rounded-full" />
+                <span className="sr-only">(an answer is being written)</span>
+              </>
+            ) : null}
+          </Button>
+        </DialogPrimitive.Trigger>
+      )}
       <DialogPrimitive.Portal>
-        <PanelContent session={session} role={me?.role} />
+        <PanelContent session={session} role={me?.role} onExpand={expand} />
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );
