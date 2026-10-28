@@ -156,3 +156,38 @@ The fast load creates the org `company-x-changed-fast`. A 150-question run in bo
 - The question set and its checks file: `data/generated/eval/questions/` (git-ignored).
 - The changed folder: `data/generated/eval/<slug>-changed/` (git-ignored).
 - Each run: the Benchmark screen at https://grc.localhost, and the full report, with the questions and answers, in `data/benchmark/<run ID>.json` (git-ignored).
+
+## Reading the scores
+
+When the checks file sits beside the set, `pnpm bench:run` scores the run against it after the run ends, while its key is still live. The scores print under "Evaluation (checks file)", after the run's usual output, as counts and scores only. The full detail goes into the report file's `evaluation` block (`data/benchmark/<run ID>.json`, report version 2).
+
+If the checks file is broken, or its question IDs aren't the set's in the same order, the run is refused before anything is made (exit 2, naming the field). Without a checks file the run works as before. With `--part extraction` the checks file is ignored, and one line says so.
+
+- **Breakdown by fine kind and by wording.** The run's usual scores, worked out again for the questions of one fine kind, then for those of one wording. On screen, per mode, the answers part:
+  - the answers (`n`) and pass/partial/fail/skipped;
+  - the mean answer correctness and made-up record numbers;
+  - the no-answer rule and planted instruction followed, where those questions are in the slice;
+  - the 95th-percentile first words and full answer.
+
+  The report holds both parts (search and answers). A stale answer (below) counts as a fail here.
+
+- **Consistency.** The three wordings of one fact should name the same records. For each answer, the evaluation lists the org's records of the question's target kinds that it names, by number or by name. A group is measured in a mode when at least 2 of its answers were scored. An answer isn't scored when it was skipped, or failed with no answer. A group is consistent when every answer names exactly the same records, whether or not they are the right ones. The score is consistent groups ÷ measured groups, overall and per fine kind.
+- **Execution accuracy** (hybrid only, apart from the answer score). Each hybrid answer's own graph query is compared with the question's correct graph query. Both are checked with Ask's query rules and run read-only, with Ask's limits, as the read-only query account of the run key's role and clearance. They never run as the admin or writer account. A result set is the records of the question's target kinds that the query returned, plus any returned name or number that matches exactly one such record. Outcomes:
+  - `match`: the two result sets are equal;
+  - `mismatch`: they differ;
+  - `no_query`: the answer has no graph query;
+  - `refused`: Ask's rules refuse the query, so it is never sent;
+  - `failed`: it ran but timed out or failed.
+
+  The score is match ÷ (match + mismatch + no_query + refused + failed), overall, per fine kind and per wording. Precision and recall compare the model's result set with the correct one.
+
+- **Left out of the execution score:**
+  - `gold_mismatch`: the correct query's own result isn't the question's expected records. The org's graph and the answer key disagree, so the model can't be judged on that question.
+  - `gold_failed`: the correct query couldn't run.
+
+  Both are counted on screen and listed by question ID in the report. Skipped answers are left out too.
+
+- **Without `NEO4J_QUERY_SECRET`** there is no query account to run as. Execution accuracy then shows "not measured (NEO4J_QUERY_SECRET not set)", and the rest is still scored.
+- **Stale answers** (shown only when some question has forbidden names, as in the changed-data test). An answer is stale when it shows a forbidden name: an old name of a renamed record, or an end of a deleted link. A control's old name right after its code, as in "AC-4 Information Flow Enforcement", is the catalog's own requirement title and doesn't count. The score per mode is stale answers ÷ scored answers of those questions, also split by why (`renamed`, `deleted_link`).
+
+These scores stay in the command's output and the report file. The run stored on the API, its items and the Benchmark screen don't include them.

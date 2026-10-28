@@ -29,24 +29,41 @@
 //   kind, and the seven ratios with their numerators and denominators. Scores, counts, times and IDs
 //   only: never a question, an answer, a name or the key (D57, D164). The whole run, texts
 //   included, goes to `data/benchmark/<run ID>.json`, a folder git keeps out (D81).
+// - The checks file (EV-002; D261 track A, items 1–3 and item 4's failure rule): when
+//   `<set without .json>.checks.json` sits beside the set, it is checked against the set (the same
+//   question IDs in the same order; a bad or misfitting file exits 2 naming the field, nothing made)
+//   and, after the run and while its key is live, the run is scored against it (`evaluateRun`): the
+//   breakdown by fine kind and by wording, consistency across the wordings of one fact, execution
+//   accuracy (each hybrid answer's own graph query against the correct one, run read-only as the
+//   run key's role x clearance query account after `checkGraphQuery`, never the admin or writer
+//   account; not measured without NEO4J_QUERY_SECRET) and stale answers. Counts and scores go on
+//   screen under "Evaluation (checks file)"; the detail goes into the report's `evaluation` block.
+//   Nothing of it goes to the API. With `--part extraction` a checks file is ignored (one line says
+//   so). An evaluation that throws prints its type and code and exits 1; the run stays stored and
+//   the key is still revoked.
 // The root script runs node with `--use-system-ca`, so the Mac's trust in Caddy's local
 // certificate applies (D60). An error prints its type and code, or, for an API refusal, the address,
 // status, code and reference ID. Settings: see org-script-env.ts (D170). Every run is a new run;
 // nothing in the command is random.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ScriptDb } from './org-script-env.js';
 // Loaded by URL: plain `node` needs the `.ts` file name, which tsc refuses in an import path. The
 // env module goes first: it lets the benchmark's, the shared and the api's `./x.js` imports load
 // their `.ts`.
 type Env = typeof import('./org-script-env.js');
-const { connect, describeError, load, missingSettings, sqlTag } = (await import(
+const { connect, describeError, load, missingSettings, setting, sqlTag } = (await import(
   new URL('./org-script-env.ts', import.meta.url).href
 )) as Env;
 type Benchmark = typeof import('../../benchmark/src/index.js');
 const bench = (await import(new URL('../../benchmark/src/index.ts', import.meta.url).href)) as Benchmark;
 type Shared = typeof import('../../shared/src/index.js');
 const shared = (await import(new URL('../../shared/src/index.ts', import.meta.url).href)) as Shared;
+// Ask's graph rules, loaded only when a checks file needs them (the evaluation's runner).
+type QueryCheckModule = typeof import('../../api/src/search/graph/query-check.js');
+type GraphSearchModule = typeof import('../../api/src/search/graph/graph-search.service.js');
+type GraphResultsModule = typeof import('../../api/src/search/graph/graph-results.js');
+type GraphReader = import('../../api/src/search/graph/graph-search.service.js').GraphReader;
 
 /** The run's API key lives at most this long (D54); it is revoked at the end anyway. */
 const KEY_LIFETIME_MS = 12 * 60 * 60 * 1000;
@@ -110,6 +127,30 @@ if (args.part === 'extraction') {
   }
 }
 
+// The checks file beside the set (EV-002): checked against the set before anything is made; its
+// problems name fields only (D164).
+type EvalChecks = ReturnType<Benchmark['parseEvalChecks']>;
+const setPath = resolve(process.cwd(), args.set);
+async function loadChecks(): Promise<EvalChecks | null> {
+  if (args.part === 'extraction') {
+    if (existsSync(bench.checksPathFor(setPath))) {
+      console.log('bench:run: the checks file beside the set is ignored with --part extraction');
+    }
+    return null;
+  }
+  try {
+    return await bench.loadChecksBeside(setPath, set);
+  } catch (err) {
+    if (err instanceof bench.ChecksFileError) {
+      const shown = err.problems.slice(0, 10).map((p) => `the checks file is not valid: ${p.field}: ${p.message}`);
+      const more = err.problems.length - shown.length;
+      refuse(more > 0 ? [...shown, `… and ${more} more problem(s)`] : shown);
+    }
+    refuse([`the checks file could not be read: ${describeError(err)}`]);
+  }
+}
+const checks = await loadChecks();
+
 const missing = missingSettings();
 if (missing.length > 0) {
   console.error(`bench:run: missing settings (environment or .env): ${missing.join(', ')}. Nothing was made.`);
@@ -153,6 +194,41 @@ async function checkOrg(db: ScriptDb, orgId: string, slug: string): Promise<OrgC
 }
 
 const conn = await connect();
+
+/**
+ * The evaluation's graph runner (EV-002 behaviour 2(d); D73, D131, D176): each query checked with
+ * Ask's `checkGraphQuery` (a refused one is never sent), then run with Ask's `runGraphQuery` and
+ * limits (5 s, 50 rows) through `GraphService.readAs`, as the read-only query account of the run
+ * key's own role and clearance (Admin at Restricted), and read with `readGraphRows` for the Admin
+ * who made the key. Never the admin or writer account. One query at a time (the evaluation awaits
+ * each). Without NEO4J_QUERY_SECRET there is no query account: not measured.
+ */
+async function evalGraph(orgId: string, viewerId: string): Promise<Parameters<Benchmark['evaluateRun']>[0]['graph']> {
+  if (setting('NEO4J_QUERY_SECRET') === '') return { notMeasured: bench.EXECUTION_NO_SECRET };
+  const { checkGraphQuery } = await load<QueryCheckModule>('search/graph/query-check.ts');
+  const { GRAPH_QUERY_LIMITS, runGraphQuery } = await load<GraphSearchModule>('search/graph/graph-search.service.ts');
+  const { readGraphRows } = await load<GraphResultsModule>('search/graph/graph-results.ts');
+  const reader = conn.deps.graph as GraphReader;
+  const role = 'admin' as const;
+  const clearance = 'restricted' as const;
+  return {
+    runner: async (query) => {
+      const check = checkGraphQuery(query);
+      if (!check.ok) return { ok: false, reason: 'refused', code: check.reason };
+      // readAs: the role x clearance query account only (GraphService.readAs, M0-005).
+      const ran = await runGraphQuery(reader, { orgId, role, clearance }, query, GRAPH_QUERY_LIMITS);
+      if (!ran.ok) {
+        return { ok: false, reason: ran.fallback === 'graph_query_refused' ? 'refused' : 'failed', code: ran.code };
+      }
+      const read = readGraphRows(ran.rows, { userId: viewerId, role, clearance });
+      return {
+        ok: true,
+        records: read.records.map((r) => ({ id: r.id, kind: r.kind })),
+        values: read.values.map((row) => Object.values(row) as unknown[]),
+      };
+    },
+  };
+}
 const stop = new AbortController();
 let key: { id: string; ctx: OrgCtx } | null = null;
 let apiKeys: KeysApi | null = null;
@@ -249,6 +325,8 @@ try {
 
     let end: 'finished' | 'failed' | 'not_started';
     let lines: string[];
+    /** The evaluation's error line (type and code, or the API refusal's line); null when none. */
+    let evaluationError: string | null = null;
     if (extraction !== null) {
       const { expected, source: generated } = extraction;
       console.log(
@@ -289,8 +367,34 @@ try {
         sleep: (ms) => bench.abortableSleep(ms, stop.signal),
         log: (line) => console.log(line),
       });
+      // The run scored against the checks file, while the key is live (EV-002).
+      type EvalReport = Awaited<ReturnType<Benchmark['evaluateRun']>>;
+      let evaluation: EvalReport | null = null;
+      let evaluationLines: string[] = [];
+      if (checks !== null && result.runId !== null) {
+        if (stopping || stop.signal.aborted) {
+          evaluationLines = ['Evaluation (checks file): not run (the run was stopped)'];
+        } else {
+          try {
+            const records = await bench.readOrgRecords(api, bench.evalTargetKinds(checks));
+            evaluation = await bench.evaluateRun({
+              checks,
+              checksPath: bench.checksPathFor(args.set),
+              questions: result.questions,
+              items: result.items,
+              records,
+              graph: await evalGraph(orgId, org.adminId),
+              log: (line) => console.log(line),
+            });
+            evaluationLines = bench.evalRunOutput(evaluation);
+          } catch (err) {
+            const line = bench.benchErrorLine(err);
+            evaluationError = line.startsWith('type=') ? describeError(err) : line;
+          }
+        }
+      }
       const reportPath = writeReport(result.runId, () =>
-        bench.formatBenchReport(bench.benchReport(result, args, set, { slug: args.org, id: orgId })),
+        bench.formatBenchReport(bench.benchReport(result, args, set, { slug: args.org, id: orgId }, evaluation)),
       );
       end = result.end;
       lines = bench.benchRunOutput(result, {
@@ -300,11 +404,16 @@ try {
         baseUrl: args.baseUrl,
         reportPath,
       });
+      if (evaluationLines.length > 0) lines.push('', ...evaluationLines);
     }
 
     console.log('');
     for (const line of lines) console.log(line);
     if (end !== 'finished' && !stopping) process.exitCode = 1;
+    if (evaluationError !== null) {
+      console.error(`bench:run: the evaluation (checks file) failed: ${evaluationError}`);
+      if (!stopping) process.exitCode = 1;
+    }
   }
 } catch (err) {
   // An API refusal's line names its address, status, code and reference ID; anything else (a
