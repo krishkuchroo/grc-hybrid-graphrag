@@ -3,12 +3,16 @@
 // the run as the API gave it (its settings: models, prompt versions, limits, cut-offs and injection
 // checks), every question with its expected records as the org holds them, every item as sent, how
 // they were stored, and the summary. The output stays free of texts; only this file holds them.
+// Version 2 (EV-002) adds `evaluation`: the run scored against the set's checks file (per question
+// its group, kind and wording, the records each answer named, the execution outcome with both
+// queries and result sets, the stale hits, and every summary), or null when the set has none.
 // Pure: it formats what the run gave.
 import type { BenchmarkResultItemInput, BenchmarkRunDetail, BenchmarkSummary, QuestionSet } from '@grc/shared';
+import type { EvalReport } from '../eval/evaluate.js';
 import type { BenchRunArgs } from './args.js';
 import type { BenchRunResult } from './run.js';
 
-export const BENCH_REPORT_VERSION = 1;
+export const BENCH_REPORT_VERSION = 2;
 
 export interface BenchReport {
   reportVersion: number;
@@ -45,6 +49,8 @@ export interface BenchReport {
   summary: BenchmarkSummary;
   summaryFrom: BenchRunResult['summaryFrom'];
   documents: BenchRunResult['documents'];
+  /** The run scored against the set's checks file; null when there is none beside the set. */
+  evaluation: EvalReport | null;
 }
 
 export function benchReport(
@@ -52,6 +58,7 @@ export function benchReport(
   args: BenchRunArgs,
   set: QuestionSet,
   org: { slug: string; id: string },
+  evaluation: EvalReport | null = null,
 ): BenchReport {
   return {
     reportVersion: BENCH_REPORT_VERSION,
@@ -93,6 +100,7 @@ export function benchReport(
     summary: result.summary,
     summaryFrom: result.summaryFrom,
     documents: result.documents,
+    evaluation,
   };
 }
 

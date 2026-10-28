@@ -84,3 +84,61 @@ export {
   type EvalSetCounts,
   type EvalSetOptions,
 } from './build-eval-set.js';
+// Scoring a run against its set's checks file (EV-002; D261 track A, items 1–3 and item 4's failure
+// rule): the breakdown by fine kind and wording, consistency, execution accuracy and stale answers.
+// `pnpm bench:run` runs it when the checks file sits beside the set.
+export {
+  EVAL_REPORT_SECTIONS,
+  EXECUTION_NO_SECRET,
+  evalTargetKinds,
+  evaluateRun,
+  isScoredAnswer,
+  type EvalAnswerReport,
+  type EvalExecutionReport,
+  type EvalGraphInput,
+  type EvalQuestionReport,
+  type EvalReport,
+  type EvalReportSection,
+  type EvalRunInput,
+  type EvalSliceSummary,
+} from './evaluate.js';
+export {
+  consistencySummary,
+  nameableRecords,
+  namedRecords,
+  sameRecordSets,
+  type ConsistencyAnswer,
+  type ConsistencyGroup,
+  type ConsistencyModeSummary,
+  type ConsistencyShare,
+  type NameableRecord,
+  type NamedRecordRef,
+} from './consistency.js';
+export {
+  EXECUTION_EXCLUDED_OUTCOMES,
+  EXECUTION_OUTCOMES,
+  EXECUTION_SCORED_OUTCOMES,
+  executeQuestion,
+  executionSummary,
+  recordValueIndex,
+  resultSetOf,
+  type EvalExecution,
+  type EvalGraphRunResult,
+  type EvalGraphRunner,
+  type EvalQueryRun,
+  type ExecutionInput,
+  type ExecutionMean,
+  type ExecutionOutcome,
+  type ExecutionSummary,
+  type RecordValueIndex,
+} from './execution.js';
+export {
+  showsForbidden,
+  staleHitsOf,
+  staleSummary,
+  type EvalStaleHit,
+  type StaleAnswer,
+  type StaleModeSummary,
+  type StaleShare,
+} from './stale.js';
+export { evalRunOutput } from './eval-output.js';
