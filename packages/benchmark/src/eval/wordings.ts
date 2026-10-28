@@ -97,13 +97,45 @@ function holdsWords(outer: string, inner: string): boolean {
 }
 
 /**
+ * The words a short form never starts with (D263 item 11): dropping a name's first word left
+ * fragments such as "or modify system process", "and authentication policy" and "of duties".
+ */
+export const JOINING_WORDS: ReadonlySet<string> = new Set([
+  'a',
+  'an',
+  'and',
+  'as',
+  'at',
+  'by',
+  'for',
+  'from',
+  'in',
+  'into',
+  'of',
+  'on',
+  'or',
+  'the',
+  'to',
+  'via',
+  'with',
+]);
+
+/** Whether the text's first word, lowercased and without punctuation at its ends, is a joining word. */
+function startsWithJoiningWord(text: string): boolean {
+  const first = text.trim().split(/\s+/)[0] ?? '';
+  return JOINING_WORDS.has(first.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''));
+}
+
+/**
  * The short form of a name, lowercased: the first of these with at least 4 characters whose
  * normalised form appears, as whole words, in exactly one of `namesOfKind` (the names of the
  * record's kind in the folder):
  * 1. the text after the last `": "`;
  * 2. for a name of 3 or more words, the name without its first word;
  * 3. the name itself.
- * When none of them is told apart that way, the name itself, lowercased.
+ * Candidates 1 and 2 are skipped when their first word is one of `JOINING_WORDS` (D263 item 11:
+ * a short form reads as a name, never as a fragment that starts with "of" or "and"); the name
+ * itself is always tried. When none of them is told apart that way, the name itself, lowercased.
  */
 export function shortFormOf(name: string, namesOfKind: readonly string[]): string {
   const normalisedNames = namesOfKind.map(normaliseName);
@@ -112,9 +144,10 @@ export function shortFormOf(name: string, namesOfKind: readonly string[]): strin
   if (colon >= 0) candidates.push(name.slice(colon + 2));
   if (name.trim().split(/\s+/).length >= 3) candidates.push(name.trim().replace(/^\S+\s+/, ''));
   candidates.push(name);
-  for (const candidate of candidates) {
+  for (const [i, candidate] of candidates.entries()) {
     const text = candidate.trim();
     if (text.length < MIN_SHORT_FORM_LENGTH) continue;
+    if (i < candidates.length - 1 && startsWithJoiningWord(text)) continue;
     const n = normaliseName(text);
     if (n === '') continue;
     if (normalisedNames.filter((other) => holdsWords(other, n)).length === 1) return text.toLowerCase();

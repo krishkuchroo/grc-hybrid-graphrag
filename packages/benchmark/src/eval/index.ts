@@ -45,6 +45,7 @@ export {
 } from './checks-file.js';
 export {
   DROP_WORD_LETTERS,
+  JOINING_WORDS,
   MIN_SHORT_FORM_LENGTH,
   SWAP_WORD_LETTERS,
   WORDINGS,
