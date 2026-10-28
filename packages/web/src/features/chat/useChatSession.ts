@@ -1,8 +1,9 @@
 // The chat panel's state (S6-007): whether it is open, which conversation it shows (or a new one,
 // started on its first question), the question being written, and the questions asked in this
-// session that the conversation, read again, doesn't hold yet. It lives in the shell's header, so it
-// stays as the person moves between screens and while the panel is closed; an answer keeps arriving
-// behind a closed panel.
+// session that the conversation, read again, doesn't hold yet. It lives in the shell, through
+// ChatSessionProvider, so it stays as the person moves between screens and while the panel is
+// closed, and the Ask page shows the same session (D262); an answer keeps arriving behind a closed
+// panel.
 // - One question at a time: the box is disabled while an answer is being written (behaviour 3).
 // - The answer's events arrive through ./stream.ts. `done` carries the saved message; Stop closes
 //   the connection, and the API saves what was written as stopped; an `error` event or a lost

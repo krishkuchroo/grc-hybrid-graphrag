@@ -9,6 +9,8 @@
 //   message with its reference ID.
 // - Under a saved answer (live once `done` has come, or reopened), the "Not reviewed yet" part
 //   (D260, ./PendingLinks) when the API listed pending link findings with it.
+// - Two sizes (D262): 'panel', the quick panel's, and 'page', the Ask page's larger type. MessageView
+//   and LiveTurnView take it as a prop and pass it to their parts through a context.
 import { CHAT_STEPS, CHAT_TEXT, chatStepText, queuePositionText, type AnswerSource, type ChatStep } from '@grc/shared';
 import {
   Check,
@@ -23,7 +25,7 @@ import {
   Sparkles,
   Square,
 } from 'lucide-react';
-import { Fragment, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, type ReactNode } from 'react';
 import { ApiError } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { ApiProblem } from '@/features/records/ApiProblem';
@@ -36,6 +38,15 @@ import type { Message, MessageCitation, VisibleMessage } from './useChat';
 import type { LiveTurn, TurnFailure } from './useChatSession';
 import { counted, messageTime } from './words';
 
+/** Where a conversation is shown: the quick panel, or the Ask page with larger type. */
+export type ChatSize = 'panel' | 'page';
+
+const SizeContext = createContext<ChatSize>('panel');
+
+function useSize(): ChatSize {
+  return useContext(SizeContext);
+}
+
 export interface RetryProps {
   /** Offered on the latest question only, when nothing else is being answered. */
   canRetry: boolean;
@@ -43,12 +54,19 @@ export interface RetryProps {
 }
 
 function QuestionBubble({ text, at }: { text: string; at: string }) {
+  const page = useSize() === 'page';
   return (
-    <div className="grid justify-items-end gap-1">
-      <p className="bg-accent text-accent-foreground max-w-[88%] rounded-lg rounded-br-sm px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
+    <div className={page ? 'grid justify-items-end gap-1.5' : 'grid justify-items-end gap-1'}>
+      <p
+        className={
+          page
+            ? 'bg-accent text-accent-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]'
+            : 'bg-accent text-accent-foreground max-w-[88%] rounded-lg rounded-br-sm px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]'
+        }
+      >
         {text}
       </p>
-      <time dateTime={at} className="text-muted-foreground text-[11px] tabular-nums">
+      <time dateTime={at} className={cn('text-muted-foreground tabular-nums', page ? 'text-xs' : 'text-[11px]')}>
         {messageTime(at)}
       </time>
     </div>
@@ -56,12 +74,16 @@ function QuestionBubble({ text, at }: { text: string; at: string }) {
 }
 
 function AssistantMark() {
+  const page = useSize() === 'page';
   return (
-    <div className="flex items-center gap-2">
-      <span aria-hidden className="bg-chrome text-brand grid size-6 shrink-0 place-items-center rounded-full">
-        <Sparkles className="size-3.5" />
+    <div className={page ? 'flex items-center gap-2.5' : 'flex items-center gap-2'}>
+      <span
+        aria-hidden
+        className={cn('bg-chrome text-brand grid shrink-0 place-items-center rounded-full', page ? 'size-7' : 'size-6')}
+      >
+        <Sparkles className={page ? 'size-4' : 'size-3.5'} />
       </span>
-      <span className="text-xs font-semibold">Assistant</span>
+      <span className={page ? 'text-[13px] font-semibold' : 'text-xs font-semibold'}>Assistant</span>
     </div>
   );
 }
@@ -75,11 +97,13 @@ function Notice({
   icon: typeof Info;
   children: ReactNode;
 }) {
+  const page = useSize() === 'page';
   return (
     <div
       role="note"
       className={cn(
-        'flex items-start gap-2 rounded-md border px-3 py-2 text-[13px] leading-snug',
+        'flex items-start gap-2 rounded-md border px-3 py-2 leading-snug',
+        page ? 'text-sm' : 'text-[13px]',
         tone === 'info' && 'border-[#9cc4d0] bg-[#eaf4f7] text-[#12404d]',
         tone === 'amber' && 'border-[#e3c98f] bg-[#fdf6e5] text-[#6b4a0e]',
         tone === 'grey' && 'bg-muted text-muted-foreground border-border',
@@ -171,6 +195,7 @@ export function AnswerBody({
   streaming?: boolean;
   role: string | undefined;
 }) {
+  const page = useSize() === 'page';
   const blocks = answerBlocks(text);
   const byNumber = new Map((citations ?? []).map((c) => [c.number, c]));
 
@@ -210,7 +235,13 @@ export function AnswerBody({
 
   if (blocks.length === 0) return streaming ? <Caret /> : null;
   return (
-    <div className="grid gap-2 text-sm leading-relaxed [overflow-wrap:anywhere]">
+    <div
+      className={
+        page
+          ? 'grid gap-3 text-[15px] leading-[1.7] [overflow-wrap:anywhere]'
+          : 'grid gap-2 text-sm leading-relaxed [overflow-wrap:anywhere]'
+      }
+    >
       {blocks.map((block, b) => {
         const lastBlock = streaming && b === blocks.length - 1;
         if (block.type === 'paragraph') {
@@ -307,10 +338,11 @@ function HiddenAnswer() {
 }
 
 function AnswerFrame({ children, busy = false }: { children: ReactNode; busy?: boolean }) {
+  const page = useSize() === 'page';
   return (
-    <div className="grid gap-2.5" aria-busy={busy || undefined}>
+    <div className={page ? 'grid gap-3' : 'grid gap-2.5'} aria-busy={busy || undefined}>
       <AssistantMark />
-      <div className="grid gap-3 pl-8">{children}</div>
+      <div className={page ? 'grid gap-3.5 pl-[2.375rem]' : 'grid gap-3 pl-8'}>{children}</div>
     </div>
   );
 }
@@ -321,23 +353,27 @@ export function MessageView({
   failure,
   retry,
   role,
+  size = 'panel',
 }: {
   message: Message;
   failure: TurnFailure | undefined;
   retry: RetryProps;
   role: string | undefined;
+  size?: ChatSize;
 }) {
   return (
-    <article aria-label="Question and answer" className="grid gap-3">
-      <QuestionBubble text={message.question} at={message.createdAt} />
-      <AnswerFrame>
-        {message.hidden ? (
-          <HiddenAnswer />
-        ) : (
-          <SavedAnswer message={message} failure={failure} retry={retry} role={role} />
-        )}
-      </AnswerFrame>
-    </article>
+    <SizeContext.Provider value={size}>
+      <article aria-label="Question and answer" className={size === 'page' ? 'grid gap-4' : 'grid gap-3'}>
+        <QuestionBubble text={message.question} at={message.createdAt} />
+        <AnswerFrame>
+          {message.hidden ? (
+            <HiddenAnswer />
+          ) : (
+            <SavedAnswer message={message} failure={failure} retry={retry} role={role} />
+          )}
+        </AnswerFrame>
+      </article>
+    </SizeContext.Provider>
   );
 }
 
@@ -345,9 +381,10 @@ export function MessageView({
 const SHOWN_STEPS: readonly ChatStep[] = CHAT_STEPS;
 
 function Progress({ turn }: { turn: LiveTurn }) {
+  const page = useSize() === 'page';
   if (turn.phase === 'sending') {
     return (
-      <p className="text-muted-foreground flex items-center gap-2 text-[13px]">
+      <p className={cn('text-muted-foreground flex items-center gap-2', page ? 'text-sm' : 'text-[13px]')}>
         <LoaderCircle className="text-primary size-4 animate-spin" aria-hidden />
         Sending your question
       </p>
@@ -358,7 +395,9 @@ function Progress({ turn }: { turn: LiveTurn }) {
       <div className="flex items-start gap-2.5 rounded-md border border-[#c9dadd] bg-[#f3f8f8] px-3 py-2.5">
         <Hourglass className="text-primary mt-0.5 size-4 shrink-0" aria-hidden />
         <div className="grid gap-0.5">
-          <p className="text-[13px] font-semibold">{queuePositionText(turn.position ?? 1)}</p>
+          <p className={page ? 'text-sm font-semibold' : 'text-[13px] font-semibold'}>
+            {queuePositionText(turn.position ?? 1)}
+          </p>
           <p className="text-muted-foreground text-xs">Questions are answered one at a time.</p>
         </div>
       </div>
@@ -374,7 +413,8 @@ function Progress({ turn }: { turn: LiveTurn }) {
           <li
             key={step}
             className={cn(
-              'flex items-center gap-2 text-[13px]',
+              'flex items-center gap-2',
+              page ? 'text-sm' : 'text-[13px]',
               active ? 'text-foreground font-semibold' : reached ? 'text-foreground' : 'text-muted-foreground',
             )}
           >
@@ -409,44 +449,58 @@ function localCitations(answer: string, sources: AnswerSource[] | null): Message
 }
 
 /** The question being answered now, as its events have told it so far. */
-export function LiveTurnView({ turn, retry, role }: { turn: LiveTurn; retry: RetryProps; role: string | undefined }) {
+export function LiveTurnView({
+  turn,
+  retry,
+  role,
+  size = 'panel',
+}: {
+  turn: LiveTurn;
+  retry: RetryProps;
+  role: string | undefined;
+  size?: ChatSize;
+}) {
   if (turn.saved !== null) {
-    return <MessageView message={turn.saved} failure={turn.failure ?? undefined} retry={retry} role={role} />;
+    return (
+      <MessageView message={turn.saved} failure={turn.failure ?? undefined} retry={retry} role={role} size={size} />
+    );
   }
   const writing =
     turn.phase === 'sending' || turn.phase === 'queued' || turn.phase === 'working' || turn.phase === 'answering';
   const nothingFound = turn.sources !== null && turn.sources.length === 0;
   return (
-    <article aria-label="Question and answer" className="grid gap-3">
-      <QuestionBubble text={turn.question} at={turn.askedAt} />
-      <AnswerFrame busy={writing}>
-        {writing && !(turn.phase === 'answering' && nothingFound) ? <Progress turn={turn} /> : null}
-        {turn.fallback !== null && turn.phase !== 'failed' ? (
-          <Notice tone="info" icon={Info}>
-            <p>{CHAT_TEXT.documentsOnly}</p>
-          </Notice>
-        ) : null}
-        {turn.phase === 'failed' ? (
-          <>
-            {turn.answer !== '' && turn.failure?.code === 'connection_lost' ? (
-              <AnswerBody text={turn.answer} citations={localCitations(turn.answer, turn.sources)} role={role} />
-            ) : null}
-            <FailureNotice failure={turn.failure ?? undefined} question={turn.question} retry={retry} />
-          </>
-        ) : nothingFound && turn.answer.trim() === CHAT_TEXT.nothingFound ? (
-          <Notice tone="grey" icon={SearchX}>
-            <p>{CHAT_TEXT.nothingFound}</p>
-          </Notice>
-        ) : turn.phase === 'stopped' || turn.phase === 'answered' ? (
-          <AnswerBody text={turn.answer} citations={localCitations(turn.answer, turn.sources)} role={role} />
-        ) : turn.answer !== '' ? (
-          <AnswerBody text={turn.answer} citations={null} streaming role={role} />
-        ) : null}
-        {turn.phase === 'stopped' ? <StoppedTag /> : null}
-        {turn.phase === 'stopped' || turn.phase === 'answered' ? (
-          <SourcesList citations={localCitations(turn.answer, turn.sources)} role={role} />
-        ) : null}
-      </AnswerFrame>
-    </article>
+    <SizeContext.Provider value={size}>
+      <article aria-label="Question and answer" className={size === 'page' ? 'grid gap-4' : 'grid gap-3'}>
+        <QuestionBubble text={turn.question} at={turn.askedAt} />
+        <AnswerFrame busy={writing}>
+          {writing && !(turn.phase === 'answering' && nothingFound) ? <Progress turn={turn} /> : null}
+          {turn.fallback !== null && turn.phase !== 'failed' ? (
+            <Notice tone="info" icon={Info}>
+              <p>{CHAT_TEXT.documentsOnly}</p>
+            </Notice>
+          ) : null}
+          {turn.phase === 'failed' ? (
+            <>
+              {turn.answer !== '' && turn.failure?.code === 'connection_lost' ? (
+                <AnswerBody text={turn.answer} citations={localCitations(turn.answer, turn.sources)} role={role} />
+              ) : null}
+              <FailureNotice failure={turn.failure ?? undefined} question={turn.question} retry={retry} />
+            </>
+          ) : nothingFound && turn.answer.trim() === CHAT_TEXT.nothingFound ? (
+            <Notice tone="grey" icon={SearchX}>
+              <p>{CHAT_TEXT.nothingFound}</p>
+            </Notice>
+          ) : turn.phase === 'stopped' || turn.phase === 'answered' ? (
+            <AnswerBody text={turn.answer} citations={localCitations(turn.answer, turn.sources)} role={role} />
+          ) : turn.answer !== '' ? (
+            <AnswerBody text={turn.answer} citations={null} streaming role={role} />
+          ) : null}
+          {turn.phase === 'stopped' ? <StoppedTag /> : null}
+          {turn.phase === 'stopped' || turn.phase === 'answered' ? (
+            <SourcesList citations={localCitations(turn.answer, turn.sources)} role={role} />
+          ) : null}
+        </AnswerFrame>
+      </article>
+    </SizeContext.Provider>
   );
 }

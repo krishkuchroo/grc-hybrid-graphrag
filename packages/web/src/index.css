@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /*
- * GRC Workspace theme, after ServiceNow IRM (D2): a deep slate-teal chrome around a cool grey
+ * Warrant theme, after ServiceNow IRM (D2): a deep slate-teal chrome around a cool grey
  * canvas, white work surfaces, one teal action colour, and the brand sage green used only to mark
  * where you are (the active navigation item and the org badge).
  */
@@ -83,6 +83,21 @@
     to {
       opacity: 1;
       transform: none;
+    }
+  }
+}
+
+/* The Warrant mark draws its stroke in once, on the Ask page's welcome (UI-001). The path has
+ * pathLength 1 and a dash of 1, so the offset runs from hidden to whole. */
+@theme {
+  --animate-mark-draw: mark-draw 900ms cubic-bezier(0.65, 0, 0.35, 1) both;
+
+  @keyframes mark-draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
     }
   }
 }
