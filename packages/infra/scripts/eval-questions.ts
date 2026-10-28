@@ -12,9 +12,14 @@
 //   (`<name>.checks.json`). Both replace earlier files of the same names.
 // - Every correct graph query is checked with the api's `checkGraphQuery` before anything is
 //   written; one that is refused exits 1 naming the question ID and the reason.
+// - A changed folder (`pnpm eval:changed`, EV-003): its `changes.json` is read and checked against
+//   the folder; each question's `forbidden` list gets the old names and deleted links' far ends it
+//   must not show, the facts touching a change come first, and the checks file's `changed` block
+//   counts the changes. A bad `changes.json` exits 2.
 // - Refused with exit 2, nothing written: unknown or repeated arguments, a bad count, seed or output
-//   path, a folder `readDatasetFolder` refuses, and a `framework-mappings.json` or `plants.json` that
-//   can't be read or isn't in the shape read.
+//   path, a folder `readDatasetFolder` refuses, a `framework-mappings.json` or `plants.json` that
+//   can't be read or isn't in the shape read, and a `changes.json` that isn't valid or doesn't fit
+//   the folder.
 // No model, no database, no network: it reads files and writes two. The same folder, count and seed
 // always write byte-identical files (D45.8). The output holds counts, IDs and paths only: never a
 // question, a name or a query (D164); the texts go only into the git-ignored files (D81).
@@ -205,6 +210,23 @@ try {
   refuse([`the folder's extras could not be read: ${describeError(err)}`]);
 }
 
+// A changed folder's changes, checked against the folder; its problems name fields only (D164).
+let changes: Awaited<ReturnType<Benchmark['loadChangesFile']>>;
+try {
+  changes = await bench.loadChangesFile(folder.dir);
+} catch (err) {
+  if (err instanceof bench.ChangesFileError) {
+    refuse(err.problems.map((p) => `${bench.CHANGES_FILE}: ${p.field}: ${p.message}`));
+  }
+  refuse([`${bench.CHANGES_FILE} could not be read: ${describeError(err)}`]);
+}
+if (changes !== null) {
+  const problems = bench.checkChangesFitFolder(changes, folder);
+  if (problems.length > 0) {
+    refuse(problems.map((p) => `${bench.CHANGES_FILE}: ${p.field}: ${p.message} (it doesn't fit the folder)`));
+  }
+}
+
 const outPath =
   args.out !== null
     ? resolve(process.cwd(), args.out)
@@ -221,7 +243,11 @@ const checksPath = bench.checksPathFor(outPath);
 
 let built: ReturnType<Benchmark['buildEvalSet']>;
 try {
-  built = bench.buildEvalSet(folder, extra, { count: args.count, seed: args.seed });
+  built = bench.buildEvalSet(folder, extra, {
+    count: args.count,
+    seed: args.seed,
+    ...(changes !== null ? { changes } : {}),
+  });
 } catch (err) {
   if (err instanceof bench.EvalSetBuildError) {
     if (err.code === 'bad_option') refuse([err.message]);
@@ -288,6 +314,12 @@ if (counts.shortfalls.length > 0) {
 }
 lines.push(`  groups dropped: ${list(bench.EVAL_DROP_REASONS, counts.dropped)}`);
 lines.push(`  fixed templates: ${counts.fixed.written} written, ${counts.fixed.leftOut} left out`);
+if (checks.changed !== null) {
+  lines.push(
+    `  changed folder: ${checks.changed.renames} rename(s), ${checks.changed.deletions} deletion(s); ` +
+      `questions with forbidden names: ${counts.withForbidden} of ${counts.questions}`,
+  );
+}
 if (counts.questions < counts.asked) {
   lines.push(
     `  fewer questions than asked for: ${counts.questions} of ${counts.asked}` +

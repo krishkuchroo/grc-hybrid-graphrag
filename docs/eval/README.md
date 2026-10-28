@@ -15,7 +15,7 @@ Every command here that uses the model or the running app is yours to run. The g
   - its fine kind and wording;
   - the kinds of record it asks for;
   - the correct graph query;
-  - the names an answer must not show (empty for now: the changed-data test fills this list).
+  - the names an answer must not show (empty except on a changed folder: see "The changed-data test" below).
 
 Each fact is asked three ways (plain, loose and typo), so the three answers of a group should name the same records.
 Question IDs are `<group>.<wording>`, for example `mitigated_by-03.loose`.
@@ -90,7 +90,69 @@ pnpm bench:run --org company-x-fast --set data/generated/eval/questions/company-
 
 A 150-question run in both modes asks for 300 chat answers: about 2 to 3 hours at D259's speeds. `--modes hybrid` halves that, but loses the hybrid-against-vector comparison.
 
+## The changed-data test
+
+This test catches answers that come from what the model learned in training instead of from the data.
+`pnpm eval:changed` copies a dataset folder into a new one where some records have new, made-up names and some links are gone.
+Questions are then made from the changed folder, and you load it into a fresh org.
+An answer that still shows an old name, or a link that is no longer there, can't have come from that org's data.
+
+### What changes
+
+- **Renames** (8 by default): risks, controls, policies and incidents take turns, in that order.
+  - Each gets a made-up name in the same style as the `no_answer` questions' names, matching no record's name, old or new.
+  - The new name replaces the old one everywhere: in the answer key, the facts and their sentences, the provenance, the framework mappings, every document, the asset lists and the planted injections. Upper or lower case is matched; spacing must be the same.
+  - Assets are never renamed: their names come from the asset lists and sit inside incident names.
+  - Never renamed either: a record a fixed question rests on, an end of a planted injection's link, and a record whose name sits inside another record's name (or holds one), since changing it would change that other name too.
+  - Every Company X incident name holds an asset's name, so on Company X no incident can be renamed, and the other kinds take its turns.
+  - A control keeps its 800-53 code. The framework catalogs keep their own names, so `AC-17 Remote Access` still names the requirement.
+- **Deletions** (20 by default): MITIGATED_BY, GOVERNED_BY, IMPACTS and EXPOSES links take turns, in that order.
+  - The link leaves the answer key, the facts and the provenance. Each sentence that stated it is taken out of its document.
+  - A link is only deleted when its sentences state no other link, neither end is renamed (or rests under a fixed question or a planted injection), and the record its question starts from (the risk, the policy, the asset or the incident) keeps at least one link of that type.
+- **What it writes:** every file `pnpm dataset:load` reads, `sources/`, `plants.json`, and `changes.json`, which lists each rename (old name, new name, and a control's code) and each deletion (the link, its ends and the sentences removed).
+  The manifest gets the new slug and the org name "<name> (changed)". The hand-written `questions-*.json` isn't copied, because it would be out of date.
+
+Before it finishes, the command checks the written folder. No old name may be left anywhere (a control's name right after its 800-53 code is allowed), every deleted sentence must be gone, every other sentence must still be there word for word, and the folder must read back as a dataset folder.
+A failed check exits with 1, names the file and the count, and leaves nothing behind.
+
+```
+pnpm eval:changed --from <dataset folder> --to <new folder under data/generated/> [--seed 1] [--renames 8] [--deletions 20] [--slug <slug>] [--replace]
+```
+
+- `--to`: a new folder under `data/generated/`, never under `data/generated/training/` (Company X is never training data, D234).
+- `--renames`: 0 to 40. `--deletions`: 0 to 100. If too few records or links qualify, it makes as many as it can and says so.
+- `--slug`: the new org's slug (default `<from slug>-changed`). Its fast-load org is `<slug>-fast`.
+- `--replace`: replaces a `--to` folder that this command wrote before (one that holds `changes.json`). No other folder is ever removed.
+
+Bad arguments, a `--to` that isn't allowed, or a `--from` folder that isn't valid exit with 2, and nothing is written.
+The same `--from`, seed and counts always write byte-identical files. The output gives counts and paths only, never a name or a sentence.
+
+### What counts as a stale answer
+
+`pnpm eval:questions` on a changed folder reads its `changes.json` and fills each question's `forbidden` list in the checks file:
+
+- **`renamed`:** the old name of each renamed record the question starts from, passes through (a two-step question's middle record) or expects. For a control, `exceptAfter` gives its code, because `AC-17 Remote Access` is still the requirement's real name.
+- **`deleted_link`:** the far end of each deleted link that the question would have followed, for example the control a risk no longer has. It's left out when that record is still expected through another link, or when its name sits inside an expected record's name.
+
+An answer that shows a forbidden name is stale. Questions touching a change come first within each kind, so the set tests the changes as much as it can.
+The checks file's `changed` block gives the source slug and how many renames and deletions there were. The output says how many questions have forbidden names.
+
+### Your commands
+
+You run these, after EV-003 is merged. The `bench:run` and `dataset:load` commands need `NODE_EXTRA_CA_CERTS` set to a copy of Caddy's root (CLAUDE.md, "HTTPS commands on the Mac"). Load the trained model in the Unsloth app with Context Length 18432 and Parallel Slots 1 (D259).
+
+```
+pnpm eval:changed --from docs/datasets/company-x --to data/generated/eval/company-x-changed
+pnpm dataset:load --folder data/generated/eval/company-x-changed --mode fast --step base
+pnpm dataset:load --folder data/generated/eval/company-x-changed --mode fast --step documents
+pnpm eval:questions --folder data/generated/eval/company-x-changed
+pnpm bench:run --org company-x-changed-fast --set data/generated/eval/questions/company-x-changed-150-seed1.json --part all --wait
+```
+
+The fast load creates the org `company-x-changed-fast`. A 150-question run in both modes takes about 2 to 3 hours, as for the baseline.
+
 ## Where the results go
 
 - The question set and its checks file: `data/generated/eval/questions/` (git-ignored).
+- The changed folder: `data/generated/eval/<slug>-changed/` (git-ignored).
 - Each run: the Benchmark screen at https://grc.localhost, and the full report, with the questions and answers, in `data/benchmark/<run ID>.json` (git-ignored).
