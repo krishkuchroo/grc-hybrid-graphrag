@@ -14,6 +14,10 @@
 //   it has and the rest passes round-robin to `SHORTFALL_ORDER`'s kinds while they have facts left.
 //   Within a kind the facts come in a seeded order, each kind on its own stream (`EVAL_STREAMS`).
 // - Every text in the set is distinct: a group whose texts aren't is dropped and the next fact taken.
+// - A changed folder (EV-003, its `changes.json` given as `changes`): within each kind the facts
+//   touching a change (those with a forbidden name, `forbiddenOf`) come first, each question's
+//   `forbidden` list names the old names and deleted links' far ends it must not show, a made-up
+//   name matches no old name either, and the checks file's `changed` block counts the changes.
 // Pure: the same folder, extras, count and seed always give the same set and checks, byte for byte
 // (`formatQuestionSet`, `formatEvalChecks`).
 import { Faker, base, en } from '@faker-js/faker';
@@ -24,6 +28,7 @@ import {
   benchmarkFileNameSchema,
   benchmarkQuestionSchema,
   benchmarkRecordNameSchema,
+  normaliseName,
   questionSetSchema,
   type BenchmarkQuestion,
   type ExpectedRecord,
@@ -43,12 +48,14 @@ import {
 } from '../dataset/folder.js';
 import { fieldOf } from '../questions/answer-key.js';
 import { assetPrefixOf, isMadeUp, madeUpName } from '../questions/made-up-names.js';
-import { OrgGraph, compareKeys, type LinkStep } from '../questions/org-graph.js';
+import { OrgGraph, compareKeys, type GraphRecord, type LinkStep } from '../questions/org-graph.js';
+import type { ChangesFile } from './changes-file.js';
 import {
   EVAL_CHECKS_FORMAT_VERSION,
   evalChecksSchema,
   type EvalCheckQuestion,
   type EvalChecks,
+  type EvalForbidden,
 } from './checks-file.js';
 import { FIXED_QUESTIONS, type FixedQuestion } from './fixed-questions.js';
 import {
@@ -168,6 +175,13 @@ export interface EvalSetOptions {
   seed: number;
   /** The fixed templates; default `FIXED_QUESTIONS`. */
   fixed?: readonly FixedQuestion[];
+  /**
+   * A changed folder's `changes.json` (EV-003), already checked against the folder
+   * (`checkChangesFitFolder`). With it, the facts touching a change come first within each kind,
+   * each question's `forbidden` list names the old names and deleted links' far ends it must not
+   * show, and the checks file's `changed` block is filled.
+   */
+  changes?: ChangesFile;
 }
 
 /** Why a group was dropped: its texts weren't distinct (among themselves or from earlier ones), or a
@@ -202,6 +216,8 @@ export interface EvalSetCounts {
   /** Groups dropped, by reason. */
   dropped: Record<EvalDropReason, number>;
   fixed: { written: number; leftOut: number };
+  /** Questions with at least one forbidden name (0 unless the folder was changed). */
+  withForbidden: number;
 }
 
 export type EvalSetBuildErrorCode = 'bad_option' | 'no_questions';
@@ -235,6 +251,11 @@ interface Fact {
   goldQuery: string;
   madeUpName?: string;
   injection?: QuestionInjection;
+  /** The start record's key and the steps from it to the expected records (none for a made-up name). */
+  startKey?: string;
+  steps?: readonly LinkStep[];
+  /** The names an answer must not show (EV-003; empty unless the folder was changed). */
+  forbidden: EvalForbidden[];
 }
 
 /** One group's questions and their checks, before its ID is given. */
@@ -284,6 +305,9 @@ function linkFacts(
       }),
       targetKinds: [target],
       goldQuery: query(record.name),
+      startKey: record.key,
+      steps,
+      forbidden: [],
     });
   }
   return facts;
@@ -325,6 +349,9 @@ function frameworkFacts(graph: OrgGraph, crosswalks: ReadonlyMap<string, readonl
       expected: distinct.map((name) => ({ kind: 'requirement', name })),
       targetKinds: ['requirement'],
       goldQuery: frameworkQuery(control.name),
+      startKey: control.key,
+      steps: [],
+      forbidden: [],
     });
   }
   return facts;
@@ -378,21 +405,31 @@ function injectionFacts(folder: DatasetFolder, plants: readonly EvalPlant[], gra
       targetKinds: ['risk'],
       goldQuery: exposedToQuery(asset.name),
       injection,
+      startKey: key,
+      steps: [OUT('EXPOSED_TO')],
+      forbidden: [],
     });
   }
   return facts;
 }
 
 /** `no_answer` facts: made-up names, a risk then an asset in turn, each new and matching no record. */
-function* noAnswerFacts(folder: DatasetFolder, graph: OrgGraph, faker: Faker): Generator<Fact> {
+function* noAnswerFacts(
+  folder: DatasetFolder,
+  graph: OrgGraph,
+  faker: Faker,
+  oldNames: readonly GraphRecord[],
+): Generator<Fact> {
   const prefix = assetPrefixOf(folder.answerOrg.name, graph.records);
+  // A changed folder's old names count as names of the org: a made-up name must match none of them.
+  const records = oldNames.length === 0 ? graph.records : [...graph.records, ...oldNames];
   const used = new Set<string>();
   for (let n = 0; n < MAX_MADE_UP_FACTS; n++) {
     const kind: RecordKind = n % 2 === 0 ? 'risk' : 'asset';
     let name: string | null = null;
     for (let tries = 0; tries < MADE_UP_TRIES && name === null; tries++) {
       const candidate = madeUpName(faker, kind, prefix);
-      if (!used.has(candidate) && isMadeUp(candidate, graph.records)) name = candidate;
+      if (!used.has(candidate) && isMadeUp(candidate, records)) name = candidate;
     }
     if (name === null) return;
     used.add(name);
@@ -406,6 +443,7 @@ function* noAnswerFacts(folder: DatasetFolder, graph: OrgGraph, faker: Faker): G
           targetKinds: ['control'],
           goldQuery: mitigatedByQuery(name),
           madeUpName: name,
+          forbidden: [],
         }
       : {
           kind: 'no_answer',
@@ -416,24 +454,91 @@ function* noAnswerFacts(folder: DatasetFolder, graph: OrgGraph, faker: Faker): G
           targetKinds: ['risk'],
           goldQuery: exposedToQuery(name),
           madeUpName: name,
+          forbidden: [],
         };
   }
 }
 
-/** Each kind's facts, in its seeded order. */
+/**
+ * The names a fact's answer must not show, for a changed folder (EV-003 behaviour 7):
+ * - for each renamed record that is its start, a record on its way (a two-step middle record) or
+ *   an expected record: its old name, with its 800-53 code as `exceptAfter` for a control;
+ * - for each deleted link that would have been one of its steps (its near end the start, or a
+ *   middle record for the second step, and of the step's type): the far end's name, unless that
+ *   record is still among the expected ones or its name sits inside an expected record's name as
+ *   whole words.
+ * Each name and reason once, in that order.
+ */
+export function forbiddenOf(
+  graph: OrgGraph,
+  changes: ChangesFile,
+  fact: { startKey?: string; steps?: readonly LinkStep[]; expected: readonly ExpectedRecord[] },
+): EvalForbidden[] {
+  if (fact.startKey === undefined) return [];
+  const steps = fact.steps ?? [];
+  const frontiers: string[][] = [[fact.startKey]];
+  for (let i = 0; i + 1 < steps.length; i++) frontiers.push(graph.step(frontiers[i]!, steps[i]!));
+  const expectedKeys = new Set(fact.expected.flatMap((e) => (e.key !== undefined ? [e.key] : [])));
+  const expectedNames = fact.expected.map((e) => normaliseName(e.name));
+  const out: EvalForbidden[] = [];
+  const seen = new Set<string>();
+  const add = (f: EvalForbidden): void => {
+    const id = `${f.why}\u0000${f.name}`;
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push(f);
+  };
+  const renamed = new Map(changes.renames.map((r) => [r.key, r]));
+  for (const key of [...frontiers.flat(), ...expectedKeys]) {
+    const r = renamed.get(key);
+    if (r === undefined) continue;
+    add({ name: r.from, why: 'renamed', ...(r.code !== undefined ? { exceptAfter: r.code } : {}) });
+  }
+  steps.forEach((step, i) => {
+    const near = new Set(frontiers[i] ?? []);
+    for (const d of changes.deletions) {
+      if (!step.types.includes(d.type)) continue;
+      const [nearKey, farKey, farName] =
+        step.direction === 'out' ? [d.fromKey, d.toKey, d.to] : [d.toKey, d.fromKey, d.from];
+      if (!near.has(nearKey) || expectedKeys.has(farKey)) continue;
+      // A name held in an expected record's name (`… (2012-01)` in `… (2012-01, 2)`) would fail a
+      // right answer, so it is left out too.
+      const far = normaliseName(farName);
+      if (far === '' || expectedNames.some((name) => ` ${name} `.includes(` ${far} `))) continue;
+      add({ name: farName, why: 'deleted_link' });
+    }
+  });
+  return out;
+}
+
+/** The facts with their forbidden names, those that have any first, each part in its order. */
+function touchingFirst(facts: readonly Fact[], graph: OrgGraph, changes: ChangesFile | undefined): Fact[] {
+  if (changes === undefined) return [...facts];
+  const withNames = facts.map((fact) => ({ ...fact, forbidden: forbiddenOf(graph, changes, fact) }));
+  return [...withNames.filter((f) => f.forbidden.length > 0), ...withNames.filter((f) => f.forbidden.length === 0)];
+}
+
+/** Each kind's facts, in its seeded order (with a changed folder, those touching a change first). */
 function factSources(
   folder: DatasetFolder,
   extra: EvalExtra,
   graph: OrgGraph,
   seed: number,
+  changes: ChangesFile | undefined,
 ): Record<GeneratedEvalKind, Iterator<Fact>> {
   const shuffle = (kind: GeneratedEvalKind, facts: Fact[]): Iterator<Fact> =>
-    fakerFor(seed, EVAL_STREAMS[kind], 0).helpers.shuffle(facts)[Symbol.iterator]();
+    touchingFirst(fakerFor(seed, EVAL_STREAMS[kind], 0).helpers.shuffle(facts), graph, changes)[Symbol.iterator]();
   const twoStep = (['asset', 'incident', 'risk'] as const).map((start) =>
     linkFacts(graph, 'two_step', TWO_STEP[start].shape, start, TWO_STEP[start].steps, TWO_STEP[start].target, (n) =>
       twoStepQuery(start, n),
     ),
   );
+  const oldNames: GraphRecord[] = (changes?.renames ?? []).map((r) => ({
+    key: r.key,
+    kind: r.kind,
+    name: r.from,
+    normalised: normaliseName(r.from),
+  }));
   return {
     mitigated_by: shuffle(
       'mitigated_by',
@@ -447,9 +552,11 @@ function factSources(
       'governs',
       linkFacts(graph, 'governs', 'governs', 'policy', [IN('GOVERNED_BY')], 'control', governsQuery),
     ),
-    two_step: takingTurns(fakerFor(seed, EVAL_STREAMS.two_step, 0), twoStep)[Symbol.iterator](),
+    two_step: touchingFirst(takingTurns(fakerFor(seed, EVAL_STREAMS.two_step, 0), twoStep), graph, changes)[
+      Symbol.iterator
+    ](),
     framework: shuffle('framework', frameworkFacts(graph, extra.crosswalks)),
-    no_answer: noAnswerFacts(folder, graph, fakerFor(seed, EVAL_STREAMS.no_answer, 0)),
+    no_answer: noAnswerFacts(folder, graph, fakerFor(seed, EVAL_STREAMS.no_answer, 0), oldNames),
     injection: shuffle('injection', injectionFacts(folder, extra.plants, graph)),
   };
 }
@@ -493,6 +600,7 @@ function questionOf(fact: Fact, id: string, text: string): BenchmarkQuestion | n
 function fixedQuestionOf(
   fq: FixedQuestion,
   graph: OrgGraph,
+  changes: ChangesFile | undefined,
 ): { question: BenchmarkQuestion; check: EvalCheckQuestion } | null {
   const nameOf = (key: string): string => {
     const record = graph.record(key);
@@ -519,12 +627,21 @@ function fixedQuestionOf(
         wording: 'reported',
         targetKinds: [...fq.targetKinds],
         goldQuery,
-        forbidden: [],
+        // Its own records are never changed; an expected record reached beyond them may be renamed.
+        forbidden: changes === undefined ? [] : renamedAmong(changes, expected),
       },
     };
   } catch {
     return null;
   }
+}
+
+/** The old names of the renamed records among `expected`, each once. */
+function renamedAmong(changes: ChangesFile, expected: readonly ExpectedRecord[]): EvalForbidden[] {
+  const keys = new Set(expected.flatMap((e) => (e.key !== undefined ? [e.key] : [])));
+  return changes.renames
+    .filter((r) => keys.has(r.key))
+    .map((r) => ({ name: r.from, why: 'renamed' as const, ...(r.code !== undefined ? { exceptAfter: r.code } : {}) }));
 }
 
 /** The set, its checks and the counts, for a dataset folder (see the top of the file). */
@@ -547,7 +664,7 @@ export function buildEvalSet(
       fixedLeftOut += 1;
       continue;
     }
-    const made = fixedQuestionOf(fq, graph);
+    const made = fixedQuestionOf(fq, graph, opts.changes);
     if (made === null || texts.has(made.question.text)) {
       fixedLeftOut += 1;
       continue;
@@ -561,7 +678,7 @@ export function buildEvalSet(
   // ---- The generated groups --------------------------------------------------------------------
   const groupsWanted = Math.max(0, Math.floor((count - fixedWritten) / GROUP_WORDINGS.length));
   const shares = evalShares(groupsWanted);
-  const sources = factSources(folder, extra, graph, seed);
+  const sources = factSources(folder, extra, graph, seed, opts.changes);
   const wordingFakers = Object.fromEntries(
     GENERATED_KINDS.map((kind) => [kind, fakerFor(seed, EVAL_STREAMS[kind], 1)]),
   ) as Record<GeneratedEvalKind, Faker>;
@@ -637,7 +754,7 @@ export function buildEvalSet(
           wording,
           targetKinds: [...draft.fact.targetKinds],
           goldQuery: draft.fact.goldQuery,
-          forbidden: [],
+          forbidden: draft.fact.forbidden.map((f) => ({ ...f })),
         });
       }
       groupsPerKind[kind] += 1;
@@ -657,7 +774,14 @@ export function buildEvalSet(
     folder: { slug: folder.org.slug, answerKeyVersion: folder.key.generatorVersion },
     seed,
     count: questions.length,
-    changed: null,
+    changed:
+      opts.changes === undefined
+        ? null
+        : {
+            fromSlug: opts.changes.from.slug,
+            renames: opts.changes.renames.length,
+            deletions: opts.changes.deletions.length,
+          },
     questions: checks,
   });
 
@@ -685,6 +809,7 @@ export function buildEvalSet(
       unfilled: Math.max(0, groupsWanted - groups),
       dropped,
       fixed: { written: fixedWritten, leftOut: fixedLeftOut },
+      withForbidden: checksFile.questions.filter((q) => q.forbidden.length > 0).length,
     },
   };
 }

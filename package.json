@@ -30,6 +30,7 @@
     "dataset:load": "node --experimental-transform-types --disable-warning=ExperimentalWarning --use-system-ca packages/infra/scripts/dataset-load.ts",
     "dataset:score": "node --experimental-transform-types --disable-warning=ExperimentalWarning --use-system-ca packages/infra/scripts/dataset-score.ts",
     "eval:questions": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/eval-questions.ts",
+    "eval:changed": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/eval-changed.ts",
     "gen:api-client": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/web/scripts/gen-api-client.ts"
   },
   "devDependencies": {
