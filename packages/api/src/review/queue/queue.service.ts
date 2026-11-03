@@ -23,6 +23,11 @@
 //   from the proposed record an end points to. A record the reader can't see matches nothing.
 // - The counts are the pending findings per kind in the reader's view, with the list's own
 //   visibility rules, so each equals the list's total for that kind.
+// - `superseded` findings (FX-002, D263, Q-FX-1 (a): stale pending findings the repair command
+//   `pnpm dataset:reresolve` replaced) are treated as not there: `findingVisibility` leaves them out,
+//   so the list, its total, the counts, a proposed record's pointing links, the detail (404, as for
+//   an unknown ID) and the chat's "Not reviewed yet" list never show them. The list's status filter
+//   doesn't take the status (`@grc/shared`'s list leaves it out).
 // - Logs (D163): IDs, counts and codes only, never a name, a sentence, a chunk or a note.
 import {
   LABELS,
@@ -63,7 +68,7 @@ import {
   type ReviewRecordKind,
   type ReviewSourceDocument,
 } from '@grc/shared';
-import { and, arrayContains, asc, count, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, arrayContains, asc, count, desc, eq, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { Logger } from 'pino';
 import type { z } from 'zod';
@@ -75,7 +80,12 @@ import type { GraphService } from '../../graph/graph.service.js';
 import { apiKeys } from '../../identity/api-keys.schema.js';
 import { member, user } from '../../identity/schema.js';
 import { documents, type UploaderType } from '../../intake/intake.schema.js';
-import { chunks, reviewFindings, type ReviewFindingRow as FindingDbRow } from '../../processing/processing.schema.js';
+import {
+  chunks,
+  reviewFindings,
+  type ReviewFindingRow as FindingDbRow,
+  type ReviewFindingStatus as StoredFindingStatus,
+} from '../../processing/processing.schema.js';
 import type { Caller } from '../../records/records.service.js';
 import {
   RecordWants,
@@ -105,6 +115,15 @@ export class ReviewFindingUnreadable extends Error {
     super('A review finding could not be read.');
     this.name = 'ReviewFindingUnreadable';
   }
+}
+
+/**
+ * A stored status as the queue shows it. `superseded` never passes `findingVisibility`, so it never
+ * reaches an answer; one that did would be a bug, refused as unreadable (fail safe).
+ */
+export function queueStatus(status: StoredFindingStatus): ReviewFindingStatus {
+  if (status === 'superseded') throw new ReviewFindingUnreadable();
+  return status;
 }
 
 /** A finding with its proposal read in its kind's shape. */
@@ -266,7 +285,7 @@ function person(id: string | null, facts: PageFacts): ReviewPerson | null {
 function rowBase(row: FindingDbRow, facts: PageFacts) {
   return {
     id: row.id,
-    status: row.status,
+    status: queueStatus(row.status),
     label: row.label,
     createdAt: row.createdAt.toISOString(),
     decidedBy: person(row.decidedBy, facts),
@@ -400,9 +419,14 @@ function mappingEnd(record: GraphRecord | undefined): MappingEndDetail {
 }
 
 /** The reader's org and the labels at or below their clearance: our own check, before row security's
- * (the queue's visibility, used by the chat's pending links too). */
+ * (the queue's visibility, used by the chat's pending links too). A `superseded` finding is never
+ * visible (FX-002): the queue treats it as not there. */
 export function findingVisibility(caller: Caller, labels: readonly Label[]): SQL {
-  return and(eq(reviewFindings.orgId, caller.orgId), inArray(reviewFindings.label, [...labels]))!;
+  return and(
+    eq(reviewFindings.orgId, caller.orgId),
+    inArray(reviewFindings.label, [...labels]),
+    ne(reviewFindings.status, 'superseded'),
+  )!;
 }
 
 /** The documents the reader may read: their own org, a record type their role views, a label at or
@@ -642,7 +666,7 @@ export class ReviewQueueService {
             inArray(reviewFindings.id, proposedIds),
           ),
         );
-      for (const r of rows) recordFindings.set(r.id, r.status);
+      for (const r of rows) recordFindings.set(r.id, queueStatus(r.status));
     }
 
     const pointing = await this.pointingCounts(
@@ -691,6 +715,7 @@ export class ReviewQueueService {
       CROSS JOIN LATERAL (VALUES (f.proposal -> 'from' ->> 'recordFindingId'), (f.proposal -> 'to' ->> 'recordFindingId')) AS v(ref)
       WHERE f.org_id = ${caller.orgId}
         AND f.kind = 'link'
+        AND f.status <> 'superseded'
         AND f.label IN ${[...labels]}
         AND v.ref IN ${[...recordFindingIds]}
       GROUP BY v.ref`);
@@ -877,7 +902,7 @@ export class ReviewQueueService {
     return [
       {
         id: link.row.id,
-        status: link.row.status,
+        status: queueStatus(link.row.status),
         type: link.proposal.type,
         side,
         other: endSummary(other, records, facts),

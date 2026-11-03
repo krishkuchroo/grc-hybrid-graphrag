@@ -71,8 +71,13 @@ export type ChunkRecordKind = (typeof CHUNK_RECORD_KINDS)[number];
 export const REVIEW_FINDING_KINDS = ['link', 'record', 'duplicate', 'mapping'] as const;
 export type ReviewFindingKind = (typeof REVIEW_FINDING_KINDS)[number];
 
-/** A review finding's status: `pending` and `live` are set by processing; the rest only by S5. */
-export const REVIEW_FINDING_STATUSES = ['pending', 'live', 'approved', 'rejected', 'removed'] as const;
+/** A review finding's status: `pending` and `live` are set by processing; `approved`, `rejected` and
+ * `removed` only by S5. `superseded` (FX-002, D263, Q-FX-1 (a)) is set only by the repair command
+ * `pnpm dataset:reresolve`, only from `pending`, and isn't a decision (no `decided_by`/`decided_at`):
+ * a stale pending finding the re-run matching no longer proposes, kept (D24) and hidden from the
+ * review queue, its counts and the chat's "Not reviewed yet" list (`findingVisibility`). The API's
+ * answers and the queue's filter use `@grc/shared`'s list, which leaves it out. */
+export const REVIEW_FINDING_STATUSES = ['pending', 'live', 'approved', 'rejected', 'removed', 'superseded'] as const;
 export type ReviewFindingStatus = (typeof REVIEW_FINDING_STATUSES)[number];
 
 /** The three rule checks (D39) a link finding can list as failed. */

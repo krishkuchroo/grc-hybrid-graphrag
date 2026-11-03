@@ -430,6 +430,8 @@ export const SECURITY_MATRIX: {
     // outcome and its `review.*` entry (409 `already_decided` for the loser of a race). A document
     // the reader may not see (role x record type and label) is 404; removing it (D52.5) takes every
     // AI link from it out of the graph and is audited as `document.removed`, with counts only.
+    // `superseded` findings (FX-002, D263: set only by the operator's `pnpm dataset:reresolve`) are
+    // hidden: missing from the list, its total and the counts, and 404 on the detail.
     {
       method: 'GET',
       path: '/api/v1/review/findings',
