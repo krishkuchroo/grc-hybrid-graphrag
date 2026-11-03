@@ -159,7 +159,7 @@ The fast load creates the org `company-x-changed-fast`. A 150-question run in bo
 
 ## Reading the scores
 
-When the checks file sits beside the set, `pnpm bench:run` scores the run against it after the run ends, while its key is still live. The scores print under "Evaluation (checks file)", after the run's usual output, as counts and scores only. The full detail goes into the report file's `evaluation` block (`data/benchmark/<run ID>.json`, report version 2).
+When the checks file sits beside the set, `pnpm bench:run` scores the run against it after the run ends, while its key is still live. The scores print under "Evaluation (checks file)", after the run's usual output, as counts and scores only. The full detail goes into the report file's `evaluation` block (`data/benchmark/<run ID>.json`, report version 3; version 2 had no vagueness scores).
 
 If the checks file is broken, or its question IDs aren't the set's in the same order, the run is refused before anything is made (exit 2, naming the field). Without a checks file the run works as before. With `--part extraction` the checks file is ignored, and one line says so.
 
@@ -190,4 +190,32 @@ If the checks file is broken, or its question IDs aren't the set's in the same o
 - **Without `NEO4J_QUERY_SECRET`** there is no query account to run as. Execution accuracy then shows "not measured (NEO4J_QUERY_SECRET not set)", and the rest is still scored.
 - **Stale answers** (shown only when some question has forbidden names, as in the changed-data test). An answer is stale when it shows a forbidden name: an old name of a renamed record, or an end of a deleted link. A control's old name right after its code, as in "AC-4 Information Flow Enforcement", is the catalog's own requirement title and doesn't count. The score per mode is stale answers ÷ scored answers of those questions, also split by why (`renamed`, `deleted_link`).
 
+- **Vagueness** and **cut-off answers and full-answer times**: see the next two sections.
+
 These scores stay in the command's output and the report file. The run stored on the API, its items and the Benchmark screen don't include them.
+
+## Vagueness scores
+
+These say how an answer reads, not whether it is right. They read the words only, with fixed rules and no AI judge (D45.8, D263). A listed, cited answer can still be wrong: correctness is the answer score.
+
+They are measured on every scored answer (not skipped, and not a fail with no answer), in each mode. For `no_answer` and `injection` questions only the hedging words and the length in words are measured, because those questions have no list to give.
+
+- **Completeness:** the answer's correctness score as stored: the expected records it names ÷ the expected records.
+- **Count stated:** the first line that isn't empty gives a count. That means a whole number in digits, or a number word from "zero" to "twenty", at most 3 words before a kind word: control, risk, incident, policy, asset, requirement, record, finding or link, singular or plural ("5 controls mitigate Brute Force:"). "No" at most 3 words before a kind word, or "none" within 3 words of one, states 0. A list marker such as "1." isn't a count, and a code such as "AC-17" isn't the number 17. The first such number from the left is the count.
+- **Count right:** the stated count equals the number of expected records. Shown as a share of the answers that state a count.
+- **Cited list items:** the lines that are list items as the chat panel shows them (a `-`, `*` or `•`, or a number with `.` or `)`, then a space), and of those the ones holding a citation as the API reads it (square brackets with source numbers: `[1]`, `[1, 3]`, `[2-4]`, `[Source 2]`). The score is cited items ÷ items, averaged over the answers that have a list.
+- **Hedging words:** how many times the answer uses some, various, several, may, might, possibly, perhaps, likely, could, certain, "a few" or "a number of" (whole words, any case). "May" before a word starting with a digit ("May 2019", "May 5") is a month and doesn't count. Shown as the mean per answer and the share of answers with at least one.
+- **Length:** the words (runs of letters or digits) ÷ the expected records, shown as the median. An answer under 8 words per expected record is **too short**.
+
+On screen, per mode, the Vagueness part under "Evaluation (checks file)" gives one line for all answers, then a table by fine kind and one by wording. Each shows the answers measured, mean completeness, the shares with a count stated and with the count right, the share with a list and its mean cited share, the mean hedges and the share with any, the median words per expected record and the share too short. The report gives each answer's checks too.
+
+## Cut-off answers and full-answer times
+
+These show what the answer cap costs (D265, Q-FX-4). They are measured on every answer with a saved message, every kind included.
+
+- **Cut off:** the message was stopped. No one presses Stop in a benchmark run, so a stopped message was ended by the answer cap or by the answer's 180 s time limit. The saved message doesn't say which.
+- **The cause:** "cap" when the whole message took under 180 s, because the answer step alone can't have reached its 180 s limit in less time than that. Otherwise "cap or time limit".
+- **The answer cap** is 2,048 tokens once FX-006 is live. Before that it is 1,024, so the baseline shows the old cap.
+- **Full-answer times:** the total time of each answered message, with the median, the 95th percentile, and how many took over 60 s (D48's full-answer target). A stopped or failed message has no full-answer time, and a failed one is not counted as cut off either.
+
+On screen, per mode, one line "Cut off and full-answer times" gives the count and share cut off (split by cause), and the full answers' count, median, 95th percentile and count over 60 s. The report also splits them by fine kind and by wording.

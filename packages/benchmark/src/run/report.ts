@@ -6,13 +6,15 @@
 // Version 2 (EV-002) adds `evaluation`: the run scored against the set's checks file (per question
 // its group, kind and wording, the records each answer named, the execution outcome with both
 // queries and result sets, the stale hits, and every summary), or null when the set has none.
+// Version 3 (EV-006) adds to `evaluation` each answer's vagueness checks and how it ended (cut off,
+// or its full-answer time), with their summaries per mode.
 // Pure: it formats what the run gave.
 import type { BenchmarkResultItemInput, BenchmarkRunDetail, BenchmarkSummary, QuestionSet } from '@grc/shared';
 import type { EvalReport } from '../eval/evaluate.js';
 import type { BenchRunArgs } from './args.js';
 import type { BenchRunResult } from './run.js';
 
-export const BENCH_REPORT_VERSION = 2;
+export const BENCH_REPORT_VERSION = 3;
 
 export interface BenchReport {
   reportVersion: number;
