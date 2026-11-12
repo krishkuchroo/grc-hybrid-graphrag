@@ -34,6 +34,9 @@ export const SEARCH_LIMITS = Object.freeze({
   pendingLinks: 50,
   /** …chosen from at most this many pending link findings, newest first. */
   pendingLinkCandidates: 5_000,
+  /** The records a question names (D263 items 4 and 10): at most this many found by name, close
+   * spelling or record number, best first; in hybrid mode they join Path B's records. */
+  namedRecords: 10,
   /** `POST /api/v1/search`: the most results it lists. */
   searchResults: 50,
   /** The answer: at most this many tokens… */

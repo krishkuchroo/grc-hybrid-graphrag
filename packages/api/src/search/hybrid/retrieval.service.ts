@@ -5,12 +5,18 @@
 // 1. Path A (VECTOR_SEARCH) and, in hybrid mode, Path B (GRAPH_SEARCH) start side by side, so Path A
 //    never waits for Gemma. Path B gets the model passed in (a chat turn's session, S6-002) or, when
 //    none is, the text model itself, whose one-at-a-time slot it then queues for with the questions.
-//    Vector mode never calls Gemma.
+//    Vector mode never calls Gemma. In hybrid mode the named record finder (../named/, FX-003)
+//    starts beside them; vector mode never calls it.
 // 2. Path A failing (bge-m3 can't be reached) rejects with its `AiFailure`; the caller answers
 //    `assistant_unavailable`. It still waits for Path B to settle first, so a chat turn's session is
 //    never left with a call running after the turn has given back the slot.
 // 3. Path B failing in any way is a fallback reason, never an error: hybrid goes on with documents
-//    only (D45.7). Only the caller stopping it (`AiStopped`) is passed on.
+//    only (D45.7). Only the caller stopping it (`AiStopped`) is passed on. The finder failing gives
+//    no named records.
+// 3a. When Path B ran, the named records it didn't find itself follow its records, before the
+//    entity filter and fusion, so they reach `<GRAPH_CONTEXT>` (they rank after Path B's own; no
+//    links are added for them). When it failed they stay out of the context (D45.7) but are still
+//    listed in `namedRecords`, after the entity filter's record check.
 // 4. The API's own visibility check (./entity-filter.ts): each passage's document is read again in
 //    Postgres, in the asker's org context, so a passage of a document that is removed, another
 //    org's, or hidden from the asker is dropped; records and links are checked against the role and
@@ -34,6 +40,7 @@ import { withOrgContext } from '../../db/org-context.js';
 import { documents } from '../../intake/intake.schema.js';
 import type {
   GraphQueryModel,
+  GraphRecord,
   GraphSearch,
   GraphSearchResult,
   Retrieval,
@@ -45,7 +52,8 @@ import type {
   VectorSearchResult,
 } from '../retrieval.js';
 import { buildContext } from './context.js';
-import { filterVisible, type DocumentFacts } from './entity-filter.js';
+import type { NamedRecord, NamedRecordFinder } from '../named/named-records.js';
+import { filterVisible, recordVisible, type DocumentFacts } from './entity-filter.js';
 import { addDocumentChunks, clearDocumentOf, readDocumentChunks } from './clear-document.js';
 import { contextLimitsFor, fuseSources, selectContext, type ContextLimits, type ContextSelection } from './fusion.js';
 
@@ -55,6 +63,8 @@ export interface HybridRetrievalDeps {
   db: Db;
   vector: VectorSearch;
   graph: GraphSearch;
+  /** The records a question names (hybrid mode only, FX-003). */
+  named: NamedRecordFinder;
   /** The text model: Path B's model when the caller passes none. */
   textModel: GraphQueryModel;
   /** The text model's context in tokens (`TextModel.contextTokens`), which sets the passages'
@@ -74,6 +84,7 @@ export class HybridRetrieval implements Retrieval {
   private readonly db: Db;
   private readonly vector: VectorSearch;
   private readonly graph: GraphSearch;
+  private readonly named: NamedRecordFinder;
   private readonly textModel: GraphQueryModel;
   private readonly limits: ContextLimits;
   private readonly log: Logger;
@@ -83,6 +94,7 @@ export class HybridRetrieval implements Retrieval {
     this.db = deps.db;
     this.vector = deps.vector;
     this.graph = deps.graph;
+    this.named = deps.named;
     this.textModel = deps.textModel;
     this.limits = contextLimitsFor(deps.contextTokens);
     this.log = (deps.log ?? createLogger()).child({ context: 'Retrieval' });
@@ -93,11 +105,13 @@ export class HybridRetrieval implements Retrieval {
     const mode = options.mode ?? DEFAULT_SEARCH_MODE;
     if (!isSearchMode(mode)) throw new TypeError('retrieve: unknown search mode');
 
-    // Both paths at once, Path A first: it never waits for Gemma. (A throw becomes a rejection.)
+    // Both paths at once, Path A first: it never waits for Gemma. (A throw becomes a rejection.) The
+    // named record finder starts beside them in hybrid mode and never rejects (runNamed).
     const vectorRun = (async () => this.vector.search(caller, question))();
     const graphRun =
       mode === 'hybrid' ? this.runGraph(caller, question, options.model ?? this.textModel) : Promise.resolve(null);
-    const [a, b] = await Promise.allSettled([vectorRun, graphRun]);
+    const namedRun = mode === 'hybrid' ? this.runNamed(caller, question) : Promise.resolve([]);
+    const [a, b, n] = await Promise.allSettled([vectorRun, graphRun, namedRun]);
 
     if (b.status === 'rejected') throw b.reason; // only the caller's stop gets here (runGraph)
     if (a.status === 'rejected') {
@@ -108,7 +122,18 @@ export class HybridRetrieval implements Retrieval {
       );
       throw err;
     }
-    return this.fuse(caller, mode, a.value, b.value);
+    return this.fuse(caller, mode, a.value, b.value, n.status === 'fulfilled' ? n.value : []);
+  }
+
+  /** The named record finder, which never rejects here: anything it throws gives none. */
+  private async runNamed(caller: SearchCaller, question: string): Promise<NamedRecord[]> {
+    try {
+      const found = await this.named.find(caller, question);
+      return Array.isArray(found) ? found : [];
+    } catch {
+      this.log.warn({ orgId: caller.orgId, code: 'named_records_failed' }, 'search: the named records threw');
+      return [];
+    }
   }
 
   /** Path B, which never rejects: anything it throws is `graph_query_failed`, except a stop. */
@@ -133,16 +158,32 @@ export class HybridRetrieval implements Retrieval {
     mode: RetrievalResult['mode'],
     pathA: VectorSearchResult,
     pathB: GraphSearchResult | null,
+    named: readonly NamedRecord[],
   ): Promise<RetrievalResult> {
     const started = this.now();
     const viewer = { role: caller.role, clearance: caller.clearance };
     const passagesFound = Array.isArray(pathA.passages) ? pathA.passages : [];
     const graphOk = pathB !== null && pathB.ok ? pathB : null;
 
+    // The named records Path B didn't find follow its records (only when it ran, D45.7).
+    const namedFound = named.map((n) => n.record);
+    const graphRecords: GraphRecord[] = graphOk !== null ? [...graphOk.records] : [];
+    if (graphOk !== null) {
+      const ids = new Set(graphRecords.map((r) => r.id));
+      for (const record of namedFound) {
+        if (ids.has(record.id)) continue;
+        ids.add(record.id);
+        graphRecords.push(record);
+      }
+    }
+    const namedRecords = namedFound
+      .filter((record) => recordVisible(viewer, record))
+      .map(({ id, kind, number, name }) => ({ id, kind, number, name }));
+
     const docs = await this.documentFacts(caller, passagesFound);
     const filtered = filterVisible(viewer, caller.orgId, {
       passages: passagesFound,
-      records: graphOk?.records ?? [],
+      records: graphRecords,
       links: graphOk?.links ?? [],
       documents: docs,
     });
@@ -167,6 +208,14 @@ export class HybridRetrieval implements Retrieval {
       this.log.warn({ orgId: caller.orgId, mode, dropped }, 'search: the last check dropped findings');
     }
     const keptPassages = selection.kept.filter((e) => e.item.type === 'passage').length;
+    const keptRecordIds = new Set(selection.kept.flatMap((e) => (e.item.type === 'record' ? [e.item.record.id] : [])));
+    const passageRecordIds = [
+      ...new Set(
+        selection.kept.flatMap((e) =>
+          e.item.type === 'passage' ? e.item.passage.recordIds.filter((id) => typeof id === 'string') : [],
+        ),
+      ),
+    ];
     this.log.info(
       {
         orgId: caller.orgId,
@@ -185,6 +234,11 @@ export class HybridRetrieval implements Retrieval {
           links: selection.links.length,
         },
         results: built.results.length,
+        named: {
+          found: named.length,
+          kept: namedRecords.length,
+          inContext: namedRecords.filter((r) => keptRecordIds.has(r.id)).length,
+        },
         graphRan: graph.ran,
         fallback: graph.fallback,
         rowsRead: graph.rowsRead,
@@ -202,6 +256,8 @@ export class HybridRetrieval implements Retrieval {
       graph,
       label: built.label,
       timings,
+      namedRecords,
+      passageRecordIds,
     };
   }
 

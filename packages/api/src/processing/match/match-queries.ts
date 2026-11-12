@@ -30,7 +30,9 @@ export interface BuiltQuery {
   params: Record<string, unknown>;
 }
 
-function scopeWhere(v: string, scope: KindScope, params: Record<string, unknown>): string {
+/** The WHERE clause that keeps a query on node variable `v` inside the scope (its parameters go into
+ * `params`); exported for the named record finder (search/named/named-records.ts). */
+export function scopeWhere(v: string, scope: KindScope, params: Record<string, unknown>): string {
   params['visible'] = [...scope.visible];
   const where = [`${v}:${NODE_LABELS[scope.kind]}`, `${v}.status = 'active'`, `${v}.sensitivity IN $visible`];
   if (scope.ownerOnly !== undefined) {
@@ -44,7 +46,8 @@ function scopeWhere(v: string, scope: KindScope, params: Record<string, unknown>
   return where.join(' AND ');
 }
 
-const FIELDS = (v: string): string =>
+/** The columns `toStoredName` reads, for node variable `v`; exported for the named record finder. */
+export const FIELDS = (v: string): string =>
   `${v}.id AS id, ${v}.number AS number, ${v}.name AS name, ${v}.sensitivity AS label, ` +
   `${v}.sourceIds AS sourceIds, ${v}.version AS version`;
 

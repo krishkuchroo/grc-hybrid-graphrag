@@ -494,7 +494,11 @@ export const SECURITY_MATRIX: {
     // types, labels at or below the clearance), checked again in the API; graph records only through
     // the asker's own role x clearance read-only account in the org's own database, with a time
     // limit, checked again in the API; a link only if both ends are visible; never a removed
-    // document's passages. Hidden things never reach Gemma or the answer. Conversations and messages
+    // document's passages. In hybrid mode the records the question names (FX-003, D263) are read by
+    // our code with the extraction matcher's accounts: the asker's role x clearance read-only
+    // account with a time limit, or for an `edit_own` cell the writer limited to the person's own
+    // records; never the admin account, never a kind the role can't view; checked again in the API
+    // like Path B's records. Hidden things never reach Gemma or the answer. Conversations and messages
     // are their owner's only (row security on chat_conversations and chat_messages: the org and
     // app.user_id; 404 for anyone else's). A message above the reader's current clearance shows its
     // question only. Each question is audited as `chat.asked` in the transaction that saves it;
