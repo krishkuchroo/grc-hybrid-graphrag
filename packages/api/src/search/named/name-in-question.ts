@@ -8,13 +8,16 @@
 // - Exact: a form is in the question as whole consecutive words (score 1).
 // - Close spelling: the best `editSimilarity` between a form and a window of the question's words
 //   with the form's word count (and one word more or less for a form of 3 or more words), when it
-//   reaches `NAME_SPELLING_SCORE` and the digits agree. A one-word form needs 6 characters or more.
+//   reaches `NAME_SPELLING_SCORE` (0.9) and the digits agree. A one-word form needs 6 characters or more.
 // - "A and B": a window never spans a break or a joining "and", "or" or "&", unless the name itself
 //   holds it, so "atlassian confluence and fortigate perimeter firewall" is two names, never one.
-import { SPELLING_CLEAR_SCORE, digitsAgree, editSimilarity, normaliseName } from '@grc/shared';
+import { digitsAgree, editSimilarity, normaliseName } from '@grc/shared';
 
-/** A close-spelling score at or above this counts (the extraction matcher's clear score). */
-export const NAME_SPELLING_SCORE = SPELLING_CLEAR_SCORE;
+/**
+ * A close-spelling score at or above this counts: 0.9, the user's choice, so "brute forse" (0.909)
+ * matches "Brute Force". Below the extraction matcher's clear score (0.92), which stays as it is.
+ */
+export const NAME_SPELLING_SCORE = 0.9;
 
 /** The shortest one-word form that may match by close spelling, in characters. */
 export const ONE_WORD_SPELLING_MIN = 6;
