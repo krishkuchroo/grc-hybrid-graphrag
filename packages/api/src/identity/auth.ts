@@ -7,10 +7,12 @@
 // - a session ends 12 h after sign-in at most (Better Auth's own expiry, never extended), and
 //   after 30 min without a request (checked and recorded by `resolveSession` on every request);
 // - `session.mfa_verified` is set only on sessions made by the two-factor verify routes, so a
-//   session that never checked a second factor stays limited (SessionGuard).
+//   session that never checked a second factor stays limited (SessionGuard). The one exception is
+//   the dev auto-login switch (D264, dev-auto-login.ts): while `DEV_AUTO_LOGIN` is on, the session
+//   its server-only endpoint makes is marked too. With the setting removed the exception is gone.
 // Every time check reads the JavaScript clock.
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
-import { betterAuth } from 'better-auth';
+import { betterAuth, type BetterAuthPlugin } from 'better-auth';
 import { hashPassword as betterAuthHash } from 'better-auth/crypto';
 import { organization, twoFactor } from 'better-auth/plugins';
 import { eq, sql } from 'drizzle-orm';
@@ -29,15 +31,29 @@ export const SESSION_MAX_MS = 12 * 60 * 60_000;
 // The routes whose new session has passed the second factor.
 const MFA_VERIFY_PATHS = new Set(['/two-factor/verify-totp', '/two-factor/verify-backup-code']);
 
+/** What the dev auto-login switch (D264, dev-auto-login.ts) adds to Better Auth. */
+export interface DevAutoLoginHooks {
+  /** Its plugin with the server-only session endpoint, or null when the setting holds no email. */
+  plugin(): BetterAuthPlugin | null;
+  /** Whether a session made on this Better Auth path has passed MFA: the dev endpoint, while on. */
+  verifiesMfa(path: string): boolean;
+}
+
 /** The password hash Better Auth is set up with (used to seed users). */
 export function hashPassword(plain: string): Promise<string> {
   return betterAuthHash(plain);
 }
 
-export function createAuth(db: Db, log: Logger | undefined, env: NodeJS.ProcessEnv = process.env) {
+export function createAuth(
+  db: Db,
+  log: Logger | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+  devAutoLogin: DevAutoLoginHooks | null = null,
+) {
   const secret = env.BETTER_AUTH_SECRET;
   if (!secret) throw new Error('BETTER_AUTH_SECRET is not set');
   const baseURL = env.BETTER_AUTH_URL || TRUSTED_ORIGIN;
+  const devPlugin = devAutoLogin?.plugin() ?? null;
   return betterAuth({
     appName: 'GRC',
     baseURL,
@@ -61,13 +77,16 @@ export function createAuth(db: Db, log: Logger | undefined, env: NodeJS.ProcessE
     databaseHooks: {
       session: {
         create: {
-          before: async (session, ctx) => ({
-            data: { ...session, mfaVerified: MFA_VERIFY_PATHS.has(ctx?.path ?? '') },
-          }),
+          // The dev auto-login session (D264) is the only one marked without a second factor.
+          before: async (session, ctx) => {
+            const path = ctx?.path ?? '';
+            const mfaVerified = MFA_VERIFY_PATHS.has(path) || devAutoLogin?.verifiesMfa(path) === true;
+            return { data: { ...session, mfaVerified } };
+          },
         },
       },
     },
-    plugins: [organization(), twoFactor({ issuer: 'GRC' })],
+    plugins: [organization(), twoFactor({ issuer: 'GRC' }), ...(devPlugin ? [devPlugin] : [])],
     // D64's limits are ours, counted per person (src/common/rate-limit.ts).
     rateLimit: { enabled: false },
     telemetry: { enabled: false },
@@ -109,6 +128,7 @@ export type SignInEvent =
 export class AuthService {
   private instance: Auth | undefined;
   private log: Logger | undefined;
+  private devAutoLogin: DevAutoLoginHooks | null = null;
 
   constructor(
     readonly db: Db,
@@ -119,9 +139,15 @@ export class AuthService {
     this.log = log;
   }
 
+  /** The API's dev auto-login switch (D264). Set before Better Auth is first used. */
+  useDevAutoLogin(devAutoLogin: DevAutoLoginHooks): void {
+    if (this.instance) throw new Error('useDevAutoLogin must come before Better Auth is first used');
+    this.devAutoLogin = devAutoLogin;
+  }
+
   /** Built on first use, so the worker program never needs the auth secret. */
   get auth(): Auth {
-    this.instance ??= createAuth(this.db, this.log);
+    this.instance ??= createAuth(this.db, this.log, process.env, this.devAutoLogin);
     return this.instance;
   }
 

@@ -93,6 +93,12 @@ export const SECURITY_MATRIX: {
       orgWalled: true,
       labels: false,
     },
+    // Better Auth's catch-all. It includes `dev-auto-login` (D264, DEV-001): GET answers `{ on }`
+    // only and changes nothing; POST is 404 unless DEV_AUTO_LOGIN is on at API start, then needs
+    // Origin exactly https://grc.localhost, Content-Type application/json and, when sent,
+    // Sec-Fetch-Site same-origin (else 403), re-checks the account (exists, has a membership), and
+    // makes a real Better Auth session for that one account (MFA marked passed on it only, active
+    // org its oldest membership), audited as `auth.sign_in` with method `dev_auto_login`.
     { method: 'GET', path: '/api/v1/auth/*', access: 'public', orgWalled: false, labels: false },
     { method: 'POST', path: '/api/v1/auth/*', access: 'public', orgWalled: false, labels: false },
     // S1-004: the owner picker's people list, and the five routes of each record kind.
