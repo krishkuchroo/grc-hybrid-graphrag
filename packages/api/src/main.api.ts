@@ -3,6 +3,7 @@
 // sign-in with Better Auth (D49, D54). The upload routes alone take multipart bodies of up to 25 MB,
 // at 20 uploads a minute per person (D53, D64; S3-004). The push API takes 60 batches a minute per
 // API key (D64; S3-008). Asking the chat and searching share 10 a minute per person (D64; S6-006).
+// The dev auto-login switch (D264) is read here, by the API only, and checked once at start.
 // Importing this file builds nothing; running it directly starts listening.
 import 'reflect-metadata';
 import { pathToFileURL } from 'node:url';
@@ -18,6 +19,7 @@ import { RateLimiter, REQUESTS_PER_MINUTE, registerRateLimit } from './common/ra
 import { registerSecurityHeaders } from './common/security-headers.js';
 import { AuthService } from './identity/auth.js';
 import { registerAuthRoutes, registerSessionHook } from './identity/auth-routes.js';
+import { DevAutoLogin } from './identity/dev-auto-login.js';
 import { registerPushRateLimit } from './intake/push/push-rate-limit.js';
 import { registerMultipart } from './intake/uploads/multipart.js';
 import { registerUploadRateLimit } from './intake/uploads/upload-rate-limit.js';
@@ -48,16 +50,21 @@ export async function createApiApp(opts: ApiAppOptions = {}): Promise<NestFastif
   // The session is read first, so the rate limit counts a signed-in person by user (D64). Better
   // Auth's routes sit at /api/v1/auth/* (M0-010).
   const auth = app.get(AuthService);
+  // DEV_AUTO_LOGIN (D264): read once, before Better Auth is first built; off unless set.
+  const devAutoLogin = DevAutoLogin.fromEnv(process.env.DEV_AUTO_LOGIN, log);
+  auth.useDevAutoLogin(devAutoLogin);
   registerSessionHook(fastify, auth);
   registerRateLimit(fastify, new RateLimiter(REQUESTS_PER_MINUTE));
   registerUploadRateLimit(fastify);
   registerPushRateLimit(fastify);
   registerChatRateLimit(fastify);
   await registerMultipart(fastify);
-  registerAuthRoutes(fastify, auth, log);
+  registerAuthRoutes(fastify, auth, log, devAutoLogin);
   app.setGlobalPrefix(API_PREFIX.slice(1));
   app.useGlobalFilters(new ErrorFilter(log));
   await app.init();
+  // Once the database answers: the account must exist and have a membership, else it's ignored.
+  await devAutoLogin.startupCheck(auth, log);
   return app;
 }
 

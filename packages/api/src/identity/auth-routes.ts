@@ -12,11 +12,20 @@
 // - the 5-failure lock (lockout.ts), keyed on the account;
 // - one audit event per sign-in attempt, in the user's org (D56), plus `auth.password_verified`
 //   as soon as a password is right (D162). An unknown email has no org chain, so it goes to the
-//   API's pino log instead. Passwords and codes are never recorded.
+//   API's pino log instead. Passwords and codes are never recorded;
+// - the dev auto-login route (D264, dev-auto-login.ts), `/api/v1/auth/dev-auto-login`, sits under
+//   this catch-all and is reached before the MFA gate. GET answers `{ on }` only and changes
+//   nothing. POST answers 404 while the switch is off; when on it needs Origin exactly
+//   TRUSTED_ORIGIN, Content-Type application/json and, when sent, Sec-Fetch-Site same-origin
+//   (else 403 `forbidden`), checks the account again (else 403 `dev_auto_login_unavailable`), and
+//   makes a real Better Auth session with Better Auth's own cookie, audited as `auth.sign_in` with
+//   `{ method: 'dev_auto_login' }` in each of the account's orgs. Sign-in methods in the audit
+//   trail: `password`, `totp`, `backup_code` and `dev_auto_login`.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 import { CODES, sendError } from '../common/errors.js';
 import { AUTH_BASE_PATH, type AuthService, type ResolvedSession } from './auth.js';
+import { DEV_AUTO_LOGIN_ROUTE, DevAutoLogin } from './dev-auto-login.js';
 import { lockKey, SignInLockout } from './lockout.js';
 import type { AuthedRequest } from './session.guard.js';
 
@@ -76,7 +85,12 @@ interface Forwarded {
   json: Record<string, unknown>;
 }
 
-export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, log: Logger): void {
+export function registerAuthRoutes(
+  fastify: FastifyInstance,
+  auth: AuthService,
+  log: Logger,
+  devAutoLogin: DevAutoLogin = DevAutoLogin.off(),
+): void {
   auth.useLogger(log);
   const lockout = new SignInLockout();
 
@@ -222,6 +236,8 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService, 
     handler: async (request, reply) => {
       const req = request as Req;
       const path = new URL(request.url, 'http://x').pathname.slice(AUTH_BASE_PATH.length);
+      // Before the MFA gate: allowed with no session and with one that hasn't passed MFA (D264).
+      if (path === DEV_AUTO_LOGIN_ROUTE) return devAutoLogin.handle(request, reply, auth, webHeaders(request));
       const session = req.authSession;
       if (session && !session.mfaVerified && !ALLOWED_WITHOUT_MFA.has(path)) {
         sendError(request, reply, 403, 'mfa_required', 'Set up and check two-factor sign-in first.');
