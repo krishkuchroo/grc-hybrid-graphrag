@@ -7,14 +7,16 @@
 //   then nothing here shows or changes anything.
 // - The banner sits at the top of the shell and of the sign-in frame while the switch is on. It has
 //   an icon and words (never colour alone), is a status region and can't be dismissed.
-// - On the sign-in page, with the switch on and not paused, the app sends the POST once. The route
-//   has no OpenAPI entry, so it isn't in the generated client: `@/api/dev-auto-login` calls it the
-//   way the client calls /api/v1/auth/* (same-origin credentials, a JSON body of `{}`). On 200 it asks
+// - On the sign-in page, with the switch on and not paused, the app first asks /me: a person already
+//   signed in goes Home and nothing is sent. Only with no session (a 401, or the MFA-pending
+//   refusal) does it send the POST, once. The route has no OpenAPI entry, so it isn't in the
+//   generated client: `@/api/dev-auto-login` calls it the way the client calls /api/v1/auth/*
+//   (same-origin credentials, a JSON body of `{}`). On 200 it asks
 //   /me again and goes Home, as a normal sign-in does once its checks pass. The session the API
 //   makes has already passed MFA, so the MFA pages are skipped. Any failure, including a POST that
 //   answers 200 but leaves no session, shows the password form with one line and is not retried
 //   on its own for the rest of the page's life.
-// - Signing out (the shell's Sign out) pauses auto-login in that tab: sessionStorage
+// - Signing out (the shell's Sign out, and MFA set-up's) pauses auto-login in that tab: sessionStorage
 //   `warrant.devAutoLogin = 'paused'`, plus the same in memory in case the browser refuses storage.
 //   Closing the tab ends the pause. A session that ends by the idle or 12-hour limit doesn't pause
 //   it. While paused, the sign-in page offers "Sign in as the dev account", which clears the pause
@@ -24,8 +26,9 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tansta
 import { useNavigate } from '@tanstack/react-router';
 import { ShieldOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { ApiError } from '@/api/client';
 import { getDevAutoLogin, postDevAutoLogin } from '@/api/dev-auto-login';
-import { fetchMe, ME_KEY } from '@/features/auth/session';
+import { fetchMe, isUnauthorized, ME_KEY } from '@/features/auth/session';
 import { cn } from '@/lib/utils';
 
 export const DEV_AUTO_LOGIN_KEY = ['auth', 'dev-auto-login'] as const;
@@ -129,6 +132,23 @@ function clearPause(client: QueryClient): void {
   }
 }
 
+/**
+ * Whether this browser already has a session, asked fresh from /me. A 401, or the MFA-pending
+ * refusal, means none; any other failure is thrown, so nothing is sent and the form shows its line.
+ */
+async function hasSession(client: QueryClient): Promise<boolean> {
+  try {
+    await fetchMe(client);
+    return true;
+  } catch (err) {
+    if (isUnauthorized(err) || (err instanceof ApiError && err.code === 'mfa_required')) {
+      client.removeQueries({ queryKey: ME_KEY });
+      return false;
+    }
+    throw err;
+  }
+}
+
 export interface DevAutoSignIn {
   /** The POST is on its way, or it worked and the app is moving on. */
   signingIn: boolean;
@@ -152,6 +172,9 @@ export function useDevAutoSignIn(): DevAutoSignIn {
 
   const signIn = useMutation({
     mutationFn: async () => {
+      // Only with no session (D264): a person already signed in goes Home and nothing is sent, so
+      // their session isn't replaced by the dev account's.
+      if (await hasSession(client)) return;
       await postDevAutoLogin();
       // As after a normal sign-in: forget the old answer and ask who is signed in now. A 200 that
       // leaves no session (no cookie) fails here, so it can't bounce between sign-in and Home.
