@@ -1,11 +1,22 @@
 // The frame around the signed-out screens: the product's chrome colour on the left, the form on the
-// right. On narrow screens the left panel folds into a strip above the form.
+// right. On narrow screens the left panel folds into a strip above the form. While the dev
+// auto-login switch is on (D264), its banner runs across the top as a row of its own; with the
+// switch off the frame is exactly as before.
 import type { ReactNode } from 'react';
 import { BrandMark } from '@/components/BrandMark';
+import { DevAutoLoginBanner, useDevAutoLoginOn } from '@/features/auth/DevAutoLogin';
+import { cn } from '@/lib/utils';
 
 export function AuthLayout({ title, lead, children }: { title: string; lead?: ReactNode; children: ReactNode }) {
+  const devAutoLogin = useDevAutoLoginOn();
   return (
-    <div className="grid min-h-full lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+    <div
+      className={cn(
+        'grid min-h-full lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]',
+        devAutoLogin && 'grid-rows-[auto_auto_1fr] lg:grid-rows-[auto_1fr]',
+      )}
+    >
+      <DevAutoLoginBanner className="lg:col-span-2" />
       <aside className="bg-chrome text-chrome-foreground relative flex flex-col justify-between overflow-hidden px-8 py-6 lg:px-12 lg:py-12">
         <BrandMark />
         <div className="hidden max-w-sm lg:block">
