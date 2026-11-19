@@ -4,7 +4,8 @@
 //   3. save the backup codes, shown this once,
 //   4. confirm with a code from the app.
 // The QR secret and the backup codes live only in this page's memory, never in browser storage,
-// and are gone once the page closes.
+// and are gone once the page closes. Its Sign out pauses dev auto-login in this tab while the switch
+// is on (D264, D265), as the shell's does; with the switch off it is exactly as before.
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -22,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AuthLayout } from '@/features/auth/AuthLayout';
 import { CodeForm } from '@/features/auth/CodeForm';
+import { pauseDevAutoLogin, useDevAutoLoginOn } from '@/features/auth/DevAutoLogin';
 import { ME_KEY, problemText } from '@/features/auth/session';
 import { cn } from '@/lib/utils';
 
@@ -194,6 +196,7 @@ export function MfaSetupPage() {
   const [enrolment, setEnrolment] = useState<PostAuthTwoFactorEnableResponse | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const devAutoLogin = useDevAutoLoginOn();
 
   const confirm = useMutation({
     mutationFn: (code: string) => api.postAuthTwoFactorVerifyTotp({ code }),
@@ -205,6 +208,10 @@ export function MfaSetupPage() {
   });
 
   const signOut = useMutation({
+    // Set before the request, so the sign-in page that follows doesn't sign straight back in.
+    onMutate: () => {
+      if (devAutoLogin) pauseDevAutoLogin(queryClient);
+    },
     mutationFn: () => api.postAuthSignOut({}),
     onSettled: async () => {
       setEnrolment(null);

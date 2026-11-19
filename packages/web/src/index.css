@@ -34,6 +34,11 @@
   --chrome-foreground: #e9f0f2;
   --chrome-muted: #93a7b0;
   --brand: #81b5a1;
+
+  /* A warning that stays on screen: the dev auto-login banner (D264). */
+  --warning: #fdf0d5;
+  --warning-foreground: #5c3d07;
+  --warning-border: #e3c27a;
 }
 
 @theme inline {
@@ -64,6 +69,9 @@
   --color-chrome-foreground: var(--chrome-foreground);
   --color-chrome-muted: var(--chrome-muted);
   --color-brand: var(--brand);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-border: var(--warning-border);
 
   --radius-sm: calc(var(--radius) * 0.75);
   --radius-md: var(--radius);

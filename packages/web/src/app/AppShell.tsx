@@ -11,6 +11,9 @@
 // - The whole frame sits in ChatSessionProvider, the one chat session the panel, the page and the
 //   menu share. It lives inside the shell's route, so signing out unmounts it and the next person
 //   starts with nothing.
+// - While the dev auto-login switch is on (D264), its banner sits above the header as a row of its
+//   own, and Sign out pauses auto-login in this tab (D265). With the switch off the frame and Sign
+//   out are exactly as before.
 import { canViewReviewQueue } from '@grc/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
@@ -19,11 +22,13 @@ import { api } from '@/api/client';
 import { HOME, isScreenShown, SCREEN_GROUPS, type Screen } from '@/app/screens';
 import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/ui/button';
+import { DevAutoLoginBanner, pauseDevAutoLogin, useDevAutoLoginOn } from '@/features/auth/DevAutoLogin';
 import { formatRole, initials, ME_KEY } from '@/features/auth/session';
 import { isAskPath } from '@/features/chat/AskPage';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 import { ChatSessionProvider, useSharedChatSession } from '@/features/chat/ChatSessionProvider';
 import { useReviewCounts } from '@/features/review/useReview';
+import { cn } from '@/lib/utils';
 
 /** How many wait, as the menu shows it: nothing for none, `99+` past 99. */
 function WaitingBadge({ count }: { count: number }) {
@@ -89,8 +94,13 @@ export function AppShell() {
   // The shell's route has just asked the API, so this reads the answer from the cache.
   const { data: me } = useQuery({ queryKey: ME_KEY, queryFn: api.getMe, staleTime: Infinity });
   const reviewCounts = useReviewCounts(me !== undefined && canViewReviewQueue(me.role));
+  const devAutoLogin = useDevAutoLoginOn();
 
   const signOut = useMutation({
+    // Set before the request, so the sign-in page that follows doesn't sign straight back in.
+    onMutate: () => {
+      if (devAutoLogin) pauseDevAutoLogin(queryClient);
+    },
     mutationFn: () => api.postAuthSignOut({}),
     onSettled: async () => {
       queryClient.clear();
@@ -102,7 +112,8 @@ export function AppShell() {
 
   return (
     <ChatSessionProvider>
-      <div className="grid h-full grid-rows-[auto_1fr]">
+      <div className={cn('grid h-full', devAutoLogin ? 'grid-rows-[auto_auto_1fr]' : 'grid-rows-[auto_1fr]')}>
+        <DevAutoLoginBanner className="h-7 overflow-hidden whitespace-nowrap" />
         <header className="bg-chrome text-chrome-foreground flex h-14 items-center gap-4 border-b border-black/30 px-4">
           <BrandMark />
           <div className="ml-auto flex min-w-0 items-center gap-4">

@@ -1,7 +1,8 @@
 // The whole web app: its query client, its router and every page. Each mount builds its own.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { startDevAutoLoginCheck } from '@/features/auth/DevAutoLogin';
 import { createAppRouter } from '@/router';
 
 export function App() {
@@ -15,6 +16,8 @@ export function App() {
       }),
   );
   const [router] = useState(() => createAppRouter(queryClient));
+  // The dev auto-login switch is asked as the app starts, once for the page's life (D264).
+  useEffect(() => startDevAutoLoginCheck(queryClient), [queryClient]);
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />

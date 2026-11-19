@@ -15,6 +15,8 @@
 // - The panel always searches both documents and the graph (S6-Q3).
 // - Steps and outcomes are read out to screen readers once each (a polite live region); the answer's
 //   words are not, as they arrive.
+// - It opens just below the header: lower by the banner's height while the dev auto-login banner
+//   shows above the header (D264).
 // The API decides what anyone may see or ask (D7): this panel only shows its answers.
 import { CHAT_TEXT } from '@grc/shared';
 import { useLocation, useNavigate } from '@tanstack/react-router';
@@ -23,6 +25,7 @@ import { Dialog as DialogPrimitive } from 'radix-ui';
 import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useDevAutoLoginOn } from '@/features/auth/DevAutoLogin';
 import { useMe } from '@/features/records/useRecords';
 import { cn } from '@/lib/utils';
 import { isAskPath } from './AskPage';
@@ -83,6 +86,7 @@ function PanelContent({
   const latest = session.latest;
   const title = conversationId === null ? CHAT_TEXT.newConversation : (session.conversation.data?.title ?? '');
   const { scrollerRef, onScroll } = useKeepAtBottom(session, view);
+  const devAutoLogin = useDevAutoLoginOn();
 
   const focusBox = () => {
     const box = textareaRef.current;
@@ -135,7 +139,11 @@ function PanelContent({
         if (view === 'thread') focusBox();
         else newButtonRef.current?.focus();
       }}
-      className="animate-panel-in bg-background fixed top-14 right-0 bottom-0 z-40 flex w-full flex-col border-l shadow-[-16px_0_40px_-16px_rgba(21,38,47,0.35)] outline-none sm:w-[28rem]"
+      className={cn(
+        'animate-panel-in bg-background fixed right-0 bottom-0 z-40 flex w-full flex-col border-l shadow-[-16px_0_40px_-16px_rgba(21,38,47,0.35)] outline-none sm:w-[28rem]',
+        // The header's height (3.5rem), plus the banner's (1.75rem) above it while it shows.
+        devAutoLogin ? 'top-21' : 'top-14',
+      )}
     >
       <TooltipProvider>
         <div className="bg-card flex h-14 shrink-0 items-center gap-2.5 border-b px-3">
