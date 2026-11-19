@@ -19,6 +19,7 @@
     "test:env": "node packages/infra/scripts/test-env.ts",
     "org:create": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/create-org.ts",
     "org:admin-password": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/org-admin-password.ts",
+    "org:user-name": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/org-user-name.ts",
     "graph:schema": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/graph-schema.ts",
     "frameworks:load": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/infra/scripts/frameworks-load.ts",
     "graph:leftovers": "node packages/infra/scripts/leftover-org-databases.ts",
